@@ -1,0 +1,286 @@
+[
+  {
+    "rel": "supabase\\migrations\\0001_ticketing.sql",
+    "bytes": 23665
+  },
+  {
+    "rel": ".env.local.example",
+    "bytes": 737
+  },
+  {
+    "rel": "lib\\env.ts",
+    "bytes": 1733
+  },
+  {
+    "rel": "lib\\types\\database.ts",
+    "bytes": 3980
+  },
+  {
+    "rel": "lib\\supabase\\client.ts",
+    "bytes": 236
+  },
+  {
+    "rel": "lib\\supabase\\server.ts",
+    "bytes": 694
+  },
+  {
+    "rel": "lib\\supabase\\admin.ts",
+    "bytes": 413
+  },
+  {
+    "rel": "lib\\supabase\\middleware.ts",
+    "bytes": 1067
+  },
+  {
+    "rel": "lib\\api\\errors.ts",
+    "bytes": 1607
+  },
+  {
+    "rel": "lib\\api\\rate-limit.ts",
+    "bytes": 1050
+  },
+  {
+    "rel": "lib\\schemas\\event.ts",
+    "bytes": 1459
+  },
+  {
+    "rel": "lib\\schemas\\ticket.ts",
+    "bytes": 865
+  },
+  {
+    "rel": "lib\\schemas\\merchant.ts",
+    "bytes": 580
+  },
+  {
+    "rel": "lib\\crypto\\bank.ts",
+    "bytes": 948
+  },
+  {
+    "rel": "lib\\tickets\\ids.ts",
+    "bytes": 1139
+  },
+  {
+    "rel": "lib\\tickets\\qr-generator.ts",
+    "bytes": 837
+  },
+  {
+    "rel": "lib\\payments\\paystack.ts",
+    "bytes": 3306
+  },
+  {
+    "rel": "lib\\payments\\idempotency.ts",
+    "bytes": 1262
+  },
+  {
+    "rel": "lib\\webhooks\\merchant.ts",
+    "bytes": 3473
+  },
+  {
+    "rel": "lib\\api\\gateway-auth.ts",
+    "bytes": 1578
+  },
+  {
+    "rel": "lib\\payments\\fulfill.ts",
+    "bytes": 7765
+  },
+  {
+    "rel": "lib\\payments\\initialize-ticket.ts",
+    "bytes": 8594
+  },
+  {
+    "rel": "lib\\email\\tickets.ts",
+    "bytes": 1401
+  },
+  {
+    "rel": "lib\\tickets\\checkin.ts",
+    "bytes": 2132
+  },
+  {
+    "rel": "lib\\wallet.ts",
+    "bytes": 1138
+  },
+  {
+    "rel": "middleware.ts",
+    "bytes": 1411
+  },
+  {
+    "rel": "lib\\api\\session.ts",
+    "bytes": 732
+  },
+  {
+    "rel": "app\\api\\tickets\\initialize\\route.ts",
+    "bytes": 2223
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\tickets\\initialize\\route.ts",
+    "bytes": 1902
+  },
+  {
+    "rel": "app\\api\\tickets\\verify\\[reference]\\route.ts",
+    "bytes": 448
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\tickets\\verify\\[reference]\\route.ts",
+    "bytes": 1112
+  },
+  {
+    "rel": "app\\api\\webhooks\\paystack\\route.ts",
+    "bytes": 1420
+  },
+  {
+    "rel": "lib\\payments\\verify.ts",
+    "bytes": 1309
+  },
+  {
+    "rel": "app\\api\\payments\\demo-complete\\route.ts",
+    "bytes": 1368
+  },
+  {
+    "rel": "app\\api\\checkin\\route.ts",
+    "bytes": 713
+  },
+  {
+    "rel": "app\\api\\cron\\jobs\\route.ts",
+    "bytes": 792
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\merchants\\register\\route.ts",
+    "bytes": 2867
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\merchants\\keys\\route.ts",
+    "bytes": 1625
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\events\\route.ts",
+    "bytes": 2277
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\events\\[event_id]\\stats\\route.ts",
+    "bytes": 2006
+  },
+  {
+    "rel": "app\\api\\v1\\gateway\\webhooks\\route.ts",
+    "bytes": 1300
+  },
+  {
+    "rel": "app\\api\\events\\route.ts",
+    "bytes": 2962
+  },
+  {
+    "rel": "app\\api\\events\\mine\\route.ts",
+    "bytes": 1719
+  },
+  {
+    "rel": "app\\api\\events\\[eventId]\\attendees\\route.ts",
+    "bytes": 1090
+  },
+  {
+    "rel": "app\\api\\events\\slug\\[slug]\\route.ts",
+    "bytes": 1246
+  },
+  {
+    "rel": "app\\api\\tickets\\mine\\route.ts",
+    "bytes": 1170
+  },
+  {
+    "rel": "app\\api\\wallet\\route.ts",
+    "bytes": 1528
+  },
+  {
+    "rel": "app\\api\\wallet\\transfer\\route.ts",
+    "bytes": 1492
+  },
+  {
+    "rel": "app\\api\\auth\\signup\\route.ts",
+    "bytes": 998
+  },
+  {
+    "rel": "app\\api\\auth\\login\\route.ts",
+    "bytes": 720
+  },
+  {
+    "rel": "app\\api\\auth\\logout\\route.ts",
+    "bytes": 354
+  },
+  {
+    "rel": "app\\api\\checkin\\[eventId]\\snapshot\\route.ts",
+    "bytes": 1141
+  },
+  {
+    "rel": "components\\public-shell.tsx",
+    "bytes": 785
+  },
+  {
+    "rel": "components\\tickets\\countdown.tsx",
+    "bytes": 689
+  },
+  {
+    "rel": "components\\tickets\\ticket-checkout-form.tsx",
+    "bytes": 5335
+  },
+  {
+    "rel": "app\\t\\[slug]\\page.tsx",
+    "bytes": 5182
+  },
+  {
+    "rel": "app\\checkout\\[reference]\\page.tsx",
+    "bytes": 3006
+  },
+  {
+    "rel": "app\\api\\payments\\[reference]\\route.ts",
+    "bytes": 859
+  },
+  {
+    "rel": "components\\events-tickets.tsx",
+    "bytes": 4324
+  },
+  {
+    "rel": "components\\event-info.tsx",
+    "bytes": 3200
+  },
+  {
+    "rel": "app\\dashboard\\events\\page.tsx",
+    "bytes": 3532
+  },
+  {
+    "rel": "app\\dashboard\\events\\create\\page.tsx",
+    "bytes": 7017
+  },
+  {
+    "rel": "app\\dashboard\\events\\[eventId]\\attendees\\page.tsx",
+    "bytes": 2783
+  },
+  {
+    "rel": "app\\tickets\\page.tsx",
+    "bytes": 3755
+  },
+  {
+    "rel": "app\\checkin\\[eventId]\\page.tsx",
+    "bytes": 5405
+  },
+  {
+    "rel": "app\\login\\page.tsx",
+    "bytes": 2015
+  },
+  {
+    "rel": "app\\gateway\\page.tsx",
+    "bytes": 5201
+  },
+  {
+    "rel": "public\\widget\\bu-widget.js",
+    "bytes": 2094
+  },
+  {
+    "rel": "app\\api\\wallet\\withdraw\\route.ts",
+    "bytes": 1255
+  },
+  {
+    "rel": ".env.local",
+    "bytes": 526
+  },
+  {
+    "rel": "lib\\payments\\paystack-subaccounts.ts",
+    "bytes": 59
+  }
+]

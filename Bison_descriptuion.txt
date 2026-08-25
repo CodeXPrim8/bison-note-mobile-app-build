@@ -1,0 +1,53 @@
+BISON NOTE – PROJECT OVERVIEW &
+DEVELOPER SOURCE OF TRUTH
+1. Project Overview
+Bison Note is an event-based digital payment and celebration platform designed to solve key
+challenges in Nigerian party culture. It restores the joy of spraying while eliminating cash handling,
+fraud, and legal risk. All value transfer occurs digitally, while physical Bison Notes serve strictly as
+ceremonial spray tokens with zero monetary value.
+2. Problems Identified
+1 Restriction on spraying Naira has reduced the cultural experience of celebrations.
+2 Cash handling at events leads to theft, loss, and stress for celebrants.
+3 Money vendors exploit guests and celebrants with extreme exchange rates.
+4 Digital transfers lack the prestige and visual impact of traditional spraying.
+3. Bison Note Solution
+Bison Note separates monetary value from ceremonial spraying. Guests transfer value digitally
+using BU (Bison Units). Once payment is complete, guests receive physical Bison Notes solely for
+spraying. These notes are non-redeemable and carry no financial value, eliminating fraud and
+reuse.
+4. Platform Roles
+1 Guest (Sprayer): Funds BU wallet, sends BU to an event, receives notes, and sprays.
+2 Celebrant: Receives BU instantly and withdraws to bank.
+3 Vendor (Event Operator): Creates events, confirms payments, issues notes, earns
+commissions.
+5. Final Confirmed System Flow (Source of Truth)
+Bison Note operates on a wallet-first architecture. All users must fund their BU wallets before
+participating in events. Events act strictly as routing logic, not wallets.
+1 Guest funds BU wallet ( → BU).
+2 Vendor creates event and links celebrant wallet.
+3 Guest selects event and sends BU.
+4 System routes BU directly to celebrant wallet.
+5 Vendor receives confirmation and issues physical Bison Notes.
+6 Guest sprays ceremonial notes.
+6. Security & Anti-Fraud Design
+No API exists for redeeming Bison Notes. Physical notes cannot be scanned, exchanged, or
+reused. All value is transferred before spraying, making theft and fraud impossible.
+7. Core Backend Entities
+1 User
+2 Wallet
+3 Vendor
+4 Event (routing only)
+5 Transaction
+6 Commission
+8. Business & Revenue Model
+1 Transaction-based service fees
+2 Vendor commissions per event
+3 Event setup and premium branding fees
+4 POS rentals and enterprise partnerships
+9. Legal & Compliance Positioning
+Bison Note is not a currency and does not replace the Nigerian Naira. It operates as a digital event
+payment and celebration voucher platform, using licensed payment channels in compliance with
+Nigerian regulations.
+10. Vision
+To become the standard digital event payment and celebration platform across Nigeria and Africa,
+restoring the joy of spraying while ensuring security, transparency, and innovation
