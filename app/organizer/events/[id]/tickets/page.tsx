@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { isCheckedInTicket } from '@/lib/events/sale'
 import type { TicketRecord } from '@/lib/types/database'
 
 export default function EventTicketsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -58,8 +59,13 @@ export default function EventTicketsPage({ params }: { params: Promise<{ id: str
                 <p className="font-semibold">{ticket.buyer_name ?? ticket.buyer_email}</p>
                 <p className="text-xs text-muted-foreground">{ticket.ticket_number} · {ticket.buyer_email}</p>
               </div>
-              <span className="text-xs uppercase text-primary">{ticket.status}</span>
+              <span className="text-xs uppercase text-primary">
+                {isCheckedInTicket(ticket) ? 'checked in' : ticket.status}
+              </span>
             </div>
+            {ticket.guest_comment && (
+              <p className="mt-3 text-sm text-muted-foreground">{ticket.guest_comment}</p>
+            )}
           </Card>
         ))}
       </div>

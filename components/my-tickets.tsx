@@ -5,8 +5,9 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
 import { publicTicketStatus } from '@/lib/types/database'
-import { isEventUpcoming } from '@/lib/events/sale'
+import { isCheckedInTicket, isEventUpcoming } from '@/lib/events/sale'
 import { ticketQrScanString } from '@/lib/tickets/qr-generator'
+import { TicketAdmitCard } from '@/components/ticket-admit'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 
 interface TicketRow extends TicketRecord {
@@ -29,9 +30,12 @@ export default function MyTickets({
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    fetch('/api/tickets/mine', { credentials: 'include' })
-      .then(async (res) => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch('/api/tickets/mine', { credentials: 'include' })
         const json = await res.json()
+        if (cancelled) return
         setLoaded(true)
         if (!json.status) {
           setMessage(json.message ?? 'Sign in to see tickets.')
@@ -39,21 +43,33 @@ export default function MyTickets({
         }
         const list = (json.data ?? []) as TicketRow[]
         setTickets(list)
-        if (ticketId) {
-          const match = list.find((ticket) => ticket.id === ticketId)
-          if (match && isEventUpcoming(match.event)) setSelected(match)
+        setSelected((current) => {
+          const wanted = ticketId || current?.id
+          if (!wanted) return current
+          const match = list.find((ticket) => ticket.id === wanted)
+          if (match && (isEventUpcoming(match.event) || isCheckedInTicket(match))) return match
+          return current
+        })
+      } catch {
+        if (!cancelled) {
+          setLoaded(true)
+          setMessage('Could not load tickets')
         }
-      })
-      .catch(() => {
-        setLoaded(true)
-        setMessage('Could not load tickets')
-      })
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 8000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
   }, [ticketId])
 
   useEffect(() => {
     async function render() {
       const next: Record<string, string> = {}
       for (const ticket of tickets) {
+        if (isCheckedInTicket(ticket)) continue
         if (ticket.qr_code_data || ticket.checkin_code) {
           next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), { width: 280, margin: 1 })
         }
@@ -67,7 +83,7 @@ export default function MyTickets({
     return <p className="px-4 py-10 text-sm text-muted-foreground">Loading tickets…</p>
   }
 
-  const upcoming = tickets.filter((ticket) => isEventUpcoming(ticket.event))
+  const upcoming = tickets.filter((ticket) => isEventUpcoming(ticket.event) || isCheckedInTicket(ticket))
   const pastCount = tickets.length - upcoming.length
 
   if (upcoming.length === 0) {
@@ -100,23 +116,14 @@ export default function MyTickets({
             {ticket.tier?.name} · {ticket.ticket_number}
           </p>
           <p className="mt-1 text-xs text-primary">
-            {ticket.display_status ?? publicTicketStatus(ticket.status, ticket.event?.end_time)}
+            {isCheckedInTicket(ticket)
+              ? 'CHECKED IN'
+              : ticket.display_status ?? publicTicketStatus(ticket.status, ticket.event?.end_time)}
           </p>
         </Card>
       ))}
       {selected && (
-        <Card className="p-6 text-center">
-          <h2 className="text-xl font-bold">{selected.event?.title}</h2>
-          {qrs[selected.id] && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrs[selected.id]} alt="Ticket QR" className="mx-auto mt-4 h-56 w-56 rounded bg-white p-2" />
-          )}
-          <p className="mt-4 font-mono text-2xl tracking-[0.25em]">{selected.checkin_code}</p>
-          <p className="text-xs text-muted-foreground">Backup check-in code · event access only</p>
-          <Button className="mt-4" variant="ghost" onClick={() => setSelected(null)}>
-            Close
-          </Button>
-        </Card>
+        <TicketAdmitCard ticket={selected} qr={qrs[selected.id]} onClose={() => setSelected(null)} />
       )}
     </div>
   )

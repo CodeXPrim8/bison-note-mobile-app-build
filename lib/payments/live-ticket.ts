@@ -42,7 +42,7 @@ interface LiveInitializeInput {
 
 export const LIVE_TICKET_REF_PREFIX = 'BU_LIVE_'
 export const LIVE_TICKETS_SQL_HINT =
-  'Run supabase/migrations/0010_bu_live_tickets.sql in the live ɃU Supabase SQL editor, then try again.'
+  'Run supabase/migrations/0011_bu_checkin_feedback.sql in the live ɃU Supabase SQL editor, then try again.'
 
 export function isLiveTicketReference(reference: string) {
   return reference.startsWith(LIVE_TICKET_REF_PREFIX)
@@ -610,32 +610,9 @@ export async function checkInLiveTicket(input: {
   let updated: TicketRecord | null = null
   if (!rpc.error && rpc.data) {
     updated = asLiveTicketRows(rpc.data).map(mapLiveTicket)[0] ?? null
-  } else {
-    const attempt = await db
-      .from('tickets')
-      .update({ status: 'used' })
-      .eq('id', looked.ticket.id)
-      .eq('event_id', input.eventId)
-      .select('*')
-      .maybeSingle()
-    if (attempt.error || !attempt.data) {
-      const fallback = await db
-        .from('tickets')
-        .update({ status: 'checked_in' })
-        .eq('id', looked.ticket.id)
-        .eq('event_id', input.eventId)
-        .select('*')
-        .maybeSingle()
-      if (fallback.data) updated = mapLiveTicket(fallback.data as Record<string, unknown>)
-    } else {
-      updated = mapLiveTicket(attempt.data as Record<string, unknown>)
-    }
   }
 
-  if (!updated) {
-    throw new ApiError(503, 'CHECKIN_FAILED', `Could not check in this ticket. ${LIVE_TICKETS_SQL_HINT}`)
-  }
-  if (updated.status === 'checked_in') {
+  if (updated && (updated.status === 'checked_in' || updated.checked_in_at)) {
     return {
       status: 'checked_in',
       ticket: updated,
@@ -643,5 +620,6 @@ export async function checkInLiveTicket(input: {
       ...(await enrichLiveCheckin(updated, title)),
     }
   }
+
   throw new ApiError(503, 'CHECKIN_FAILED', `Could not check in this ticket. ${LIVE_TICKETS_SQL_HINT}`)
 }

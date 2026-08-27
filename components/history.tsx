@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { isEventPast } from '@/lib/events/sale'
+import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 
 interface Transaction {
@@ -90,17 +91,13 @@ export default function History() {
             </Card>
           ) : (
             pastTickets.map((ticket) => (
-              <Card key={ticket.id} className="border-border/50 bg-card/50 p-4">
-                <p className="font-medium">{ticket.event?.title ?? 'Event'}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {ticket.tier?.name ?? 'General'}
-                  {ticket.event?.start_time ? ` · ${new Date(ticket.event.start_time).toLocaleDateString()}` : ''}
-                  {ticket.event?.venue_name ? ` · ${ticket.event.venue_name}` : ''}
-                </p>
-                <span className="mt-2 inline-block rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
-                  {ticket.status === 'checked_in' ? 'Attended' : 'Ended'}
-                </span>
-              </Card>
+              <TicketFeedbackForm
+                key={ticket.id}
+                ticket={ticket}
+                onSaved={(updated) =>
+                  setPastTickets((list) => list.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)))
+                }
+              />
             ))
           )}
         </div>

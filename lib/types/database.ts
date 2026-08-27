@@ -158,6 +158,7 @@ export interface TicketRecord {
   checked_in_at: string | null
   checked_in_by: string | null
   reserved_until: string | null
+  guest_comment?: string | null
   created_at: string
   updated_at: string
 }

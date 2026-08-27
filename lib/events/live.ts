@@ -125,12 +125,30 @@ function parseQrMeta(raw: unknown) {
             }
           })()
         : null
-  if (!obj) return { checkin_code: null, qr_token: null, pay_ref: null, type: null }
+  if (!obj) {
+    return {
+      checkin_code: null,
+      qr_token: null,
+      pay_ref: null,
+      type: null,
+      checked_in: false,
+      checked_in_at: null,
+      guest_comment: null,
+    }
+  }
+  const checkedIn =
+    obj.checked_in === true ||
+    obj.checked_in === 'true' ||
+    obj.checked_in === 1 ||
+    Boolean(asString(obj.checked_in_at))
   return {
     checkin_code: asString(obj.checkin_code) || null,
     qr_token: asString(obj.qr_token) || null,
     pay_ref: asString(obj.pay_ref) || asString(obj.reference) || null,
     type: asString(obj.type) || null,
+    checked_in: checkedIn,
+    checked_in_at: asString(obj.checked_in_at) || null,
+    guest_comment: asString(obj.guest_comment) || null,
   }
 }
 
@@ -158,6 +176,7 @@ export function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
   const eventId = asString(row.event_id)
   const qrRaw = qrRawString(row.qr_code_data)
   const qrMeta = parseQrMeta(row.qr_code_data ?? qrRaw)
+  if (qrMeta.checked_in || qrMeta.checked_in_at) status = 'checked_in'
   return {
     id: asString(row.id),
     ticket_number: asString(row.ticket_number) || null,
@@ -173,11 +192,12 @@ export function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
     qr_code_data: qrRaw || null,
     qr_token: asString(row.qr_token) || qrMeta.qr_token || qrRaw || null,
     checkin_code: asString(row.checkin_code) || qrMeta.checkin_code || null,
-    checked_in_at: row.checked_in_at ? asIso(row.checked_in_at) : null,
+    checked_in_at: row.checked_in_at ? asIso(row.checked_in_at) : qrMeta.checked_in_at,
     checked_in_by: asString(row.checked_in_by) || null,
     reserved_until: row.reserved_until ? asIso(row.reserved_until) : null,
     created_at: asIso(row.created_at),
     updated_at: asIso(row.updated_at ?? row.created_at),
+    guest_comment: qrMeta.guest_comment,
   }
 }
 
@@ -354,8 +374,17 @@ export function withLiveTiers(row: Record<string, unknown>) {
 export async function fetchTicketsForEvents(eventIds: string[], db: SupabaseClient = createDataClient()) {
   if (!eventIds.length) return [] as TicketRecord[]
   const live = await db.from('tickets').select('*').in('event_id', eventIds)
-  if (live.error) return []
-  return ((live.data as Record<string, unknown>[]) ?? []).map(mapLiveTicket)
+  if (!live.error && live.data?.length) {
+    return ((live.data as Record<string, unknown>[]) ?? []).map(mapLiveTicket)
+  }
+  const listed: TicketRecord[] = []
+  for (const eventId of eventIds) {
+    const rpc = await db.rpc('bu_list_event_tickets', { p_event_id: eventId })
+    if (!rpc.error && rpc.data != null) {
+      listed.push(...asTicketRows(rpc.data).map(mapLiveTicket))
+    }
+  }
+  return listed
 }
 
 export async function fetchLiveTierPrice(tierId: string, db: SupabaseClient = createDataClient()) {
@@ -560,4 +589,22 @@ export async function lookupLiveUser(phone: string) {
     phone: asString(row.phone_number) || null,
     email: asString(row.email) || null,
   }
+}
+
+export async function submitLiveTicketFeedback(input: {
+  ticketId: string
+  guestId: string
+  comment: string
+}) {
+  const db = createDataClient()
+  const rpc = await db.rpc('bu_submit_ticket_feedback', {
+    p_ticket_id: input.ticketId,
+    p_guest_id: input.guestId,
+    p_comment: input.comment.trim(),
+  })
+  if (rpc.error || rpc.data == null) {
+    return { error: rpc.error?.message ?? 'Could not save this comment. Run supabase/migrations/0011_bu_checkin_feedback.sql in the live ɃU SQL editor.' }
+  }
+  const row = asTicketRows(rpc.data)[0] ?? (rpc.data as Record<string, unknown>)
+  return { ticket: mapLiveTicket(row) }
 }

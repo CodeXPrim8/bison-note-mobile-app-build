@@ -61,7 +61,7 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
             active={camera}
             onScan={(text) => {
               setCode(text)
-              void scan(text, false)
+              void scan(text, true)
               setCamera(false)
             }}
           />
@@ -71,7 +71,7 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
           value={code}
           onChange={(e) => setCode(e.target.value)}
         />
-        <Button className="w-full" disabled={busy} onClick={() => scan(code, false)}>
+        <Button className="w-full" disabled={busy} onClick={() => scan(code, true)}>
           Check ticket
         </Button>
         {result && (
@@ -79,7 +79,9 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
             className={`rounded-xl border p-4 ${
               result.status === 'valid' || result.status === 'checked_in'
                 ? 'border-primary/30 bg-primary/10'
-                : 'border-destructive/40 bg-destructive/15'
+                : result.status === 'already_used'
+                  ? 'border-yellow-400/40 bg-yellow-400/10'
+                  : 'border-destructive/40 bg-destructive/15'
             }`}
           >
             <p className="text-lg font-bold">{result.message || result.status}</p>
@@ -91,6 +93,12 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
             {result.event_title && <p className="text-sm text-muted-foreground">{result.event_title}</p>}
             {result.ticket?.ticket_number && (
               <p className="mt-1 font-mono text-xs">{result.ticket.ticket_number}</p>
+            )}
+            {result.status === 'checked_in' && (
+              <p className="mt-2 text-sm text-muted-foreground">Guest is in. This QR cannot be used again.</p>
+            )}
+            {result.status === 'already_used' && (
+              <p className="mt-2 text-sm text-muted-foreground">Already checked in — do not let this QR through twice.</p>
             )}
             {result.status === 'valid' && (
               <Button className="mt-4 w-full" disabled={busy} onClick={() => scan(code, true)}>

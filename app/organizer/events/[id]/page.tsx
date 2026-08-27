@@ -88,7 +88,7 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
       </div>
       <div className="mt-8 flex flex-wrap gap-3">
         <Button asChild variant="outline"><Link href={`/organizer/events/${id}/tickets`}>Ticket sales</Link></Button>
-        <Button asChild variant="outline"><Link href={`/organizer/events/${id}/guests`}>Guests</Link></Button>
+        <Button asChild variant="outline"><Link href={`/organizer/events/${id}/guests`}>Guests & comments</Link></Button>
       </div>
       <h2 className="mt-10 font-semibold">Tiers</h2>
       <div className="mt-3 space-y-2">

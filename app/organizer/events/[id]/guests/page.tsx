@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import type { EventInvitation } from '@/lib/types/database'
+import { isCheckedInTicket } from '@/lib/events/sale'
+import type { EventInvitation, TicketRecord } from '@/lib/types/database'
 
 export default function GuestsPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState('')
   const [invites, setInvites] = useState<EventInvitation[]>([])
+  const [tickets, setTickets] = useState<TicketRecord[]>([])
   const [buIds, setBuIds] = useState('')
   const [lookup, setLookup] = useState('')
   const [lookupResult, setLookupResult] = useState<string | null>(null)
@@ -25,6 +27,12 @@ export default function GuestsPage({ params }: { params: Promise<{ id: string }>
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setInvites(json.data)
+      })
+      .catch(() => undefined)
+    fetch(`/api/events/${id}/attendees`)
+      .then(async (res) => {
+        const json = await res.json()
+        if (json.status) setTickets(json.data.tickets ?? [])
       })
       .catch(() => undefined)
   }
@@ -84,6 +92,34 @@ export default function GuestsPage({ params }: { params: Promise<{ id: string }>
               <p className="text-xs text-muted-foreground">{invite.invited_phone}</p>
             </div>
             <span className="text-xs uppercase text-primary">{invite.status}</span>
+          </Card>
+        ))}
+      </div>
+
+      <h2 className="mt-10 text-2xl font-bold">Guest report & comments</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Checked-in guests and comments they leave after the event. Use this to plan a better experience next time.
+      </p>
+      <div className="mt-4 space-y-2">
+        {tickets.length === 0 && (
+          <p className="text-sm text-muted-foreground">No ticket buyers yet.</p>
+        )}
+        {tickets.map((ticket) => (
+          <Card key={ticket.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold">{ticket.buyer_name || ticket.buyer_email || 'Guest'}</p>
+                <p className="text-xs text-muted-foreground">{ticket.buyer_email}</p>
+              </div>
+              <span className="text-xs uppercase text-primary">
+                {isCheckedInTicket(ticket) ? 'Checked in' : ticket.status}
+              </span>
+            </div>
+            {ticket.guest_comment ? (
+              <p className="mt-3 whitespace-pre-wrap text-sm">{ticket.guest_comment}</p>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">No comment yet.</p>
+            )}
           </Card>
         ))}
       </div>

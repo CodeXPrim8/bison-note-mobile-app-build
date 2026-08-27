@@ -48,3 +48,8 @@ export const quoteTicketSchema = z.object({
   ticket_tier_id: ticketTierIdSchema,
   quantity: z.number().int().min(1).max(20),
 })
+
+export const ticketFeedbackSchema = z.object({
+  ticket_id: z.string().uuid(),
+  comment: z.string().trim().min(3).max(1000),
+})

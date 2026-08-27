@@ -45,3 +45,15 @@ export function isEventUpcoming(event: { start_time: string; end_time?: string |
 export function isEventPast(event: { start_time: string; end_time?: string | null } | null | undefined) {
   return Boolean(event?.start_time) && !isEventUpcoming(event)
 }
+
+export function isCheckedInTicket(ticket: { status?: string | null; checked_in_at?: string | null } | null | undefined) {
+  return ticket?.status === 'checked_in' || Boolean(ticket?.checked_in_at)
+}
+
+export function eventWelcomeLine(event?: { title?: string | null; category?: string | null } | null) {
+  const hay = `${event?.category ?? ''} ${event?.title ?? ''}`
+  if (/party|night|club|concert|wedding|birthday/i.test(hay)) {
+    return "You're in — enjoy the party!"
+  }
+  return "You're in — enjoy the event!"
+}
