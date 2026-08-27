@@ -288,6 +288,37 @@ export async function fetchLiveTierPrice(tierId: string, db: SupabaseClient = cr
   return packed.ticket_tiers[0] ?? null
 }
 
+function liveCreateError(message: string) {
+  if (/celebrant_id_fkey|foreign key constraint/i.test(message)) {
+    return 'This signed-in account is not a live ɃU user. Sign out, then sign in with your ɃU ID (phone number) and PIN from the live ɃU app.'
+  }
+  return message
+}
+
+export async function resolveLiveCelebrantId(input: {
+  id: string
+  email?: string | null
+  phone?: string | null
+}) {
+  const db = createDataClient()
+  const byId = await db.from('users').select('id').eq('id', input.id).maybeSingle()
+  if (asString(byId.data?.id)) return asString(byId.data?.id)
+
+  const phone = input.phone?.trim()
+  if (phone) {
+    const found = await lookupLiveUser(phone)
+    if (found?.id) return found.id
+  }
+
+  const email = input.email?.trim()
+  if (email) {
+    const byEmail = await db.from('users').select('id').eq('email', email).maybeSingle()
+    if (asString(byEmail.data?.id)) return asString(byEmail.data?.id)
+  }
+
+  return null
+}
+
 export async function insertLiveEvent(
   userId: string,
   input: {
@@ -340,7 +371,7 @@ export async function insertLiveEvent(
     p_max_tickets: payload.max_tickets,
   })
   if (rpc.error) {
-    return { error: inserted.error?.message || rpc.error.message }
+    return { error: liveCreateError(inserted.error?.message || rpc.error.message) }
   }
   const created = await db.from('events').select('*').eq('id', rpc.data).maybeSingle()
   if (created.data) return { row: created.data as Record<string, unknown> }

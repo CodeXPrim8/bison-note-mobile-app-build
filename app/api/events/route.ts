@@ -3,9 +3,11 @@ import { createEventSchema } from '@/lib/schemas/event'
 import { requireUser } from '@/lib/api/session'
 import { auditFromRequest } from '@/lib/api/audit-request'
 import { isSupabaseConfigured } from '@/lib/env'
+import { readBuSession } from '@/lib/auth/bu-session'
 import {
   fetchPublicEventRows,
   insertLiveEvent,
+  resolveLiveCelebrantId,
   withLiveTiers,
 } from '@/lib/events/live'
 
@@ -25,10 +27,23 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
+    const session = await readBuSession()
+    const celebrantId = await resolveLiveCelebrantId({
+      id: user.id,
+      email: user.email,
+      phone: session?.phone_e164 || session?.phone || null,
+    })
+    if (!celebrantId) {
+      throw new ApiError(
+        403,
+        'NOT_LIVE_USER',
+        'This signed-in account is not a live ɃU user. Sign out, then sign in with your ɃU ID (phone number) and PIN from the live ɃU app.',
+      )
+    }
     const json: unknown = await request.json()
     const body = createEventSchema.parse(json)
     const firstTier = body.ticket_tiers[0]
-    const created = await insertLiveEvent(user.id, {
+    const created = await insertLiveEvent(celebrantId, {
       title: body.title,
       start_time: body.start_time,
       venue_name: body.venue_name,
