@@ -1,5 +1,7 @@
 import { verifyPaystackSignature, isPaystackConfigured } from '@/lib/payments/paystack'
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
+import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
+import { isServiceRoleConfigured } from '@/lib/env'
 import { errorResponse, successResponse } from '@/lib/api/errors'
 
 export async function POST(request: Request) {
@@ -23,12 +25,17 @@ export async function POST(request: Request) {
   }
 
   if (event.event === 'charge.success') {
-    const result = await fulfillSuccessfulPayment(reference)
+    const result =
+      isLiveTicketReference(reference) || !isServiceRoleConfigured()
+        ? await fulfillLiveTicketPayment(reference)
+        : await fulfillSuccessfulPayment(reference).catch(() => fulfillLiveTicketPayment(reference))
     return successResponse({ reference, tickets: result.tickets.length }, 'Fulfilled')
   }
 
   if (event.event === 'charge.failed' || event.data?.status === 'failed') {
-    await failPayment(reference, event.event)
+    if (!isLiveTicketReference(reference) && isServiceRoleConfigured()) {
+      await failPayment(reference, event.event)
+    }
     return successResponse({ reference }, 'Marked failed')
   }
 

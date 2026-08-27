@@ -10,6 +10,7 @@ import {
   resolveLiveCelebrantId,
   withLiveTiers,
 } from '@/lib/events/live'
+import { isPublicCatalogEvent } from '@/lib/events/access'
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
       return successResponse([])
     }
     const rows = await fetchPublicEventRows()
-    const list = rows.map(withLiveTiers).filter((event) => event.visibility === 'PUBLIC' && event.status !== 'cancelled')
+    const list = rows.map(withLiveTiers).filter(isPublicCatalogEvent)
     return successResponse(list)
   } catch (error) {
     return handleRouteError(error)

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Ticket, Search } from 'lucide-react'
+import { ticketsRemaining } from '@/lib/events/sale'
 import type { EventWithTiers } from '@/lib/types/database'
 
 interface EventsTicketsProps {
@@ -18,7 +19,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/events')
+    fetch('/api/events', { credentials: 'include' })
       .then(async (res) => {
         const json = (await res.json()) as { status: boolean; data?: EventWithTiers[]; message?: string }
         if (json.status && json.data) setEvents(json.data)
@@ -30,7 +31,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   useEffect(() => {
     if (initialData?.action === 'buy' && initialData.eventId) {
       const match = events.find((event) => event.id === initialData.eventId)
-      if (match) window.location.href = `/checkout/${match.slug}`
+      if (match) window.location.href = `/checkout/${match.slug}?from=app`
     }
   }, [initialData, events])
 
@@ -79,7 +80,9 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <Ticket className="h-3 w-3" />
-                  {event.tickets_available ?? 0} available
+                  {ticketsRemaining(event.ticket_tiers) <= 0
+                    ? 'Sold out'
+                    : `${ticketsRemaining(event.ticket_tiers)} remaining`}
                   <Calendar className="ml-2 h-3 w-3" />
                   {event.organizer_name ?? event.celebrant_name}
                 </div>

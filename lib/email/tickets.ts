@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import { getResendConfig } from '@/lib/env'
-import { ticketQrDataUrl } from '@/lib/tickets/qr-generator'
+import { ticketQrDataUrl, ticketQrScanString } from '@/lib/tickets/qr-generator'
 import type { TicketRecord } from '@/lib/types/database'
 
 export async function sendTicketEmail(input: {
@@ -14,7 +14,7 @@ export async function sendTicketEmail(input: {
 
   const items = await Promise.all(
     input.tickets.map(async (ticket) => {
-      const qr = ticket.qr_code_data ? await ticketQrDataUrl(ticket.qr_code_data) : ''
+      const qr = await ticketQrDataUrl(ticketQrScanString(ticket))
       return `<tr>
         <td style="padding:12px;border-bottom:1px solid #eee">
           <p><strong>${ticket.ticket_number ?? ticket.id}</strong></p>

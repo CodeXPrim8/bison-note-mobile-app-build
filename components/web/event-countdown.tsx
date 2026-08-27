@@ -1,6 +1,11 @@
 'use client'
 
-export function EventCountdown({ start }: { start: string }) {
+import { isEventPast } from '@/lib/events/sale'
+
+export function EventCountdown({ start, end }: { start: string; end?: string | null }) {
+  if (isEventPast({ start_time: start, end_time: end })) {
+    return <p className="mt-4 text-sm text-muted-foreground">This event has ended</p>
+  }
   const startMs = new Date(start).getTime()
   const diff = startMs - Date.now()
   if (diff <= 0) return <p className="mt-4 text-sm text-primary">Happening now</p>

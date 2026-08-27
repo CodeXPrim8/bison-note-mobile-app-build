@@ -3,12 +3,15 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { getProfile, requireUser } from '@/lib/api/session'
 import { createDataClient } from '@/lib/supabase/data'
 import { fetchLiveInvites } from '@/lib/events/live'
+import { isEventUpcoming } from '@/lib/events/sale'
 
 export async function GET() {
   try {
     const user = await requireUser()
     const profile = await getProfile(user.id)
-    const invites = await fetchLiveInvites(user.id, profile?.phone_e164 ?? profile?.phone)
+    const invites = (await fetchLiveInvites(user.id, profile?.phone_e164 ?? profile?.phone)).filter(
+      (invite) => !invite.event || isEventUpcoming(invite.event),
+    )
     return successResponse(invites)
   } catch (error) {
     return handleRouteError(error)

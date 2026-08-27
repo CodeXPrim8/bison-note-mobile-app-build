@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/api/session'
 import { handleRouteError, successResponse } from '@/lib/api/errors'
 import { fetchOrganizerEventRows, fetchTicketsForEvents, mapLiveEvent } from '@/lib/events/live'
+import { isEventUpcoming } from '@/lib/events/sale'
 
 export async function GET() {
   try {
@@ -13,7 +14,7 @@ export async function GET() {
       total_events: list.length,
       tickets_sold: paid.length,
       total_revenue: paid.reduce((sum, ticket) => sum + Number(ticket.amount_paid), 0),
-      upcoming_events: list.filter((event) => new Date(event.start_time).getTime() >= Date.now()).length,
+      upcoming_events: list.filter((event) => isEventUpcoming(event)).length,
       total_guests: paid.length,
       checked_in: paid.filter((ticket) => ticket.status === 'checked_in').length,
     })

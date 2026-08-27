@@ -1,3 +1,4 @@
+import { isServiceRoleConfigured } from '@/lib/env'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function writeAudit(input: {
@@ -8,6 +9,7 @@ export async function writeAudit(input: {
   statusCode?: number
   ip?: string | null
 }) {
+  if (!isServiceRoleConfigured()) return
   try {
     const admin = createAdminClient()
     await admin.from('api_audit_logs').insert({

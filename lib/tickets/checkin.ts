@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
+import { isServiceRoleConfigured } from '@/lib/env'
 import { parseTicketQr } from '@/lib/tickets/qr-generator'
+import { checkInLiveTicket, lookupLiveTicketForCheckin } from '@/lib/payments/live-ticket'
 import { enqueueMerchantWebhook } from '@/lib/webhooks/merchant'
 import type { CheckinResult, EventRecord, GatewayMerchant, TicketRecord, TicketTier } from '@/lib/types/database'
 
@@ -25,6 +27,12 @@ export async function lookupTicketForCheckin(input: {
   checkinCode?: string
   qrPayload?: string
 }): Promise<{ status: CheckinResult['status']; ticket?: TicketRecord; message: string }> {
+  const live = await lookupLiveTicketForCheckin(input)
+  if (live.ticket || live.message !== 'INVALID TICKET') {
+    return live
+  }
+  if (!isServiceRoleConfigured()) return live
+
   const admin = createAdminClient()
   let code = input.checkinCode?.trim().toUpperCase()
   let qrToken: string | undefined
@@ -77,6 +85,14 @@ export async function checkInTicket(input: {
   gatekeeperId?: string | null
   confirm?: boolean
 }): Promise<CheckinResult> {
+  const live = await lookupLiveTicketForCheckin(input)
+  if (live.ticket || live.message !== 'INVALID TICKET') {
+    return checkInLiveTicket(input)
+  }
+  if (!isServiceRoleConfigured()) {
+    return checkInLiveTicket(input)
+  }
+
   const admin = createAdminClient()
   const looked = await lookupTicketForCheckin(input)
   if (!looked.ticket || looked.status !== 'valid') {

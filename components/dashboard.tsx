@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { Bell, Settings, Eye, EyeOff } from 'lucide-react'
-import type { EventInvitation, EventRecord, EventWithTiers } from '@/lib/types/database'
+import type { EventInvitation, EventRecord, EventWithTiers, TicketRecord, TicketTier } from '@/lib/types/database'
+import { isEventUpcoming } from '@/lib/events/sale'
+
+interface OwnedTicket extends TicketRecord {
+  event: EventRecord | null
+  tier: TicketTier | null
+  display_status: string
+}
 
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void
@@ -12,6 +19,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [publicEvents, setPublicEvents] = useState<EventWithTiers[]>([])
   const [invites, setInvites] = useState<Array<EventInvitation & { event: EventRecord | null }>>([])
+  const [myTickets, setMyTickets] = useState<OwnedTicket[]>([])
+  const [ticketsLoaded, setTicketsLoaded] = useState(false)
   const [greetingName, setGreetingName] = useState('there')
   const [buBalance, setBuBalance] = useState<number | null>(null)
   const [nairaBalance, setNairaBalance] = useState<number | null>(null)
@@ -51,6 +60,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         if (json.status) setInvites((json.data ?? []).slice(0, 2))
       })
       .catch(() => undefined)
+    fetch('/api/tickets/mine', { credentials: 'include' })
+      .then(async (res) => {
+        const json = await res.json()
+        if (json.status) {
+          const list = (json.data ?? []) as OwnedTicket[]
+          setMyTickets(list.filter((ticket) => isEventUpcoming(ticket.event)).slice(0, 4))
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setTicketsLoaded(true))
   }, [])
 
   return (
@@ -153,6 +172,42 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
+      <div className="px-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold">My tickets</h3>
+          <button onClick={() => onNavigate('tickets')} className="text-sm font-semibold text-primary">
+            View All
+          </button>
+        </div>
+        <div className="space-y-3">
+          {!ticketsLoaded && myTickets.length === 0 && (
+            <p className="text-sm text-muted-foreground">Loading tickets…</p>
+          )}
+          {ticketsLoaded && myTickets.length === 0 && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">No upcoming tickets. Past events you paid for are in History.</p>
+              <button type="button" onClick={() => onNavigate('history')} className="text-sm font-semibold text-primary">
+                Open history
+              </button>
+            </div>
+          )}
+          {myTickets.map((ticket) => (
+            <button
+              key={ticket.id}
+              type="button"
+              onClick={() => onNavigate('tickets', { ticketId: ticket.id })}
+              className="flex w-full items-center justify-between rounded-xl bg-card p-3 text-left transition hover:bg-card/80"
+            >
+              <div>
+                <h4 className="font-semibold">{ticket.event?.title ?? 'Event ticket'}</h4>
+                <p className="text-xs text-muted-foreground">{ticket.tier?.name ?? 'General'}</p>
+              </div>
+              <span className="text-xs font-semibold text-primary">{ticket.display_status ?? 'VALID'}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Invites Section */}
       <div className="px-4">
         <div className="flex items-center justify-between mb-4">
@@ -171,7 +226,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           {invites.map((item) => (
             <div
               key={item.id}
-              onClick={() => onNavigate('invites')}
+              onClick={() => (item.event_id ? onNavigate('event-info', item.event_id) : onNavigate('invites'))}
               className="flex cursor-pointer gap-3 rounded-xl bg-card p-3 transition hover:bg-card/80"
             >
               <div className="text-3xl">💌</div>
@@ -225,8 +280,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <p className="text-xs text-muted-foreground">
                     🎫 ₦{Number(item.starting_price ?? 0).toLocaleString()}
                   </p>
-                  <span className="rounded-full bg-green-400/20 px-2 py-1 text-xs text-green-400">
-                    {item.tickets_available ? 'Available' : 'Check tickets'}
+                  <span
+                    className={`rounded-full px-2 py-1 text-xs ${
+                      item.tickets_available
+                        ? 'bg-green-400/20 text-green-400'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {item.tickets_available ? 'Available' : 'Sold out'}
                   </span>
                 </div>
               </div>

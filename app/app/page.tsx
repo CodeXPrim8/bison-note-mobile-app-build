@@ -23,6 +23,13 @@ import ReceiveBU from '@/components/receive-bu'
 import EventInfo from '@/components/event-info'
 import MyTickets from '@/components/my-tickets'
 
+function ticketIdFromPageData(pageData: unknown) {
+  if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
+    return String((pageData as { ticketId?: string }).ticketId ?? '') || undefined
+  }
+  return undefined
+}
+
 export default function MobileApp() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [pageData, setPageData] = useState<unknown>(null)
@@ -50,7 +57,8 @@ export default function MobileApp() {
           return
         }
         if (json.status && !json.data?.user) {
-          window.location.replace('/login?next=/app')
+          const next = `${window.location.pathname}${window.location.search}`
+          window.location.replace(`/login?next=${encodeURIComponent(next.startsWith('/app') ? next : '/app')}`)
           return
         }
         setMounted(true)
@@ -59,6 +67,23 @@ export default function MobileApp() {
         setMounted(true)
       })
   }, [])
+
+  useEffect(() => {
+    if (!allowed) return
+    const query = new URLSearchParams(window.location.search)
+    const page = query.get('page')
+    const ticketId = query.get('id')
+    const event = query.get('event')
+    if (page === 'tickets') {
+      setCurrentPage('tickets')
+      if (ticketId) setPageData({ ticketId })
+    } else if (page === 'events') {
+      setCurrentPage('events')
+    } else if ((page === 'event-info' || page === 'event') && event) {
+      setCurrentPage('event-info')
+      setPageData(event)
+    }
+  }, [allowed])
 
   useEffect(() => {
     if (mounted) {
@@ -127,8 +152,10 @@ export default function MobileApp() {
               {currentPage === 'notifications' && <Notifications />}
               {currentPage === 'buy-bu' && <BuyBU />}
               {currentPage === 'history' && <History />}
-              {currentPage === 'invites' && <Invites />}
-              {currentPage === 'tickets' && <MyTickets onNavigate={handleNavigate} />}
+              {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
+              {currentPage === 'tickets' && (
+                <MyTickets onNavigate={handleNavigate} ticketId={ticketIdFromPageData(pageData)} />
+              )}
               {currentPage === 'events' && (
                 <EventsTickets onNavigate={handleNavigate} initialData={pageData as { action?: string; eventId?: string }} />
               )}
@@ -143,7 +170,16 @@ export default function MobileApp() {
               {currentPage === 'dashboard' && <CelebrantDashboard />}
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
               {currentPage === 'redemption' && <Redemption />}
-              {currentPage === 'tickets' && <MyTickets onNavigate={handleNavigate} />}
+              {currentPage === 'tickets' && (
+                <MyTickets onNavigate={handleNavigate} ticketId={ticketIdFromPageData(pageData)} />
+              )}
+              {currentPage === 'events' && (
+                <EventsTickets onNavigate={handleNavigate} initialData={pageData as { action?: string; eventId?: string }} />
+              )}
+              {currentPage === 'event-info' && (
+                <EventInfo eventId={typeof pageData === 'string' ? pageData : undefined} onNavigate={handleNavigate} />
+              )}
+              {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
               {currentPage === 'profile' && <Profile onNavigate={handleNavigate} />}
             </>
           ) : (

@@ -10,9 +10,13 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
   const [reference, setReference] = useState('')
   const [message, setMessage] = useState('Confirming payment…')
   const [ok, setOk] = useState(false)
+  const [ticketsHref, setTicketsHref] = useState('/tickets')
 
   useEffect(() => {
     params.then(({ reference: value }) => setReference(value))
+    if (new URLSearchParams(window.location.search).get('next') === '/app') {
+      setTicketsHref('/app?page=tickets')
+    }
   }, [params])
 
   useEffect(() => {
@@ -21,8 +25,14 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
       .then(async (res) => {
         const json = await res.json()
         if (json.status) {
+          const title = json.data?.event_title
+          const count = Array.isArray(json.data?.tickets) ? json.data.tickets.length : 0
           setOk(true)
-          setMessage('Payment confirmed. Your tickets are ready.')
+          setMessage(
+            title
+              ? `Payment confirmed. Your ticket${count === 1 ? '' : 's'} for ${title} ${count === 1 ? 'is' : 'are'} ready.`
+              : 'Payment confirmed. Your tickets are ready.',
+          )
         } else if (json.code === 'PAYMENT_PENDING') {
           setMessage('Payment is still pending. Complete Paystack checkout, then return here.')
         } else {
@@ -42,10 +52,10 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
           <p className="mt-2 font-mono text-xs">{reference}</p>
           <div className="mt-6 flex flex-col gap-2">
             <Button asChild>
-              <Link href="/tickets">View tickets</Link>
+              <Link href={ticketsHref}>View tickets</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/app">Open ɃU app</Link>
+              <Link href="/app?page=tickets">Open ɃU app</Link>
             </Button>
           </div>
         </Card>

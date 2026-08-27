@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
-import { getAppUrl, isPaystackConfigured } from '@/lib/env'
+import { getAppUrl, isPaystackConfigured, isServiceRoleConfigured } from '@/lib/env'
 import { quoteTicketTotal } from '@/lib/money'
 import { normalizePhone } from '@/lib/phone'
 import {
@@ -9,6 +9,9 @@ import {
   nairaToKobo,
 } from '@/lib/payments/paystack'
 import { fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
+import { initializeLiveTicketPurchase } from '@/lib/payments/live-ticket'
+import { parseLiveTierId } from '@/lib/events/live'
+import { isEventUpcoming } from '@/lib/events/sale'
 import { generateReference } from '@/lib/tickets/ids'
 import type { EventRecord, GatewayMerchant, Payment, TicketTier } from '@/lib/types/database'
 
@@ -27,6 +30,13 @@ export interface InitializeTicketInput {
 }
 
 export async function initializeTicketPurchase(input: InitializeTicketInput) {
+  if (parseLiveTierId(input.ticket_tier_id)) {
+    return initializeLiveTicketPurchase(input)
+  }
+  if (!isServiceRoleConfigured()) {
+    throw new ApiError(404, 'TIER_NOT_FOUND', 'Ticket tier not found')
+  }
+
   const admin = createAdminClient()
   const quantity = input.quantity
   const spray = input.spray_bu_amount ?? 0
@@ -66,6 +76,9 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
   const event = eventRow as EventRecord
   if (event.status !== 'published') {
     throw new ApiError(409, 'EVENT_NOT_ON_SALE', 'Event is not published')
+  }
+  if (!isEventUpcoming(event)) {
+    throw new ApiError(409, 'EVENT_ENDED', 'This event has ended')
   }
 
   const salesStart = event.ticket_sales_start ? new Date(event.ticket_sales_start).getTime() : null

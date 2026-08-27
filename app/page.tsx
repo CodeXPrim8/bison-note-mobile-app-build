@@ -59,7 +59,7 @@ export default function WebsiteHome() {
         {[
           { title: 'Create your event', body: 'Weddings, concerts, club nights, conferences — publish in minutes.' },
           { title: 'Private invites', body: 'Invite guests by ɃU ID. Private events never hit Upcoming Events.' },
-          { title: 'Ticketing', body: 'Regular, VIP, tables, free entry. Inventory that cannot oversell.' },
+          { title: 'Ticketing', body: 'Live ɃU events sell one General ticket type at a set price and cap. VIP or table inventory needs a new table.' },
           { title: 'QR check-in', body: 'Scan at the gate. Valid, already used, refunded — decided server-side.' },
         ].map((item) => (
           <Card key={item.title} className="border-primary/20 p-6">
@@ -94,13 +94,13 @@ export default function WebsiteHome() {
 
       <section className="mx-auto max-w-6xl px-4 py-16">
         <Card className="border-primary/30 bg-gradient-to-br from-primary/20 to-background p-8 md:p-12">
-          <h2 className="text-3xl font-bold">Download the ɃU mobile app</h2>
+          <h2 className="text-3xl font-bold">Open the ɃU app</h2>
           <p className="mt-3 max-w-xl text-muted-foreground">
             Wallet, spraying, invites, tickets, and withdrawals — one ɃU account across web and mobile. Physical Bison
             Notes stay ceremonial. Value lives in the wallet.
           </p>
           <Button asChild className="mt-6">
-            <Link href="/app">Launch mobile experience</Link>
+            <Link href="/app">Open ɃU app</Link>
           </Button>
         </Card>
       </section>

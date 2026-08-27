@@ -9,7 +9,7 @@ interface InviteRow extends EventInvitation {
   event: EventRecord | null
 }
 
-export default function Invites() {
+export default function Invites({ onNavigate }: { onNavigate?: (page: string, data?: unknown) => void }) {
   const [invites, setInvites] = useState<InviteRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
 
@@ -70,8 +70,16 @@ export default function Invites() {
                 <Button size="sm" variant="outline" onClick={() => respond(invite.id, 'declined')}>
                   Decline
                 </Button>
-                {invite.event?.slug && (
-                  <Button size="sm" variant="ghost" onClick={() => (window.location.href = `/events/${invite.event?.slug}`)}>
+                {invite.event?.id && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      onNavigate
+                        ? onNavigate('event-info', invite.event?.id)
+                        : (window.location.href = `/events/${invite.event?.slug ?? invite.event?.id}`)
+                    }
+                  >
                     View invitation
                   </Button>
                 )}

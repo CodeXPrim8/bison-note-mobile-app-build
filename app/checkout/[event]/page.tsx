@@ -8,12 +8,14 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatNaira } from '@/lib/money'
 import { clearDraft, loadDraft, saveDraft } from '@/lib/forms/draft'
+import { isEventUpcoming } from '@/lib/events/sale'
 import type { EventRecord, TicketTier } from '@/lib/types/database'
 
 interface Quote {
   subtotal: number
   serviceFee: number
   total: number
+  remaining?: number
 }
 
 export default function CheckoutPage({ params }: { params: Promise<{ event: string }> }) {
@@ -28,11 +30,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
   const [quote, setQuote] = useState<Quote | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [fromApp, setFromApp] = useState(false)
   const [draftReady, setDraftReady] = useState(false)
   const draftKey = slug ? `bu-checkout-draft:${slug}` : ''
 
   useEffect(() => {
     params.then(({ event: value }) => setSlug(value))
+    setFromApp(new URLSearchParams(window.location.search).get('from') === 'app')
   }, [params])
 
   useEffect(() => {
@@ -71,6 +75,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         const json = await res.json()
         if (json.status) {
           setEvent(json.data)
+          if (!isEventUpcoming(json.data)) {
+            setError('This event has ended')
+            setTierId('')
+            return
+          }
           setTierId((current) => current || json.data.ticket_tiers?.[0]?.id || '')
         } else setError(json.message)
       })
@@ -78,7 +87,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
   }, [slug])
 
   useEffect(() => {
-    if (!tierId) return
+    if (!tierId || (event && !isEventUpcoming(event))) return
     fetch('/api/tickets/quote', {
       method: 'POST',
       credentials: 'include',
@@ -87,10 +96,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
     })
       .then(async (res) => {
         const json = await res.json()
-        if (json.status) setQuote(json.data)
+        if (json.status) {
+          setQuote(json.data)
+          setError(null)
+        } else {
+          setQuote(null)
+          setError(json.message ?? 'Could not quote this ticket')
+        }
       })
       .catch(() => undefined)
-  }, [tierId, quantity])
+  }, [tierId, quantity, event])
 
   async function pay() {
     setBusy(true)
@@ -103,13 +118,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         email,
         ticket_tier_id: tierId,
         quantity,
-        metadata: { buyer_name: name, phone },
+        metadata: { buyer_name: name, phone, custom: fromApp ? { next: '/app' } : undefined },
       }),
     })
     const json = await res.json()
     setBusy(false)
     if (res.status === 401) {
-      window.location.assign(`/login?next=${encodeURIComponent(`/checkout/${slug}`)}`)
+      const checkoutPath = fromApp ? `/checkout/${slug}?from=app` : `/checkout/${slug}`
+      window.location.assign(`/login?next=${encodeURIComponent(checkoutPath)}`)
       return
     }
     if (!json.status) {
@@ -124,7 +140,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
     <div className="theme-pink min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main className="mx-auto max-w-xl px-4 py-12">
-        <Button variant="ghost" type="button" onClick={() => router.back()}>
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={() => (fromApp ? window.location.assign('/app') : router.back())}
+        >
           ← Back
         </Button>
         <h1 className="mt-4 text-3xl font-bold">Checkout</h1>
@@ -167,11 +187,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
                   <span>Total</span>
                   <span className="text-primary">{formatNaira(quote.total)}</span>
                 </div>
+                {typeof quote.remaining === 'number' && (
+                  <p className="text-xs text-muted-foreground">{quote.remaining} remaining</p>
+                )}
               </div>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="w-full" disabled={busy || !email} type="submit">
-              {busy ? 'Processing…' : 'Continue to payment'}
+            <Button className="w-full" disabled={busy || !email || !quote || (event ? !isEventUpcoming(event) : true)} type="submit">
+              {busy ? 'Processing…' : event && !isEventUpcoming(event) ? 'Event ended' : 'Continue to payment'}
             </Button>
           </form>
         </Card>

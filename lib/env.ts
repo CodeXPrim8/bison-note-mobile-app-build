@@ -43,7 +43,7 @@ export function isServiceRoleConfigured(): boolean {
 
 export function getServiceRoleKey(): string {
   const key = optional('SUPABASE_SERVICE_ROLE_KEY')
-  if (!isJwtSecret(key)) {
+  if (!key || !isJwtSecret(key)) {
     throw new MissingEnvError(
       'This website already uses the live ɃU Supabase URL and anon key. For admin writes, add that same project’s SUPABASE_SERVICE_ROLE_KEY (Supabase → Settings → API → service_role), then restart the server.',
     )

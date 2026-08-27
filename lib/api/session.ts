@@ -7,7 +7,12 @@ import { profileFromBuSession, readBuSession } from '@/lib/auth/bu-session'
 export async function getSessionUser() {
   const legacy = await readBuSession()
   if (legacy) {
-    return { id: legacy.id, email: legacy.email ?? undefined }
+    return {
+      id: legacy.id,
+      email: legacy.email ?? undefined,
+      phone: legacy.phone ?? undefined,
+      phone_e164: legacy.phone_e164 ?? undefined,
+    }
   }
   if (!isSupabaseConfigured()) return null
   const supabase = await createClient()

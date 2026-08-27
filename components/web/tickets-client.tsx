@@ -6,6 +6,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
 import { publicTicketStatus } from '@/lib/types/database'
+import { ticketQrScanString } from '@/lib/tickets/qr-generator'
+import { isEventUpcoming, isEventPast } from '@/lib/events/sale'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 
 interface TicketRow extends TicketRecord {
@@ -34,7 +36,7 @@ export default function TicketsClient() {
         const wanted = new URLSearchParams(window.location.search).get('id')
         if (wanted) {
           const match = (json.data as TicketRow[] | undefined)?.find((ticket) => ticket.id === wanted)
-          if (match) setSelected(match)
+          if (match && isEventUpcoming(match.event)) setSelected(match)
         }
       })
       .catch(() => {
@@ -47,12 +49,17 @@ export default function TicketsClient() {
     async function render() {
       const next: Record<string, string> = {}
       for (const ticket of tickets) {
-        if (ticket.qr_code_data) next[ticket.id] = await QRCode.toDataURL(ticket.qr_code_data, { width: 280, margin: 1 })
+        if (ticket.qr_code_data || ticket.checkin_code) {
+          next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), { width: 280, margin: 1 })
+        }
       }
       setQrs(next)
     }
     if (tickets.length) void render()
   }, [tickets])
+
+  const upcoming = tickets.filter((ticket) => isEventUpcoming(ticket.event))
+  const past = tickets.filter((ticket) => isEventPast(ticket.event))
 
   return (
     <div className="theme-pink min-h-screen bg-background text-foreground">
@@ -60,18 +67,24 @@ export default function TicketsClient() {
       <main className="mx-auto max-w-xl px-4 py-12">
         <h1 className="text-3xl font-bold">My tickets</h1>
         {message && <p className="mt-4 text-sm text-muted-foreground">{message}</p>}
-        {loaded && tickets.length === 0 && (
+        {loaded && upcoming.length === 0 && (
           <Card className="mt-8 p-8 text-center">
-            <h2 className="text-xl font-bold">No Ticket</h2>
-            <p className="mt-2 text-sm text-muted-foreground">You don&apos;t have any event tickets yet.</p>
-            <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to discover your next experience.</p>
+            <h2 className="text-xl font-bold">No upcoming tickets</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {past.length
+                ? 'Events you already attended are listed below in history.'
+                : "You don't have any event tickets yet."}
+            </p>
+            {!past.length && (
+              <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to discover your next experience.</p>
+            )}
             <Button asChild className="mt-4">
               <a href="/events">Explore Events</a>
             </Button>
           </Card>
         )}
         <div className="mt-6 space-y-3">
-          {tickets.map((ticket) => (
+          {upcoming.map((ticket) => (
             <Card key={ticket.id} className="cursor-pointer p-4" onClick={() => setSelected(ticket)}>
               <p className="font-semibold">{ticket.event?.title}</p>
               <p className="text-sm text-muted-foreground">
@@ -83,7 +96,7 @@ export default function TicketsClient() {
             </Card>
           ))}
         </div>
-        {selected && (
+        {selected && upcoming.some((ticket) => ticket.id === selected.id) && (
           <Card className="mt-6 p-6 text-center">
             <h2 className="text-xl font-bold">{selected.event?.title}</h2>
             {qrs[selected.id] && (
@@ -96,6 +109,24 @@ export default function TicketsClient() {
               Close
             </Button>
           </Card>
+        )}
+        {past.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-xl font-bold">History</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Events you paid for that have already ended.</p>
+            <div className="mt-4 space-y-3">
+              {past.map((ticket) => (
+                <Card key={ticket.id} className="p-4">
+                  <p className="font-semibold">{ticket.event?.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {ticket.tier?.name}
+                    {ticket.event?.start_time ? ` · ${new Date(ticket.event.start_time).toLocaleDateString()}` : ''}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Ended · {ticket.display_status ?? 'EXPIRED'}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
       </main>
     </div>

@@ -2,24 +2,29 @@ import { createDataClient } from '@/lib/supabase/data'
 import { getProfile, getSessionUser } from '@/lib/api/session'
 import { ApiError } from '@/lib/api/errors'
 import type { EventRecord } from '@/lib/types/database'
-import { fetchEventRowBySlug, mapLiveEvent } from '@/lib/events/live'
+import { fetchEventRowBySlug, mapLiveEvent, resolveLiveCelebrantId } from '@/lib/events/live'
+import { isEventUpcoming } from '@/lib/events/sale'
 
-export function isPublicCatalogEvent(event: Pick<EventRecord, 'status' | 'visibility' | 'start_time'>) {
-  return (
-    event.status === 'published' &&
-    event.visibility === 'PUBLIC' &&
-    new Date(event.start_time).getTime() >= Date.now() - 12 * 60 * 60 * 1000
-  )
+export function isPublicCatalogEvent(
+  event: Pick<EventRecord, 'status' | 'visibility' | 'start_time' | 'end_time'>,
+) {
+  return event.status === 'published' && event.visibility === 'PUBLIC' && isEventUpcoming(event)
 }
 
 export async function canViewEvent(event: EventRecord): Promise<boolean> {
+  if (!isEventUpcoming(event)) return false
   if (event.status === 'published' && event.visibility === 'PUBLIC') return true
   const user = await getSessionUser()
   if (!user) return false
-  if (event.organizer_id === user.id) return true
+  const profile = await getProfile(user.id)
+  const liveUserId = await resolveLiveCelebrantId({
+    id: user.id,
+    email: user.email,
+    phone: profile?.phone_e164 || profile?.phone,
+  })
+  if (event.organizer_id === user.id || (liveUserId && event.organizer_id === liveUserId)) return true
   if (event.visibility !== 'PRIVATE') return false
   const db = createDataClient()
-  const profile = await getProfile(user.id)
   const invited = await db
     .from('invites')
     .select('id')
@@ -27,6 +32,7 @@ export async function canViewEvent(event: EventRecord): Promise<boolean> {
     .or(
       [
         `guest_id.eq.${user.id}`,
+        liveUserId ? `guest_id.eq.${liveUserId}` : null,
         profile?.phone_e164 ? `guest_phone.eq.${profile.phone_e164}` : null,
         profile?.phone ? `guest_phone.eq.${profile.phone}` : null,
       ]
@@ -58,7 +64,13 @@ export async function requireEventOrganizer(eventId: string) {
   const row = (await fetchEventRowBySlug(eventId, db)) ?? null
   if (!row) throw new ApiError(404, 'NOT_FOUND', 'Event not found')
   const event = mapLiveEvent(row)
-  if (event.organizer_id !== user.id) {
+  const profile = await getProfile(user.id)
+  const liveUserId = await resolveLiveCelebrantId({
+    id: user.id,
+    email: user.email,
+    phone: profile?.phone_e164 || profile?.phone,
+  })
+  if (event.organizer_id !== user.id && event.organizer_id !== liveUserId) {
     throw new ApiError(403, 'FORBIDDEN', 'Not the organizer for this event')
   }
   return { user, event, admin: db }

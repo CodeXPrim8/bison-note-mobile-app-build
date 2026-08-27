@@ -1,5 +1,6 @@
 import type { EventRecord, EventStatus, EventVisibility, Payment, TicketRecord, TicketStatus, TicketTier } from '@/lib/types/database'
 import { createDataClient } from '@/lib/supabase/data'
+import { readBuSession } from '@/lib/auth/bu-session'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export function liveTierId(eventId: string) {
@@ -111,7 +112,41 @@ export function liveEventTiers(row: Record<string, unknown>, event: EventRecord)
   ]
 }
 
-function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
+function parseQrMeta(raw: unknown) {
+  const obj =
+    raw && typeof raw === 'object'
+      ? (raw as Record<string, unknown>)
+      : typeof raw === 'string' && raw
+        ? (() => {
+            try {
+              return JSON.parse(raw) as Record<string, unknown>
+            } catch {
+              return null
+            }
+          })()
+        : null
+  if (!obj) return { checkin_code: null, qr_token: null, pay_ref: null, type: null }
+  return {
+    checkin_code: asString(obj.checkin_code) || null,
+    qr_token: asString(obj.qr_token) || null,
+    pay_ref: asString(obj.pay_ref) || asString(obj.reference) || null,
+    type: asString(obj.type) || null,
+  }
+}
+
+/** Tickets minted by this website after Paystack (`type: bu_ticket` / `BU_LIVE_` pay ref). */
+export function isWebsiteIssuedLiveTicket(row: Record<string, unknown>) {
+  const meta = parseQrMeta(row.qr_code_data)
+  return meta.type === 'bu_ticket' || Boolean(meta.pay_ref?.startsWith('BU_LIVE_'))
+}
+
+function qrRawString(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object') return JSON.stringify(value)
+  return ''
+}
+
+export function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
   const raw = asString(row.status, 'confirmed')
   let status: TicketStatus = 'paid'
   if (raw === 'checked_in' || raw === 'used') status = 'checked_in'
@@ -121,27 +156,63 @@ function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
   else status = 'paid'
 
   const eventId = asString(row.event_id)
+  const qrRaw = qrRawString(row.qr_code_data)
+  const qrMeta = parseQrMeta(row.qr_code_data ?? qrRaw)
   return {
     id: asString(row.id),
     ticket_number: asString(row.ticket_number) || null,
     event_id: eventId,
     tier_id: asString(row.tier_id) || liveTierId(eventId),
-    payment_id: asString(row.payment_id) || asString(row.transfer_id) || null,
+    payment_id: asString(row.payment_id) || asString(row.transfer_id) || qrMeta.pay_ref || null,
     buyer_user_id: asString(row.buyer_user_id) || asString(row.buyer_id) || null,
     buyer_email: asString(row.buyer_email),
     buyer_name: asString(row.buyer_name) || null,
     buyer_phone: asString(row.buyer_phone) || null,
     amount_paid: asNumber(row.amount_paid ?? row.total_price_bu),
     status,
-    qr_code_data: asString(row.qr_code_data) || null,
-    qr_token: asString(row.qr_token) || asString(row.qr_code_data) || null,
-    checkin_code: asString(row.checkin_code) || null,
+    qr_code_data: qrRaw || null,
+    qr_token: asString(row.qr_token) || qrMeta.qr_token || qrRaw || null,
+    checkin_code: asString(row.checkin_code) || qrMeta.checkin_code || null,
     checked_in_at: row.checked_in_at ? asIso(row.checked_in_at) : null,
     checked_in_by: asString(row.checked_in_by) || null,
     reserved_until: row.reserved_until ? asIso(row.reserved_until) : null,
     created_at: asIso(row.created_at),
     updated_at: asIso(row.updated_at ?? row.created_at),
   }
+}
+
+export function liveRemaining(tier: Pick<TicketTier, 'quantity_total' | 'quantity_sold'>) {
+  return Math.max(0, Number(tier.quantity_total) - Number(tier.quantity_sold))
+}
+
+function escapeIlike(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
+function asTicketRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value as Record<string, unknown>[]
+  if (value && typeof value === 'object') return [value as Record<string, unknown>]
+  return []
+}
+
+export async function fetchLiveTicketsByPayRef(reference: string, db: SupabaseClient = createDataClient()) {
+  const rpc = await db.rpc('bu_tickets_by_pay_ref', { p_ref: reference })
+  if (!rpc.error && rpc.data != null) {
+    const rows = asTicketRows(rpc.data)
+    if (rows.length) return rows.map(mapLiveTicket)
+  }
+
+  const byJson = await db.from('tickets').select('*').contains('qr_code_data', { pay_ref: reference })
+  if (!byJson.error && byJson.data?.length) {
+    return (byJson.data as Record<string, unknown>[]).map(mapLiveTicket)
+  }
+
+  const byText = await db.from('tickets').select('*').ilike('qr_code_data', `%${escapeIlike(reference)}%`)
+  if (!byText.error && byText.data?.length) {
+    return (byText.data as Record<string, unknown>[]).map(mapLiveTicket)
+  }
+
+  return []
 }
 
 export function ticketsAsPayments(tickets: TicketRecord[]): Payment[] {
@@ -236,7 +307,15 @@ export async function fetchLiveEventDashboard(eventId: string, organizerId: stri
   const row = await fetchEventRowBySlug(eventId, db)
   if (!row) return null
   const packed = withLiveTiers(row)
-  if (packed.organizer_id !== organizerId) return { forbidden: true as const }
+  if (packed.organizer_id !== organizerId) {
+    const session = await readBuSession()
+    const resolved = await resolveLiveCelebrantId({
+      id: organizerId,
+      email: session?.email,
+      phone: session?.phone_e164 || session?.phone,
+    })
+    if (!resolved || packed.organizer_id !== resolved) return { forbidden: true as const }
+  }
   const tickets = await fetchTicketsForEvents([packed.id], db)
   const invitations = await fetchLiveEventInvites(packed.id, db)
   const paid = tickets.filter((ticket) => ticket.status === 'paid' || ticket.status === 'checked_in')
@@ -440,15 +519,28 @@ export async function fetchLiveInvites(userId: string, phone?: string | null) {
   })
 }
 
-export async function fetchMyLiveTickets(userId: string) {
+export async function fetchMyLiveTickets(
+  userId: string,
+  contact?: { email?: string | null; phone?: string | null },
+  options?: { websiteIssuedOnly?: boolean },
+) {
+  const resolved = await resolveLiveCelebrantId({
+    id: userId,
+    email: contact?.email,
+    phone: contact?.phone,
+  })
+  const ids = [...new Set([userId, resolved].filter((value): value is string => Boolean(value)))]
   const db = createDataClient()
-  const { data, error } = await db.from('tickets').select('*').eq('buyer_id', userId).order('created_at', { ascending: false })
-  if (error || !data) {
-    const next = await db.from('tickets').select('*').eq('buyer_user_id', userId).order('created_at', { ascending: false })
-    if (next.error || !next.data) return []
-    return (next.data as Record<string, unknown>[]).map(mapLiveTicket)
-  }
-  return (data as Record<string, unknown>[]).map(mapLiveTicket)
+  const live = await db.from('tickets').select('*').in('buyer_id', ids).order('created_at', { ascending: false })
+  const source = !live.error && live.data
+    ? (live.data as Record<string, unknown>[])
+    : await (async () => {
+        const next = await db.from('tickets').select('*').in('buyer_user_id', ids).order('created_at', { ascending: false })
+        if (next.error || !next.data) return [] as Record<string, unknown>[]
+        return next.data as Record<string, unknown>[]
+      })()
+  const rows = options?.websiteIssuedOnly ? source.filter(isWebsiteIssuedLiveTicket) : source
+  return rows.map(mapLiveTicket)
 }
 
 export async function lookupLiveUser(phone: string) {

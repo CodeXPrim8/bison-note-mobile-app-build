@@ -29,15 +29,16 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
   async function scan(payload: string | undefined, confirm: boolean) {
     if (!eventId) return
     setBusy(true)
-    const looksLikeJson = Boolean(payload?.trim().startsWith('{'))
+    const value = (payload || code).trim()
+    const looksLikeJson = value.startsWith('{') || /BU_LIVE_/i.test(value)
     const res = await fetch('/api/checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event_id: eventId,
         confirm,
-        qr_payload: looksLikeJson ? payload : undefined,
-        checkin_code: looksLikeJson ? undefined : payload || code,
+        qr_payload: looksLikeJson ? value : undefined,
+        checkin_code: looksLikeJson ? undefined : value,
       }),
     })
     const json = await res.json()
@@ -74,7 +75,13 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
           Check ticket
         </Button>
         {result && (
-          <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+          <div
+            className={`rounded-xl border p-4 ${
+              result.status === 'valid' || result.status === 'checked_in'
+                ? 'border-primary/30 bg-primary/10'
+                : 'border-destructive/40 bg-destructive/15'
+            }`}
+          >
             <p className="text-lg font-bold">{result.message || result.status}</p>
             {(result.buyer_name || result.ticket) && (
               <p className="mt-2 text-sm text-muted-foreground">
@@ -94,8 +101,8 @@ export default function CheckinPage({ params }: { params: Promise<{ id: string }
         )}
       </Card>
       <p className="mt-4 text-xs text-muted-foreground">
-        Offline later: cache the signed attendee list from this event&apos;s snapshot endpoint, then sync scans when
-        back online.
+        Scan from the check-in page for the same event the ticket was bought for. If the camera fails, type the backup
+        code shown under the guest QR.
       </p>
     </div>
   )

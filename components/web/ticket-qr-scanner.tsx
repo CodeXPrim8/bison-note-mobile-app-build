@@ -26,7 +26,10 @@ export function TicketQrScanner({
       scanner = instance
       await instance.start(
         { facingMode: 'environment' },
-        { fps: 8, qrbox: { width: 240, height: 240 } },
+        { fps: 12, qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85)
+          return { width: size, height: size }
+        } },
         (decoded) => {
           onScanRef.current(decoded)
         },

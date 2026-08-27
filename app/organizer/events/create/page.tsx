@@ -46,7 +46,7 @@ export default function CreateEventPage() {
     ticket_sales_end: '',
   })
   const [tiers, setTiers] = useState<TierDraft[]>([
-    { name: '', price: '', quantity_total: '', description: '', max_per_buyer: '6' },
+    { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' },
   ])
   const [draftReady, setDraftReady] = useState(false)
 
@@ -60,7 +60,10 @@ export default function CreateEventPage() {
     if (draft?.visibility) setVisibility(draft.visibility)
     if (draft?.status) setStatus(draft.status)
     if (draft?.form) setForm((current) => ({ ...current, ...draft.form }))
-    if (draft?.tiers?.length) setTiers(draft.tiers)
+    if (draft?.tiers?.length) {
+      const first = draft.tiers[0]
+      setTiers([{ ...first, name: 'General' }])
+    }
     setDraftReady(true)
   }, [])
 
@@ -90,13 +93,15 @@ export default function CreateEventPage() {
       ticket_sales_end: form.ticket_sales_end ? new Date(form.ticket_sales_end).toISOString() : null,
       visibility,
       status: nextStatus,
-      ticket_tiers: tiers.map((tier) => ({
-        name: tier.name,
-        price: Number(tier.price) || 0,
-        quantity_total: Number(tier.quantity_total) || 0,
-        description: tier.description,
-        max_per_buyer: Number(tier.max_per_buyer) || 10,
-      })),
+      ticket_tiers: [
+        {
+          name: 'General',
+          price: Number(tiers[0]?.price) || 0,
+          quantity_total: Number(tiers[0]?.quantity_total) || 0,
+          description: tiers[0]?.description,
+          max_per_buyer: Number(tiers[0]?.max_per_buyer) || 6,
+        },
+      ],
     }
     const res = await fetch('/api/events', {
       method: 'POST',
@@ -173,29 +178,40 @@ export default function CreateEventPage() {
           </Button>
         </div>
         <div className="space-y-3">
-          <p className="font-semibold">Ticket tiers</p>
-          {tiers.map((tier, index) => (
-            <div key={index} className="grid gap-2 md:grid-cols-5">
-              <Input placeholder="Name" value={tier.name} onChange={(e) => {
-                const next = [...tiers]; next[index] = { ...tier, name: e.target.value }; setTiers(next)
-              }} />
-              <Input placeholder="Price" value={tier.price} onChange={(e) => {
-                const next = [...tiers]; next[index] = { ...tier, price: e.target.value }; setTiers(next)
-              }} />
-              <Input placeholder="Qty" value={tier.quantity_total} onChange={(e) => {
-                const next = [...tiers]; next[index] = { ...tier, quantity_total: e.target.value }; setTiers(next)
-              }} />
-              <Input placeholder="Max / buyer" value={tier.max_per_buyer} onChange={(e) => {
-                const next = [...tiers]; next[index] = { ...tier, max_per_buyer: e.target.value }; setTiers(next)
-              }} />
-              <Input placeholder="Perks" value={tier.description} onChange={(e) => {
-                const next = [...tiers]; next[index] = { ...tier, description: e.target.value }; setTiers(next)
-              }} />
-            </div>
-          ))}
-          <Button type="button" variant="outline" onClick={() => setTiers([...tiers, { name: '', price: '', quantity_total: '', description: '', max_per_buyer: '4' }])}>
-            Add tier
-          </Button>
+          <p className="font-semibold">Tickets</p>
+          <p className="text-sm text-muted-foreground">
+            Live ɃU stores one General price on the event. Separate VIP or table inventory needs a new table.
+          </p>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="text-sm">
+              Ticket price (₦)
+              <Input
+                placeholder="0 for free"
+                type="number"
+                min={0}
+                value={tiers[0]?.price ?? ''}
+                onChange={(e) => {
+                  const next = [...tiers]
+                  next[0] = { ...(next[0] ?? { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' }), name: 'General', price: e.target.value }
+                  setTiers(next)
+                }}
+              />
+            </label>
+            <label className="text-sm">
+              Tickets for sale
+              <Input
+                placeholder="How many can be sold"
+                type="number"
+                min={0}
+                value={tiers[0]?.quantity_total ?? ''}
+                onChange={(e) => {
+                  const next = [...tiers]
+                  next[0] = { ...(next[0] ?? { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' }), name: 'General', quantity_total: e.target.value }
+                  setTiers(next)
+                }}
+              />
+            </label>
+          </div>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">

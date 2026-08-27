@@ -59,6 +59,12 @@ export default function Profile({ onNavigate }: ProfileProps) {
               action: 'tickets',
             },
             {
+              icon: '🎊',
+              title: 'Upcoming events',
+              desc: 'Same events as the website',
+              action: 'events',
+            },
+            {
               icon: '📋',
               title: 'Transaction History',
               desc: 'View all your transactions',
@@ -105,6 +111,14 @@ export default function Profile({ onNavigate }: ProfileProps) {
 
       {/* Logout Button */}
       <div className="px-4">
+        <a
+          href="/organizer"
+          className="mb-3 block w-full rounded-xl bg-card p-4 text-left transition hover:bg-card/80"
+        >
+          <div className="mb-3 text-3xl">📣</div>
+          <h3 className="font-bold">Organiser tools</h3>
+          <p className="text-xs text-muted-foreground">Create events, sales, and check-in — same as the website</p>
+        </a>
         <button
           onClick={async () => {
             if (!signedIn) {

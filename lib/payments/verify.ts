@@ -1,14 +1,20 @@
 import { isPaystackConfigured, verifyTransaction } from '@/lib/payments/paystack'
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
+import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isServiceRoleConfigured } from '@/lib/env'
 import { ApiError } from '@/lib/api/errors'
 import type { Payment } from '@/lib/types/database'
 
 export async function verifyReference(reference: string) {
+  if (isLiveTicketReference(reference) || !isServiceRoleConfigured()) {
+    return fulfillLiveTicketPayment(reference)
+  }
+
   const admin = createAdminClient()
   const { data } = await admin.from('payments').select('*').eq('reference', reference).maybeSingle()
   if (!data) {
-    throw new ApiError(404, 'NOT_FOUND', 'Payment not found')
+    return fulfillLiveTicketPayment(reference)
   }
   const payment = data as Payment
 

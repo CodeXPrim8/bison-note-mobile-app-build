@@ -1,15 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/env'
 import { canViewEvent } from '@/lib/events/access'
+import { fetchEventRowBySlug, liveRemaining, withLiveTiers } from '@/lib/events/live'
 import { SiteFooter, SiteHeader } from '@/components/web/site-chrome'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EventCountdown } from '@/components/web/event-countdown'
 import { EventShare } from '@/components/web/event-share'
-import type { EventRecord, TicketTier } from '@/lib/types/database'
 import { eventCategoryLabel } from '@/lib/schemas/event'
+import { isEventUpcoming } from '@/lib/events/sale'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,15 +23,15 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
     )
   }
 
-  const admin = createAdminClient()
-  const { data: event } = await admin.from('events').select('*').eq('slug', slug).maybeSingle()
-  if (!event) notFound()
-  const record = event as EventRecord
+  const row = await fetchEventRowBySlug(slug)
+  if (!row) notFound()
+  const record = withLiveTiers(row)
   const allowed = await canViewEvent(record)
   if (!allowed) notFound()
 
-  const { data: tiers } = await admin.from('ticket_tiers').select('*').eq('event_id', record.id).eq('is_active', true)
-  const ticketTiers = (tiers as TicketTier[]) ?? []
+  const ticketTiers = record.ticket_tiers
+  const upcoming = isEventUpcoming(record)
+  const onSale = upcoming && ticketTiers.some((tier) => tier.is_active && liveRemaining(tier) > 0)
 
   return (
     <div className="theme-pink min-h-screen bg-background text-foreground">
@@ -62,23 +62,36 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
               Open map
             </a>
           )}
-          <EventCountdown start={record.start_time} />
+          <EventCountdown start={record.start_time} end={record.end_time} />
           <p className="mt-6 whitespace-pre-wrap">{record.description}</p>
           <p className="mt-4 text-sm text-muted-foreground">
             Organised by {record.organizer_name ?? record.celebrant_name ?? 'ɃU organiser'}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href={`/checkout/${record.slug}`}>Buy ticket</Link>
-            </Button>
+            {!upcoming ? (
+              <Button type="button" disabled>
+                This event has ended
+              </Button>
+            ) : onSale ? (
+              <Button asChild>
+                <Link href={`/checkout/${record.slug}`}>Buy ticket</Link>
+              </Button>
+            ) : (
+              <Button type="button" disabled>
+                {ticketTiers.length ? 'Sold out' : 'Tickets not on sale'}
+              </Button>
+            )}
             <EventShare title={record.title} slug={record.slug} />
           </div>
         </Card>
 
         <h2 className="mt-10 text-2xl font-bold">Tickets</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {ticketTiers.length === 0 && (
+            <p className="text-sm text-muted-foreground">This event is not selling tickets online.</p>
+          )}
           {ticketTiers.map((tier) => {
-            const remaining = tier.quantity_total - tier.quantity_sold
+            const remaining = liveRemaining(tier)
             return (
               <Card key={tier.id} className="p-5">
                 <div className="flex items-start justify-between">
