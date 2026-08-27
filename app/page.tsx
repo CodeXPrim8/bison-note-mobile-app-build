@@ -19,10 +19,15 @@ export default function WebsiteHome() {
             <br />
             Celebrate with ɃU.
           </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-            The event infrastructure for Nigerian and African celebrations. Public discovery, private invites by ɃU ID,
-            Paystack checkout, QR check-in — and every ticket lands in the ɃU mobile app.
-          </p>
+          <div className="mt-6 max-w-xl space-y-4 text-lg text-muted-foreground">
+            <p>
+              Create and manage your event, sell tickets online, invite your guests and check them in—all in one place.
+            </p>
+            <p>
+              From weddings and birthdays to parties, concerts and special events, ɃU makes event ticketing simple for
+              organisers and guests.
+            </p>
+          </div>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link href="/organizer/events/create">Create your event</Link>
