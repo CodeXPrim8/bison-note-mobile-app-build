@@ -1,4 +1,5 @@
 import type { EventRecord, EventStatus, EventVisibility, Payment, TicketRecord, TicketStatus, TicketTier } from '@/lib/types/database'
+import { buFromNaira } from '@/lib/bu-rate'
 import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -500,11 +501,16 @@ export async function fetchLiveWallet(userId: string) {
     }
   }
   const row = data as Record<string, unknown>
+  const nairaLedger =
+    asNumber(row.balance) ||
+    asNumber(row.naira_balance) ||
+    asNumber(row.naira_available) ||
+    asNumber(row.bu_balance)
   return {
     id: asString(row.id, userId),
     user_id: userId,
-    bu_balance: asNumber(row.balance ?? row.bu_balance),
-    naira_available: asNumber(row.naira_balance ?? row.naira_available),
+    bu_balance: buFromNaira(nairaLedger),
+    naira_available: nairaLedger,
     created_at: asIso(row.created_at),
     updated_at: asIso(row.updated_at ?? row.created_at),
   }

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { formatEventDateTime } from '@/lib/datetime'
 
 interface TransferValidation {
   id: string
@@ -56,7 +57,7 @@ export default function QRScanner() {
         guestName: '',
         amount: 0,
         status: 'invalid',
-        timestamp: new Date().toLocaleString(),
+        timestamp: formatEventDateTime(new Date()),
         message: 'Enter the event ID, or scan a ticket QR that includes it.',
       }
       setScanResult(failed)
@@ -86,7 +87,7 @@ export default function QRScanner() {
         guestName: String(json.data?.buyer_name ?? ''),
         amount: Number(json.data?.amount_paid ?? 0),
         status: ok ? 'valid' : json.code === 'ALREADY_USED' ? 'duplicate' : 'invalid',
-        timestamp: new Date().toLocaleString(),
+        timestamp: formatEventDateTime(new Date()),
         message: json.message ?? (ok ? 'Ticket checked in' : 'Check-in failed'),
       }
       setScanResult(result)
@@ -101,7 +102,7 @@ export default function QRScanner() {
         guestName: '',
         amount: 0,
         status: 'invalid',
-        timestamp: new Date().toLocaleString(),
+        timestamp: formatEventDateTime(new Date()),
         message: 'Could not reach ɃU.',
       }
       setScanResult(failed)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import type { Payment } from '@/lib/types/database'
+import { formatEventDateTime } from '@/lib/datetime'
 
 export default function SettlementsPage() {
   const [payments, setPayments] = useState<Payment[]>([])
@@ -41,7 +42,7 @@ export default function SettlementsPage() {
           <Card key={payment.id} className="flex items-center justify-between p-4">
             <div>
               <p className="font-mono text-sm">{payment.reference}</p>
-              <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">{formatEventDateTime(payment.created_at)}</p>
             </div>
             <p className="font-semibold">₦{Number(payment.amount).toLocaleString()}</p>
           </Card>

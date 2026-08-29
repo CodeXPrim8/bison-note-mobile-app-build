@@ -12,8 +12,8 @@ export function isPublicCatalogEvent(
 }
 
 export async function canViewEvent(event: EventRecord): Promise<boolean> {
-  if (!isEventUpcoming(event)) return false
   if (event.status === 'published' && event.visibility === 'PUBLIC') return true
+  if (!isEventUpcoming(event)) return false
   const user = await getSessionUser()
   if (!user) return false
   const profile = await getProfile(user.id)

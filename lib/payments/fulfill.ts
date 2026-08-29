@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { nairaFromBu } from '@/lib/bu-rate'
 import { generateCheckinCode, generateQrToken, generateTicketNumber } from '@/lib/tickets/ids'
 import { ticketQrPayload } from '@/lib/tickets/qr-generator'
 import { enqueueMerchantWebhook } from '@/lib/webhooks/merchant'
@@ -57,9 +58,17 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
 
   if (payment.kind === 'deposit') {
     if (payment.user_id) {
+      const creditedBu = Number(meta.bu ?? 0)
+      const creditNaira = Number(meta.credit_naira ?? 0)
+      const amountToCredit =
+        Number.isFinite(creditNaira) && creditNaira > 0
+          ? creditNaira
+          : Number.isFinite(creditedBu) && creditedBu > 0
+            ? nairaFromBu(creditedBu)
+            : payment.amount
       await admin.rpc('credit_wallet', {
         p_user_id: payment.user_id,
-        p_amount: payment.amount,
+        p_amount: amountToCredit,
         p_type: 'deposit',
         p_description: 'Wallet top-up',
         p_payment_id: payment.id,

@@ -5,6 +5,9 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Banknote, CheckCircle, AlertCircle } from 'lucide-react'
+import { formatEventDateTime } from '@/lib/datetime'
+import { BU_BUY_PRESETS, BU_MIN_WITHDRAW, BU_NAIRA_VALUE, formatBu, formatNairaPlain, quoteWithdrawBu, WalletAmountError } from '@/lib/bu-rate'
+import { useAccount } from '@/components/account-store'
 
 interface WithdrawalRequest {
   id: string
@@ -19,6 +22,7 @@ interface WithdrawalRequest {
 }
 
 export default function Redemption() {
+  const { applySpendBu } = useAccount()
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [showForm, setShowForm] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -40,6 +44,13 @@ export default function Redemption() {
     ) {
       return
     }
+    let quote
+    try {
+      quote = quoteWithdrawBu(Number(form.buAmount))
+    } catch (error) {
+      setMessage(error instanceof WalletAmountError ? error.message : 'Enter how many ɃU to withdraw')
+      return
+    }
     setBusy(true)
     setMessage(null)
     try {
@@ -48,7 +59,7 @@ export default function Redemption() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Number(form.buAmount),
+          bu: Number(form.buAmount),
           bank_name: form.bankName,
           account_number: form.accountNumber,
           account_name: form.accountName,
@@ -60,17 +71,18 @@ export default function Redemption() {
         setMessage(json.message ?? 'Withdrawal failed')
         return
       }
-      const buAmount = Number(form.buAmount)
+      const buAmount = quote.bu
+      applySpendBu(buAmount)
       setWithdrawals([
         {
           id: String(Date.now()),
           buAmount,
-          nairaAmount: buAmount,
+          nairaAmount: quote.bankNaira,
           bankName: form.bankName,
           accountNumber: `****${form.accountNumber.slice(-4)}`,
           accountName: form.accountName,
           status: 'pending',
-          date: new Date().toLocaleString(),
+          date: formatEventDateTime(new Date()),
         },
         ...withdrawals,
       ])
@@ -79,6 +91,16 @@ export default function Redemption() {
     } catch {
       setBusy(false)
       setMessage('Could not reach ɃU.')
+    }
+  }
+
+  let withdrawQuote: ReturnType<typeof quoteWithdrawBu> | null = null
+  let withdrawQuoteError: string | null = null
+  try {
+    withdrawQuote = quoteWithdrawBu(Number(form.buAmount))
+  } catch (error) {
+    if (form.buAmount) {
+      withdrawQuoteError = error instanceof WalletAmountError ? error.message : null
     }
   }
 
@@ -119,7 +141,11 @@ export default function Redemption() {
         </div>
         <div className="mt-4 rounded-lg bg-background/50 p-3">
           <p className="text-xs text-muted-foreground">Conversion Rate</p>
-          <p className="mt-1 text-lg font-bold text-primary">1 Ƀ = ₦1</p>
+          <p className="mt-1 text-lg font-bold text-primary">1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Minimum {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU. You receive the full naira amount. Paystack bank
+            transfer fees (₦10–₦50 plus ₦50 stamp duty from ₦10,000) are covered by the 5% card buy rate.
+          </p>
         </div>
         <div className="mt-4 rounded-lg border border-yellow-400/30 bg-yellow-400/10 p-3">
           <div className="flex items-start gap-2">
@@ -148,16 +174,34 @@ export default function Redemption() {
             <label className="text-sm font-semibold">Amount to Withdraw (ɃU)</label>
             <Input
               type="number"
-              placeholder="Enter ɃU amount"
+              min={BU_MIN_WITHDRAW}
+              step="1"
+              placeholder={`Minimum ${BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU`}
               value={form.buAmount}
               onChange={(e) => setForm({ ...form, buAmount: e.target.value })}
               className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
             />
-            {form.buAmount && !isNaN(Number(form.buAmount)) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {BU_BUY_PRESETS.filter((preset) => preset >= BU_MIN_WITHDRAW).map((preset) => (
+                <Button
+                  key={preset}
+                  type="button"
+                  size="sm"
+                  variant={form.buAmount === String(preset) ? 'default' : 'outline'}
+                  onClick={() => setForm({ ...form, buAmount: String(preset) })}
+                >
+                  Ƀ {preset.toLocaleString('en-NG')}
+                </Button>
+              ))}
+            </div>
+            {withdrawQuote ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                You will receive: ₦{Number(form.buAmount).toLocaleString('en-NG')}
+                You receive ₦{formatNairaPlain(withdrawQuote.bankNaira)} in your bank. Paystack payout on this amount is ₦
+                {withdrawQuote.paystackFee.toLocaleString('en-NG')} and is covered by ɃU.
               </p>
-            )}
+            ) : withdrawQuoteError ? (
+              <p className="mt-1 text-xs text-destructive">{withdrawQuoteError}</p>
+            ) : null}
           </div>
 
           <div>
@@ -207,7 +251,7 @@ export default function Redemption() {
           <div className="flex gap-2">
             <Button
               onClick={() => void handleWithdraw()}
-              disabled={busy}
+              disabled={busy || !withdrawQuote || !form.accountNumber || !form.accountName}
               className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {busy ? 'Submitting…' : 'Confirm Withdrawal'}
@@ -259,8 +303,8 @@ export default function Redemption() {
                     {withdrawal.status === 'completed' && (
                     <CheckCircle className="mb-2 h-5 w-5 text-green-400" />
                   )}
-                  <p className="font-bold">₦{withdrawal.nairaAmount.toLocaleString('en-NG')}</p>
-                  <p className="text-xs text-muted-foreground">Ƀ {withdrawal.buAmount.toLocaleString()}</p>
+                  <p className="font-bold">₦{formatNairaPlain(withdrawal.nairaAmount)}</p>
+                  <p className="text-xs text-muted-foreground">Ƀ {formatBu(withdrawal.buAmount)}</p>
                 </div>
               </div>
             </Card>

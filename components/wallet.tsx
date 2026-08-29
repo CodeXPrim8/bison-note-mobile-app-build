@@ -5,6 +5,21 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
+import { formatEventDateTime } from '@/lib/datetime'
+import { useAccount } from '@/components/account-store'
+import {
+  BU_BUY_PRESETS,
+  BU_MIN_PURCHASE,
+  BU_NAIRA_VALUE,
+  BuyQuoteError,
+  cardBuyRate,
+  buFromNaira,
+  formatBu,
+  formatNairaPlain,
+  formatNairaRate,
+  minPurchaseChargeNaira,
+  quoteBuyBu,
+} from '@/lib/bu-rate'
 
 interface Transaction {
   id: string
@@ -19,12 +34,11 @@ interface WalletProps {
 }
 
 export default function Wallet({ onNavigate }: WalletProps = {}) {
-  const [balance, setBalance] = useState(0)
-  const [bisonUnits, setBisonUnits] = useState(0)
+  const { buBalance, nairaBalance, applyWallet } = useAccount()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [email, setEmail] = useState('')
   const [showTopup, setShowTopup] = useState(false)
-  const [topupAmount, setTopupAmount] = useState('')
+  const [topupBu, setTopupBu] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -32,18 +46,16 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
     fetch('/api/me', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.data?.user?.email) setEmail(json.data.user.email)
+        if (json.data?.user) {
+          setEmail(json.data.profile?.email || json.data.user.email || '')
+        }
       })
       .catch(() => undefined)
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
-        const wallet = json.data?.wallet
-        if (wallet) {
-          setBisonUnits(Number(wallet.bu_balance ?? 0))
-          setBalance(Number(wallet.naira_available ?? wallet.bu_balance ?? 0))
-        }
+        if (json.data?.wallet) applyWallet(json.data.wallet)
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransactions(
           txs.map((tx) => ({
@@ -59,8 +71,14 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
   }, [])
 
   async function handleTopup() {
-    const amount = Number(topupAmount)
-    if (!amount || Number.isNaN(amount) || amount <= 0) return
+    const bu = Number(topupBu)
+    let quote
+    try {
+      quote = quoteBuyBu(bu)
+    } catch (error) {
+      setMessage(error instanceof BuyQuoteError ? error.message : 'Enter how many ɃU to buy')
+      return
+    }
     if (!email) {
       setMessage('Add an email on your account to fund this wallet.')
       return
@@ -72,7 +90,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, amount }),
+        body: JSON.stringify({ email, bu: quote.bu }),
       })
       const json = await res.json()
       setBusy(false)
@@ -87,18 +105,26 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
     }
   }
 
+  let topupQuote: ReturnType<typeof quoteBuyBu> | null = null
+  try {
+    topupQuote = quoteBuyBu(Number(topupBu))
+  } catch {
+    topupQuote = null
+  }
+
   return (
     <div className="space-y-6 pb-24 pt-4">
       <Card className="border-primary/20 bg-card p-6">
         <p className="text-sm text-muted-foreground">Total Balance</p>
         <h2 className="mt-2 text-4xl font-bold text-primary">
-          ₦{balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {nairaBalance == null ? '\u00a0' : `₦${formatNairaPlain(nairaBalance)}`}
         </h2>
         <p className="mt-4 text-sm">
-          <span className="font-semibold">
-            Ƀ {bisonUnits.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>{' '}
-          Available
+          <span className="font-semibold">{buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}</span>
+          {buBalance != null ? ' Available' : ''}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')} to spray or withdraw. Card buy ₦{formatNairaRate(cardBuyRate())}.
         </p>
       </Card>
 
@@ -125,11 +151,37 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
           <div className="space-y-3">
             <Input
               type="number"
-              placeholder="Enter amount in Naira"
-              value={topupAmount}
-              onChange={(e) => setTopupAmount(e.target.value)}
+              min={BU_MIN_PURCHASE}
+              step="1"
+              placeholder={`ɃU to buy (min ${BU_MIN_PURCHASE.toLocaleString('en-NG')})`}
+              value={topupBu}
+              onChange={(e) => setTopupBu(e.target.value)}
               className="bg-secondary text-foreground placeholder:text-muted-foreground"
             />
+            <div className="flex flex-wrap gap-2">
+              {BU_BUY_PRESETS.map((preset) => (
+                <Button
+                  key={preset}
+                  type="button"
+                  size="sm"
+                  variant={topupBu === String(preset) ? 'default' : 'outline'}
+                  onClick={() => setTopupBu(String(preset))}
+                >
+                  Ƀ {preset.toLocaleString('en-NG')}
+                </Button>
+              ))}
+            </div>
+            {topupQuote ? (
+              <p className="text-xs text-muted-foreground">
+                You pay ₦{formatNairaPlain(topupQuote.chargeNaira)} by card · wallet gets Ƀ {formatBu(topupQuote.bu)} (₦
+                {formatNairaPlain(topupQuote.creditNaira)}). Card ₦{formatNairaRate(cardBuyRate())} / ɃU.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Card ₦{formatNairaRate(cardBuyRate())} / ɃU · withdraw ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')} / ɃU ·
+                min {BU_MIN_PURCHASE.toLocaleString('en-NG')} ɃU (₦{formatNairaPlain(minPurchaseChargeNaira())})
+              </p>
+            )}
             {message && <p className="text-sm text-destructive">{message}</p>}
             <div className="flex gap-2">
               <Button
@@ -165,10 +217,13 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                 </div>
                 <div>
                   <p className="font-medium">{tx.description}</p>
-                  <p className="text-xs text-muted-foreground">{tx.date ? new Date(tx.date).toLocaleString() : ''}</p>
+                  <p className="text-xs text-muted-foreground">{tx.date ? formatEventDateTime(tx.date) : ''}</p>
                 </div>
               </div>
-              <span className="font-semibold text-primary">₦{tx.amount.toLocaleString()}</span>
+              <span className="font-semibold text-primary">
+                Ƀ {formatBu(buFromNaira(tx.amount))}
+                <span className="block text-xs font-normal text-muted-foreground">₦{formatNairaPlain(tx.amount)}</span>
+              </span>
             </Card>
           ))}
         </div>

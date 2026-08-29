@@ -3,6 +3,8 @@ import { ApiError } from '@/lib/api/errors'
 import { isSupabaseConfigured } from '@/lib/env'
 import type { Profile } from '@/lib/types/database'
 import { profileFromBuSession, readBuSession } from '@/lib/auth/bu-session'
+import { contactEmail } from '@/lib/auth/pin'
+import { createDataClient } from '@/lib/supabase/data'
 
 export async function getSessionUser() {
   const legacy = await readBuSession()
@@ -30,17 +32,60 @@ export async function requireUser() {
 
 export async function getProfile(userId: string): Promise<Profile | null> {
   const legacy = await readBuSession()
+  let profile: Profile | null = null
   if (legacy && legacy.id === userId) {
-    return profileFromBuSession(legacy)
+    profile = profileFromBuSession(legacy)
   }
-  if (!isSupabaseConfigured()) return null
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, role, display_name, username, phone, phone_e164, email, avatar_url, created_at, updated_at')
-    .eq('id', userId)
-    .maybeSingle()
-  return (data as Profile | null) ?? null
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, role, display_name, username, phone, phone_e164, email, avatar_url, created_at, updated_at')
+      .eq('id', userId)
+      .maybeSingle()
+    if (data) profile = { ...(profile ?? (data as Profile)), ...(data as Profile) }
+    try {
+      const live = await createDataClient()
+        .from('users')
+        .select('email, phone_number, first_name, last_name, account_name')
+        .eq('id', userId)
+        .maybeSingle()
+      const row = live.data as Record<string, unknown> | null
+      if (row && profile) {
+        profile = {
+          ...profile,
+          email: contactEmail(asOptionalString(row.email)) ?? contactEmail(profile.email),
+          phone: asOptionalString(row.phone_number) ?? profile.phone,
+        }
+      } else if (row && !profile) {
+        const display =
+          [asOptionalString(row.first_name), asOptionalString(row.last_name)].filter(Boolean).join(' ').trim() ||
+          asOptionalString(row.account_name) ||
+          'ɃU member'
+        const now = new Date().toISOString()
+        profile = {
+          id: userId,
+          role: 'guest',
+          display_name: display,
+          username: null,
+          phone: asOptionalString(row.phone_number),
+          phone_e164: asOptionalString(row.phone_number),
+          email: contactEmail(asOptionalString(row.email)),
+          avatar_url: null,
+          created_at: now,
+          updated_at: now,
+        }
+      }
+    } catch {
+      // Live users table is optional for website-only accounts.
+    }
+  }
+  if (profile) profile = { ...profile, email: contactEmail(profile.email) }
+  return profile
+}
+
+function asOptionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.length ? value : null
 }
 
 export async function requireOrganizer() {

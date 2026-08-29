@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { QrCode, Share2, Copy, CheckCircle } from 'lucide-react'
 import QRCode from 'qrcode'
 import { displayBuId } from '@/lib/phone'
+import { formatEventDateTime } from '@/lib/datetime'
+import { buFromNaira, formatBu } from '@/lib/bu-rate'
+import { useAccount } from '@/components/account-store'
 
 interface ReceivedTransfer {
   id: string
@@ -18,12 +21,17 @@ interface ReceivedTransfer {
 }
 
 export default function ReceiveBU() {
+  const { displayName: accountName } = useAccount()
   const [mode, setMode] = useState<'menu' | 'qr' | 'history'>('menu')
   const [qrValue, setQrValue] = useState('')
   const [qrImage, setQrImage] = useState('')
-  const [displayName, setDisplayName] = useState('ɃU member')
+  const [displayName, setDisplayName] = useState(accountName)
   const [buIdLabel, setBuIdLabel] = useState('')
   const [receivedTransfers, setReceivedTransfers] = useState<ReceivedTransfer[]>([])
+
+  useEffect(() => {
+    if (accountName) setDisplayName(accountName)
+  }, [accountName])
 
   useEffect(() => {
     fetch('/api/me', { credentials: 'include' })
@@ -32,8 +40,8 @@ export default function ReceiveBU() {
         const user = json.data?.user
         const profile = json.data?.profile
         if (!user) return
-        const name = String(profile?.display_name || user.email || 'ɃU member')
-        setDisplayName(name)
+        const name = String(profile?.display_name || accountName || '')
+        if (name) setDisplayName(name)
         const phone = String(profile?.phone_e164 || profile?.phone || '')
         if (phone) setBuIdLabel(displayBuId(phone))
         const payload = JSON.stringify({
@@ -56,9 +64,9 @@ export default function ReceiveBU() {
             id: String(tx.id),
             senderUsername: String(tx.counterparty ?? ''),
             senderName: String(tx.description ?? 'ɃU received'),
-            amount: Number(tx.amount ?? 0),
+            amount: buFromNaira(Number(tx.amount ?? 0)),
             type: String(tx.metadata ?? '').includes('tip') ? 'tip' : 'transfer',
-            date: tx.created_at ? new Date(String(tx.created_at)).toLocaleString() : '',
+            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
           })),
         )
       })
@@ -132,7 +140,7 @@ export default function ReceiveBU() {
                           <p className="text-xs text-muted-foreground">{transfer.senderUsername}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-primary">+Ƀ {transfer.amount.toLocaleString()}</p>
+                          <p className="font-bold text-primary">+Ƀ {formatBu(transfer.amount)}</p>
                           <p className="text-xs text-muted-foreground">{transfer.date}</p>
                         </div>
                       </div>
@@ -228,7 +236,7 @@ export default function ReceiveBU() {
                         <p className="text-sm text-muted-foreground mt-1">{transfer.senderUsername}</p>
                         <p className="text-xs text-muted-foreground mt-2">{transfer.date}</p>
                       </div>
-                      <p className="font-bold text-primary">+Ƀ {transfer.amount.toLocaleString()}</p>
+                      <p className="font-bold text-primary">+Ƀ {formatBu(transfer.amount)}</p>
                     </div>
                   </Card>
                 ))

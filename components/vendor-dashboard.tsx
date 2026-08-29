@@ -5,11 +5,16 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { BarChart3, TrendingUp, DollarSign, Calendar } from 'lucide-react'
 import Events from '@/components/events'
+import { formatEventDateTime } from '@/lib/datetime'
+import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { useAccount } from '@/components/account-store'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface VendorStats {
   totalSales: number
   activeSessions: number
   totalBUInventory: number
+  nairaAvailable: number
   todayEarnings: number
 }
 
@@ -22,14 +27,27 @@ interface Sale {
   status: 'completed' | 'pending'
 }
 
+const CACHE_KEY = 'bu_vendor_dashboard'
+
+type VendorCache = {
+  stats: VendorStats
+  sales: Sale[]
+}
+
 export default function VendorDashboard() {
-  const [stats, setStats] = useState<VendorStats>({
-    totalSales: 0,
-    activeSessions: 0,
-    totalBUInventory: 0,
-    todayEarnings: 0,
-  })
-  const [sales, setSales] = useState<Sale[]>([])
+  const { buBalance, nairaBalance } = useAccount()
+  const cached = readSessionSnapshot<VendorCache>(CACHE_KEY)
+  const [stats, setStats] = useState<VendorStats>(
+    cached?.stats ?? {
+      totalSales: 0,
+      activeSessions: 0,
+      totalBUInventory: 0,
+      nairaAvailable: 0,
+      todayEarnings: 0,
+    },
+  )
+  const [sales, setSales] = useState<Sale[]>(cached?.sales ?? [])
+  const [statsReady, setStatsReady] = useState(Boolean(cached))
   const [currentView, setCurrentView] = useState<'overview' | 'sales' | 'inventory' | 'events'>('overview')
 
   useEffect(() => {
@@ -38,32 +56,44 @@ export default function VendorDashboard() {
         const json = await res.json()
         const list = (json.data ?? []) as Array<Record<string, unknown>>
         const received = list.reduce((sum, event) => sum + Number(event.spray_budget_bu ?? 0), 0)
-        setStats((prev) => ({
-          ...prev,
-          totalSales: received,
-          todayEarnings: received,
-          activeSessions: list.length,
+        const nextSales = list.map((event) => ({
+          id: String(event.id),
+          amount: Number(event.spray_budget_bu ?? 0),
+          buAmount: Number(event.spray_budget_bu ?? 0),
+          timestamp: event.start_time ? formatEventDateTime(String(event.start_time)) : '',
+          eventName: String(event.title ?? event.name ?? 'Event'),
+          status: 'completed' as const,
         }))
-        setSales(
-          list.map((event) => ({
-            id: String(event.id),
-            amount: Number(event.spray_budget_bu ?? 0),
-            buAmount: Number(event.spray_budget_bu ?? 0),
-            timestamp: event.start_time ? new Date(String(event.start_time)).toLocaleString() : '',
-            eventName: String(event.title ?? event.name ?? 'Event'),
-            status: 'completed' as const,
-          })),
-        )
+        setStats((prev) => {
+          const next = {
+            ...prev,
+            totalSales: received,
+            todayEarnings: received,
+            activeSessions: list.length,
+          }
+          writeSessionSnapshot(CACHE_KEY, { stats: next, sales: nextSales })
+          return next
+        })
+        setSales(nextSales)
+        setStatsReady(true)
       })
-      .catch(() => undefined)
+      .catch(() => setStatsReady(true))
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
         if (json.data?.wallet) {
-          setStats((prev) => ({
-            ...prev,
-            totalBUInventory: Number(json.data.wallet.bu_balance ?? 0),
-          }))
+          setStats((prev) => {
+            const next = {
+              ...prev,
+              totalBUInventory: Number(json.data.wallet.bu_balance ?? 0),
+              nairaAvailable: Number(json.data.wallet.naira_available ?? 0),
+            }
+            writeSessionSnapshot(CACHE_KEY, {
+              stats: next,
+              sales: readSessionSnapshot<VendorCache>(CACHE_KEY)?.sales ?? [],
+            })
+            return next
+          })
         }
       })
       .catch(() => undefined)
@@ -75,7 +105,7 @@ export default function VendorDashboard() {
         <Card className="border-primary/20 bg-card p-4">
           <p className="text-xs text-muted-foreground">ɃU received on events</p>
           <p className="mt-2 text-2xl font-bold text-primary">
-            ₦{stats.todayEarnings.toLocaleString()}
+            {statsReady ? `₦${stats.todayEarnings.toLocaleString()}` : '\u00a0'}
           </p>
           <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
             <TrendingUp className="h-3 w-3" />
@@ -86,10 +116,10 @@ export default function VendorDashboard() {
         <Card className="border-primary/20 bg-card p-4">
           <p className="text-xs text-muted-foreground">Wallet ɃU</p>
           <p className="mt-2 text-2xl font-bold text-primary">
-            Ƀ {stats.totalBUInventory.toLocaleString()}
+            {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {stats.activeSessions} events
+            {statsReady ? `${stats.activeSessions} events` : '\u00a0'}
           </p>
         </Card>
       </div>
@@ -138,7 +168,7 @@ export default function VendorDashboard() {
                     <p className="text-xs text-muted-foreground">Across your events</p>
                   </div>
                 </div>
-                <p className="text-xl font-bold">₦{stats.totalSales.toLocaleString()}</p>
+                <p className="text-xl font-bold">{statsReady ? `₦${stats.totalSales.toLocaleString()}` : '\u00a0'}</p>
               </div>
             </Card>
             <Card className="border-border/50 bg-card/50 p-4">
@@ -151,7 +181,7 @@ export default function VendorDashboard() {
                   </div>
                 </div>
                 <p className="text-xl font-bold text-green-400">
-                  Ƀ {stats.totalBUInventory.toLocaleString()}
+                  {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
                 </p>
               </div>
             </Card>
@@ -174,8 +204,8 @@ export default function VendorDashboard() {
                     <p className="text-xs text-muted-foreground mt-1">{sale.timestamp}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-primary">₦{sale.amount.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Ƀ {sale.buAmount.toLocaleString()}</p>
+                    <p className="font-bold text-primary">₦{formatNairaPlain(sale.amount)}</p>
+                    <p className="text-xs text-muted-foreground">Ƀ {formatBu(buFromNaira(sale.buAmount))}</p>
                   </div>
                 </div>
               </Card>
@@ -192,12 +222,14 @@ export default function VendorDashboard() {
               <div>
                 <p className="text-sm text-muted-foreground">Wallet stock</p>
                 <p className="mt-2 text-3xl font-bold text-primary">
-                  Ƀ {stats.totalBUInventory.toLocaleString()}
+                  {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
                 </p>
               </div>
               <div className="rounded-lg bg-background/50 p-3">
                 <p className="text-xs text-muted-foreground">Estimated Value</p>
-                <p className="mt-1 font-bold">₦{stats.totalBUInventory.toLocaleString()}</p>
+                <p className="mt-1 font-bold">
+                  {nairaBalance == null ? '\u00a0' : `₦${formatNairaPlain(nairaBalance)}`}
+                </p>
               </div>
             </div>
           </Card>

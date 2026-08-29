@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
 import { getAppUrl, isPaystackConfigured, isServiceRoleConfigured } from '@/lib/env'
+import { BuyQuoteError, quoteBuyBu, quoteBuyFromChargeNaira } from '@/lib/bu-rate'
 import { quoteTicketTotal } from '@/lib/money'
 import { normalizePhone } from '@/lib/phone'
 import {
@@ -277,13 +278,33 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
 
 export async function initializeDeposit(input: {
   email: string
-  amount: number
+  bu?: number
+  amount?: number
   user_id: string
   callback_url?: string
 }) {
+  let quote
+  try {
+    quote = input.bu != null ? quoteBuyBu(input.bu) : quoteBuyFromChargeNaira(input.amount ?? 0)
+  } catch (error) {
+    if (error instanceof BuyQuoteError) {
+      throw new ApiError(400, error.code, error.message)
+    }
+    throw error
+  }
+
   const admin = createAdminClient()
   const reference = generateReference('DEPOSIT')
   const checkoutUrl = input.callback_url ?? `${getAppUrl()}/pay/${reference}`
+  const depositMeta = {
+    kind: 'deposit' as const,
+    user_id: input.user_id,
+    bu: quote.bu,
+    credit_naira: quote.creditNaira,
+    charge_naira: quote.chargeNaira,
+    buy_rate: quote.buyRate,
+    value_rate: quote.valueRate,
+  }
 
   const { data: paymentRow, error } = await admin
     .from('payments')
@@ -291,11 +312,11 @@ export async function initializeDeposit(input: {
       reference,
       user_id: input.user_id,
       kind: 'deposit',
-      amount: input.amount,
+      amount: quote.chargeNaira,
       status: 'pending',
       buyer_email: input.email,
       callback_url: checkoutUrl,
-      metadata: { kind: 'deposit', user_id: input.user_id },
+      metadata: depositMeta,
     })
     .select('*')
     .single()
@@ -307,16 +328,16 @@ export async function initializeDeposit(input: {
   if (isPaystackConfigured()) {
     const paystack = await initializeTransaction({
       email: input.email,
-      amountKobo: nairaToKobo(input.amount),
+      amountKobo: nairaToKobo(quote.chargeNaira),
       reference,
       callbackUrl: checkoutUrl,
-      metadata: { kind: 'deposit', payment_id: (paymentRow as Payment).id, user_id: input.user_id },
+      metadata: { ...depositMeta, payment_id: (paymentRow as Payment).id },
     })
     await admin
       .from('payments')
       .update({ authorization_url: paystack.authorization_url })
       .eq('id', (paymentRow as Payment).id)
-    return { authorization_url: paystack.authorization_url, reference }
+    return { authorization_url: paystack.authorization_url, reference, quote }
   }
 
   throw new ApiError(

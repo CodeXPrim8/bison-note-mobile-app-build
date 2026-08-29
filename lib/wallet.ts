@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
+import { BU_NAIRA_VALUE, buFromNaira } from '@/lib/bu-rate'
 
 export async function transferBu(input: {
   fromUserId: string
@@ -10,6 +11,7 @@ export async function transferBu(input: {
 }) {
   const admin = createAdminClient()
   const type = 'spray'
+  const bu = buFromNaira(input.amount)
   const { error } = await admin.rpc('debit_wallet', {
     p_user_id: input.fromUserId,
     p_amount: input.amount,
@@ -17,7 +19,7 @@ export async function transferBu(input: {
     p_description: input.isTip ? 'Tip' : 'BU transfer',
     p_counterparty: input.toUserId,
     p_event_id: input.eventId ?? null,
-    p_metadata: { kind: input.isTip ? 'tip' : 'transfer' },
+    p_metadata: { kind: input.isTip ? 'tip' : 'transfer', bu, naira: input.amount, value_rate: BU_NAIRA_VALUE },
   })
   if (error) {
     if (error.message?.includes('INSUFFICIENT_FUNDS')) {
@@ -31,6 +33,6 @@ export async function transferBu(input: {
     p_type: type,
     p_description: input.isTip ? 'Tip received' : 'BU received',
     p_event_id: input.eventId ?? null,
-    p_metadata: { from: input.fromUserId },
+    p_metadata: { from: input.fromUserId, bu, naira: input.amount, value_rate: BU_NAIRA_VALUE },
   })
 }

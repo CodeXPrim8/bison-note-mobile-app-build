@@ -8,6 +8,16 @@ export function isPublicPagePath(pathname: string): boolean {
   if (pathname.startsWith('/t/')) return true
   if (pathname === '/gateway') return true
   if (pathname === '/gateway/docs') return true
+  if (
+    pathname === '/icon' ||
+    pathname === '/apple-icon' ||
+    pathname.startsWith('/icon/') ||
+    pathname.startsWith('/apple-icon') ||
+    pathname.startsWith('/opengraph-image') ||
+    pathname.startsWith('/twitter-image')
+  ) {
+    return true
+  }
   return false
 }
 

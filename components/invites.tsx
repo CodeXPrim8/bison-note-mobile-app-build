@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { EventInvitation, EventRecord } from '@/lib/types/database'
+import { formatEventDate } from '@/lib/datetime'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface InviteRow extends EventInvitation {
   event: EventRecord | null
 }
 
 export default function Invites({ onNavigate }: { onNavigate?: (page: string, data?: unknown) => void }) {
-  const [invites, setInvites] = useState<InviteRow[]>([])
+  const cached = readSessionSnapshot<InviteRow[]>('bu_invites')
+  const [invites, setInvites] = useState<InviteRow[]>(cached ?? [])
   const [message, setMessage] = useState<string | null>(null)
 
   function load() {
@@ -21,7 +24,9 @@ export default function Invites({ onNavigate }: { onNavigate?: (page: string, da
           setMessage(json.message ?? 'Sign in to see private invitations.')
           return
         }
-        setInvites(json.data ?? [])
+        const next = (json.data ?? []) as InviteRow[]
+        setInvites(next)
+        writeSessionSnapshot('bu_invites', next)
       })
       .catch(() => setMessage('Could not load invites'))
   }
@@ -55,7 +60,7 @@ export default function Invites({ onNavigate }: { onNavigate?: (page: string, da
             <Card key={invite.id} className="border-primary/20 p-4">
               <h3 className="font-semibold">{invite.event?.title ?? 'Private event'}</h3>
               <p className="text-sm text-muted-foreground">
-                {invite.event ? new Date(invite.event.start_time).toLocaleDateString() : ''} · {invite.event?.venue_name}
+                {invite.event ? formatEventDate(invite.event.start_time) : ''} · {invite.event?.venue_name}
               </p>
               {(invite.gate || invite.seat) && (
                 <p className="mt-1 text-xs text-muted-foreground">

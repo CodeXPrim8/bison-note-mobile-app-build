@@ -7,6 +7,14 @@ export function ticketsRemaining(tiers: Pick<TicketTier, 'quantity_total' | 'qua
   )
 }
 
+export function listingRemaining(event: {
+  tickets_available?: number
+  ticket_tiers?: Pick<TicketTier, 'quantity_total' | 'quantity_sold'>[]
+}) {
+  if (typeof event.tickets_available === 'number') return event.tickets_available
+  return ticketsRemaining(event.ticket_tiers)
+}
+
 export function eventOnSale(
   tiers: Array<Pick<TicketTier, 'quantity_total' | 'quantity_sold'> & { is_active?: boolean }> | undefined,
 ) {
@@ -42,8 +50,46 @@ export function isEventUpcoming(event: { start_time: string; end_time?: string |
   return eventEndsAt(event).getTime() >= Date.now()
 }
 
+/** True while the printed event date (this device) has not passed. Used for Upcoming lists. */
+export function isUpcomingListingEvent(event: { start_time: string; end_time?: string | null } | null | undefined) {
+  return Boolean(event?.start_time) && !eventDateHasPassed(event)
+}
+
 export function isEventPast(event: { start_time: string; end_time?: string | null } | null | undefined) {
   return Boolean(event?.start_time) && !isEventUpcoming(event)
+}
+
+/** End of the start date on this device — matches the date printed on event cards. */
+export function eventDateHasPassed(event: { start_time: string; end_time?: string | null } | null | undefined) {
+  if (event?.end_time) {
+    const end = new Date(event.end_time)
+    if (Number.isFinite(end.getTime())) return end.getTime() < Date.now()
+  }
+  if (!event?.start_time) return true
+  const start = new Date(event.start_time)
+  if (!Number.isFinite(start.getTime())) return true
+  const endOfLocalDay = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59, 999)
+  return endOfLocalDay.getTime() < Date.now()
+}
+
+export function eventListingStatus(
+  event: { start_time: string; end_time?: string | null } | null | undefined,
+  remaining?: number,
+): 'ended' | 'sold_out' | 'available' {
+  if (eventDateHasPassed(event)) return 'ended'
+  if (typeof remaining === 'number' && remaining <= 0) return 'sold_out'
+  return 'available'
+}
+
+export function listingStockLabel(
+  event: { start_time: string; end_time?: string | null } | null | undefined,
+  remaining?: number,
+) {
+  const status = eventListingStatus(event, remaining)
+  if (status === 'ended') return 'Event ended'
+  if (status === 'sold_out') return 'Sold out'
+  if (typeof remaining === 'number') return `${remaining} tickets left`
+  return 'Check availability'
 }
 
 export function isCheckedInTicket(ticket: { status?: string | null; checked_in_at?: string | null } | null | undefined) {

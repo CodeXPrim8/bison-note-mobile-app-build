@@ -138,6 +138,11 @@ export interface PaymentMetadata {
   buyer_name?: string
   buyer_phone?: string
   custom?: Record<string, unknown>
+  bu?: number
+  credit_naira?: number
+  charge_naira?: number
+  buy_rate?: number
+  value_rate?: number
 }
 
 export interface TicketRecord {

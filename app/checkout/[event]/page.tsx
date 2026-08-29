@@ -8,7 +8,8 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatNaira } from '@/lib/money'
 import { clearDraft, loadDraft, saveDraft } from '@/lib/forms/draft'
-import { isEventUpcoming } from '@/lib/events/sale'
+import { eventDateHasPassed } from '@/lib/events/sale'
+import { formatEventDateTime } from '@/lib/datetime'
 import type { EventRecord, TicketTier } from '@/lib/types/database'
 
 interface Quote {
@@ -75,7 +76,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         const json = await res.json()
         if (json.status) {
           setEvent(json.data)
-          if (!isEventUpcoming(json.data)) {
+          if (eventDateHasPassed(json.data)) {
             setError('This event has ended')
             setTierId('')
             return
@@ -87,7 +88,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
   }, [slug])
 
   useEffect(() => {
-    if (!tierId || (event && !isEventUpcoming(event))) return
+    if (!tierId || (event && eventDateHasPassed(event))) return
     fetch('/api/tickets/quote', {
       method: 'POST',
       credentials: 'include',
@@ -149,6 +150,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         </Button>
         <h1 className="mt-4 text-3xl font-bold">Checkout</h1>
         <p className="text-muted-foreground">{event?.title}</p>
+        {event?.start_time && (
+          <p className="text-sm text-muted-foreground">{formatEventDateTime(event.start_time)}</p>
+        )}
         <Card className="mt-6 p-6">
           <form
             className="space-y-4"
@@ -193,8 +197,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
               </div>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="w-full" disabled={busy || !email || !quote || (event ? !isEventUpcoming(event) : true)} type="submit">
-              {busy ? 'Processing…' : event && !isEventUpcoming(event) ? 'Event ended' : 'Continue to payment'}
+            <Button className="w-full" disabled={busy || !email || !quote || (event ? eventDateHasPassed(event) : true)} type="submit">
+              {busy ? 'Processing…' : event && eventDateHasPassed(event) ? 'Event ended' : 'Continue to payment'}
             </Button>
           </form>
         </Card>

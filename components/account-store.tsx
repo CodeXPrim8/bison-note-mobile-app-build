@@ -1,0 +1,165 @@
+'use client'
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { buFromNaira, nairaFromBu, roundMoney } from '@/lib/bu-rate'
+
+const CACHE_KEY = 'bu_account_snapshot_v2'
+
+type AccountSnapshot = {
+  greetingName: string
+  displayName: string
+  buBalance: number | null
+  nairaBalance: number | null
+}
+
+type AccountContextValue = AccountSnapshot & {
+  applySpendBu: (bu: number) => void
+  applyCreditNaira: (naira: number) => void
+  applyWallet: (wallet: { bu_balance?: unknown; naira_available?: unknown }) => void
+  refreshWallet: () => Promise<void>
+  refreshAccount: () => Promise<void>
+}
+
+const emptySnapshot: AccountSnapshot = {
+  greetingName: '',
+  displayName: '',
+  buBalance: null,
+  nairaBalance: null,
+}
+
+const AccountContext = createContext<AccountContextValue | null>(null)
+
+function firstName(display: string | null | undefined): string {
+  const value = display?.trim()
+  if (!value) return ''
+  return value.split(/\s+/)[0] ?? value
+}
+
+function readCache(): AccountSnapshot | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<AccountSnapshot>
+    const greetingName = typeof parsed.greetingName === 'string' ? parsed.greetingName : ''
+    const displayName = typeof parsed.displayName === 'string' ? parsed.displayName : greetingName
+    const buBalance = typeof parsed.buBalance === 'number' && Number.isFinite(parsed.buBalance) ? parsed.buBalance : null
+    const nairaBalance =
+      typeof parsed.nairaBalance === 'number' && Number.isFinite(parsed.nairaBalance) ? parsed.nairaBalance : null
+    if (!greetingName && !displayName && buBalance == null && nairaBalance == null) return null
+    return { greetingName, displayName, buBalance, nairaBalance }
+  } catch {
+    return null
+  }
+}
+
+function writeCache(snapshot: AccountSnapshot) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(snapshot))
+  } catch {
+    // Private mode can block sessionStorage.
+  }
+}
+
+export function AccountProvider({ children }: { children: React.ReactNode }) {
+  const [snapshot, setSnapshot] = useState<AccountSnapshot>(emptySnapshot)
+
+  const ingestWallet = useCallback((wallet: { bu_balance?: unknown; naira_available?: unknown }) => {
+    const naira = Number(wallet.naira_available)
+    const bu = Number(wallet.bu_balance)
+    if (!Number.isFinite(naira) || !Number.isFinite(bu)) return
+    setSnapshot((prev) => {
+      const next = { ...prev, nairaBalance: naira, buBalance: bu }
+      writeCache(next)
+      return next
+    })
+  }, [])
+
+  const refreshWallet = useCallback(async () => {
+    try {
+      const res = await fetch('/api/wallet', { credentials: 'include' })
+      const json = await res.json()
+      if (!json.status || !json.data?.wallet) return
+      ingestWallet(json.data.wallet)
+    } catch {
+      // Keep the last known balance on screen.
+    }
+  }, [ingestWallet])
+
+  const refreshAccount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/me', { credentials: 'include' })
+      const json = await res.json()
+      const display = (json.data?.profile?.display_name as string | undefined)?.trim()
+      if (!display) return
+      setSnapshot((prev) => {
+        const next = { ...prev, displayName: display, greetingName: firstName(display) }
+        writeCache(next)
+        return next
+      })
+    } catch {
+      // Keep the last known name on screen.
+    }
+  }, [])
+
+  const applySpendBu = useCallback((bu: number) => {
+    if (!Number.isFinite(bu) || bu <= 0) return
+    const debit = nairaFromBu(bu)
+    setSnapshot((prev) => {
+      if (prev.nairaBalance == null) return prev
+      const naira = roundMoney(Math.max(0, prev.nairaBalance - debit))
+      const next = { ...prev, nairaBalance: naira, buBalance: buFromNaira(naira) }
+      writeCache(next)
+      return next
+    })
+    void refreshWallet()
+  }, [refreshWallet])
+
+  const applyCreditNaira = useCallback((nairaDelta: number) => {
+    if (!Number.isFinite(nairaDelta) || nairaDelta === 0) return
+    setSnapshot((prev) => {
+      if (prev.nairaBalance == null) return prev
+      const naira = roundMoney(Math.max(0, prev.nairaBalance + nairaDelta))
+      const next = { ...prev, nairaBalance: naira, buBalance: buFromNaira(naira) }
+      writeCache(next)
+      return next
+    })
+    void refreshWallet()
+  }, [refreshWallet])
+
+  useEffect(() => {
+    const cached = readCache()
+    if (cached) setSnapshot(cached)
+    void refreshAccount()
+    void refreshWallet()
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') void refreshWallet()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refreshAccount, refreshWallet])
+
+  const value = useMemo<AccountContextValue>(
+    () => ({
+      ...snapshot,
+      applySpendBu,
+      applyCreditNaira,
+      applyWallet: ingestWallet,
+      refreshWallet,
+      refreshAccount,
+    }),
+    [snapshot, applySpendBu, applyCreditNaira, ingestWallet, refreshWallet, refreshAccount],
+  )
+
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
+}
+
+export function useAccount() {
+  const value = useContext(AccountContext)
+  if (!value) {
+    throw new Error('useAccount must be used inside AccountProvider')
+  }
+  return value
+}

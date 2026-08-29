@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Plus, X } from 'lucide-react'
+import { formatEventDateTime } from '@/lib/datetime'
+import { buFromNaira, formatBu } from '@/lib/bu-rate'
 
 export interface Event {
   id: string
@@ -48,7 +50,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
             vendorName: String(event.venue_name ?? ''),
             status: 'active',
             createdAt: String(event.created_at ?? ''),
-            eventDate: event.start_time ? new Date(String(event.start_time)).toLocaleString() : '',
+            eventDate: event.start_time ? formatEventDateTime(String(event.start_time)) : '',
             location: String(event.venue_name ?? event.venue_address ?? ''),
             totalBUReceived: Number(event.spray_budget_bu ?? 0),
           })),
@@ -130,7 +132,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
           vendorName: String(event.venue_name ?? ''),
           status: 'active',
           createdAt: String(event.created_at ?? ''),
-          eventDate: event.start_time ? new Date(String(event.start_time)).toLocaleString() : '',
+          eventDate: event.start_time ? formatEventDateTime(String(event.start_time)) : '',
           location: String(event.venue_name ?? event.venue_address ?? ''),
           totalBUReceived: Number(event.spray_budget_bu ?? 0),
         })),
@@ -296,7 +298,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
                     {event.totalBUReceived !== undefined && (
                       <div className="text-right">
                         <p className="font-bold text-primary">
-                          Ƀ {event.totalBUReceived.toLocaleString()}
+                          Ƀ {formatBu(buFromNaira(event.totalBUReceived))}
                         </p>
                         <p className="text-xs text-muted-foreground">Received</p>
                       </div>

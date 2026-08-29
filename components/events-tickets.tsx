@@ -5,8 +5,11 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Ticket, Search } from 'lucide-react'
-import { ticketsRemaining } from '@/lib/events/sale'
+import { isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
+import { formatEventDate } from '@/lib/datetime'
+import { EventStatusBadge } from '@/components/event-status-badge'
 import type { EventWithTiers } from '@/lib/types/database'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface EventsTicketsProps {
   onNavigate?: (page: string, data?: unknown) => void
@@ -14,18 +17,26 @@ interface EventsTicketsProps {
 }
 
 export default function EventsTickets({ onNavigate, initialData }: EventsTicketsProps) {
-  const [events, setEvents] = useState<EventWithTiers[]>([])
+  const cached = readSessionSnapshot<EventWithTiers[]>('bu_public_events')
+  const [events, setEvents] = useState<EventWithTiers[]>(cached ?? [])
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [ready, setReady] = useState(Boolean(cached))
 
   useEffect(() => {
     fetch('/api/events', { credentials: 'include' })
       .then(async (res) => {
         const json = (await res.json()) as { status: boolean; data?: EventWithTiers[]; message?: string }
-        if (json.status && json.data) setEvents(json.data)
-        else setError(json.message ?? 'Could not load events')
+        if (json.status && json.data) {
+          setEvents(json.data)
+          writeSessionSnapshot('bu_public_events', json.data)
+        } else setError(json.message ?? 'Could not load events')
+        setReady(true)
       })
-      .catch(() => setError('Could not load public events. Sign in and configure Supabase.'))
+      .catch(() => {
+        setError('Could not load public events. Sign in and configure Supabase.')
+        setReady(true)
+      })
   }, [])
 
   useEffect(() => {
@@ -36,6 +47,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   }, [initialData, events])
 
   const filtered = events.filter((event) => {
+    if (!isUpcomingListingEvent(event)) return false
     const q = searchQuery.toLowerCase()
     if (!q) return true
     return (
@@ -57,7 +69,9 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
         </Card>
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
         {filtered.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">No public upcoming events.</Card>
+          ready ? (
+            <Card className="p-8 text-center text-muted-foreground">No public upcoming events.</Card>
+          ) : null
         ) : (
           <div className="space-y-3">
             {filtered.map((event) => (
@@ -66,9 +80,12 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                 onClick={() => (onNavigate ? onNavigate('event-info', event.id) : (window.location.href = `/events/${event.slug}`))}
                 className="cursor-pointer border-primary/20 bg-card p-4"
               >
-                <div className="mb-2 flex justify-between">
+                <div className="mb-2 flex justify-between gap-2">
                   <h3 className="font-semibold">{event.title}</h3>
-                  <span className="text-xs text-primary">{new Date(event.start_time).toLocaleDateString()}</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs text-primary">{formatEventDate(event.start_time)}</span>
+                    <EventStatusBadge event={event} remaining={listingRemaining(event)} />
+                  </div>
                 </div>
                 <p className="line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
                 <div className="mt-2 flex items-center justify-between text-sm">
@@ -80,9 +97,9 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <Ticket className="h-3 w-3" />
-                  {ticketsRemaining(event.ticket_tiers) <= 0
+                  {listingRemaining(event) <= 0
                     ? 'Sold out'
-                    : `${ticketsRemaining(event.ticket_tiers)} remaining`}
+                    : `${listingRemaining(event)} remaining`}
                   <Calendar className="ml-2 h-3 w-3" />
                   {event.organizer_name ?? event.celebrant_name}
                 </div>

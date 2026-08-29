@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { QrCode, CheckCircle, Calendar, MapPin, User, AlertCircle } from 'lucide-react'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { formatEventDateTime } from '@/lib/datetime'
+import { BU_MIN_SPRAY, BU_SPRAY_NOTES, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
+import { useAccount } from '@/components/account-store'
 
 interface EventDetails {
   eventId: string
@@ -37,7 +40,7 @@ function eventFromPayload(data: Record<string, unknown>): EventDetails | null {
     celebrantName: String(data.celebrant_name ?? data.organizer_name ?? data.celebrantName ?? 'Celebrant'),
     celebrantWalletId: String(data.organizer_id ?? data.celebrant_id ?? data.celebrantWalletId ?? ''),
     eventDate: data.start_time
-      ? new Date(String(data.start_time)).toLocaleString()
+      ? formatEventDateTime(String(data.start_time))
       : String(data.eventDate ?? ''),
     location: String(data.venue_name ?? data.venue_address ?? data.location ?? '') || undefined,
     vendorName: String(data.venue_name ?? data.vendorName ?? ''),
@@ -45,6 +48,7 @@ function eventFromPayload(data: Record<string, unknown>): EventDetails | null {
 }
 
 export default function SprayingQR() {
+  const { applySpendBu } = useAccount()
   const [mode, setMode] = useState<'scan' | 'details' | 'send-bu' | 'confirmation'>('scan')
   const [eventDetails, setEventDetails] = useState<EventDetails | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -87,6 +91,10 @@ export default function SprayingQR() {
 
   async function handleSendBU() {
     if (!eventDetails || !sprayForm.amount || Number(sprayForm.amount) <= 0) return
+    if (Number(sprayForm.amount) + 1e-9 < BU_MIN_SPRAY) {
+      setMessage(`Minimum spray is ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`)
+      return
+    }
     if (!eventDetails.celebrantWalletId) {
       setMessage('This event has no celebrant wallet to receive ɃU.')
       return
@@ -110,6 +118,7 @@ export default function SprayingQR() {
         setMessage(json.message ?? 'Transfer failed.')
         return
       }
+      applySpendBu(Number(sprayForm.amount))
       setTransfers([
         {
           id: eventDetails.eventId,
@@ -256,11 +265,31 @@ export default function SprayingQR() {
                   <label className="text-sm font-semibold">Amount (Ƀ)</label>
                   <Input
                     type="number"
-                    placeholder="Enter ɃU amount"
+                    min={BU_MIN_SPRAY}
+                    step="1"
+                    placeholder={`Minimum ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`}
                     value={sprayForm.amount}
                     onChange={(e) => setSprayForm({ ...sprayForm, amount: e.target.value })}
                     className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
                   />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {BU_SPRAY_NOTES.map((note) => (
+                      <Button
+                        key={note}
+                        type="button"
+                        size="sm"
+                        variant={sprayForm.amount === String(note) ? 'default' : 'outline'}
+                        onClick={() => setSprayForm({ ...sprayForm, amount: String(note) })}
+                      >
+                        Ƀ {note.toLocaleString('en-NG')}
+                      </Button>
+                    ))}
+                  </div>
+                  {sprayForm.amount && !isNaN(Number(sprayForm.amount)) && Number(sprayForm.amount) > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Equivalent: ₦{formatNairaPlain(nairaFromBu(Number(sprayForm.amount)))}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-semibold">Message (Optional)</label>
@@ -276,13 +305,18 @@ export default function SprayingQR() {
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground">
-                      ɃU is transferred from your wallet to {eventDetails.celebrantName}. Physical Bison Notes have zero monetary value.
+                      ɃU is transferred 1:1 (1 ɃU = ₦1) from your wallet to {eventDetails.celebrantName}. Physical Bison Notes have zero monetary value.
                     </p>
                   </div>
                 </div>
                 <Button
                   onClick={() => void handleSendBU()}
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    !sprayForm.amount ||
+                    Number.isNaN(Number(sprayForm.amount)) ||
+                    Number(sprayForm.amount) + 1e-9 < BU_MIN_SPRAY
+                  }
                   className="w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90"
                 >
                   {busy ? 'Sending…' : 'Send ɃU Now'}
@@ -321,7 +355,7 @@ export default function SprayingQR() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount:</span>
-                  <span className="font-bold text-primary">Ƀ {transfers[0].amount.toLocaleString()}</span>
+                  <span className="font-bold text-primary">Ƀ {formatBu(transfers[0].amount)}</span>
                 </div>
               </div>
             </Card>

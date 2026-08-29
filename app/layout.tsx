@@ -1,21 +1,48 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { BU_SITE_DESCRIPTION, BU_SITE_NAME, BU_SITE_TITLE } from '@/lib/brand'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
+function siteUrl() {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL
+  if (explicit) return explicit
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  if (production) return `https://${production}`
+  const vercel = process.env.VERCEL_URL
+  if (vercel) return `https://${vercel}`
+  return 'https://buapp.vercel.app'
+}
+
 export const metadata: Metadata = {
-  title: 'ɃU — Create Events. Sell Tickets. Celebrate.',
-  description: 'ɃU is the event, ticketing and celebration wallet for African parties. Public events, private invites, Paystack checkout, and QR check-in.',
+  metadataBase: new URL(siteUrl()),
+  title: BU_SITE_TITLE,
+  description: BU_SITE_DESCRIPTION,
+  applicationName: BU_SITE_NAME,
   icons: {
     icon: [
-      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
-      { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/apple-icon.png', type: 'image/png', sizes: '180x180' },
+      { url: '/icon', type: 'image/png' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: [{ url: '/apple-icon.png', type: 'image/png', sizes: '180x180' }],
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_NG',
+    siteName: BU_SITE_NAME,
+    title: BU_SITE_TITLE,
+    description: BU_SITE_DESCRIPTION,
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: BU_SITE_NAME }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: BU_SITE_TITLE,
+    description: BU_SITE_DESCRIPTION,
+    images: ['/og.png'],
   },
 }
 

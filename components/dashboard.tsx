@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react'
 import { Bell, Settings, Eye, EyeOff } from 'lucide-react'
 import type { EventInvitation, EventRecord, EventWithTiers, TicketRecord, TicketTier } from '@/lib/types/database'
-import { isEventUpcoming } from '@/lib/events/sale'
+import { isEventUpcoming, isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
+import { formatEventDate } from '@/lib/datetime'
+import { EventStatusBadge } from '@/components/event-status-badge'
+import { useAccount } from '@/components/account-store'
+import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
 
 interface OwnedTicket extends TicketRecord {
   event: EventRecord | null
@@ -21,45 +25,31 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [invites, setInvites] = useState<Array<EventInvitation & { event: EventRecord | null }>>([])
   const [myTickets, setMyTickets] = useState<OwnedTicket[]>([])
   const [ticketsLoaded, setTicketsLoaded] = useState(false)
-  const [greetingName, setGreetingName] = useState('there')
-  const [buBalance, setBuBalance] = useState<number | null>(null)
-  const [nairaBalance, setNairaBalance] = useState<number | null>(null)
+  const [invitesLoaded, setInvitesLoaded] = useState(false)
+  const [eventsLoaded, setEventsLoaded] = useState(false)
+  const { greetingName, buBalance, nairaBalance } = useAccount()
 
   useEffect(() => {
-    fetch('/api/me', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        const display = json.data?.profile?.display_name as string | undefined
-        if (display) setGreetingName(display.split(' ')[0])
-      })
-      .catch(() => undefined)
-    fetch('/api/wallet', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        if (json.status && json.data?.wallet) {
-          setBuBalance(Number(json.data.wallet.bu_balance ?? 0))
-          setNairaBalance(Number(json.data.wallet.naira_available ?? json.data.wallet.bu_balance ?? 0))
-        } else {
-          setBuBalance(0)
-          setNairaBalance(0)
-        }
-      })
-      .catch(() => {
-        setBuBalance(0)
-        setNairaBalance(0)
-      })
     fetch('/api/events', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.status) setPublicEvents((json.data ?? []).slice(0, 2))
+        if (json.status) {
+          setPublicEvents(
+            (json.data ?? [])
+              .filter((event: EventWithTiers) => isUpcomingListingEvent(event))
+              .slice(0, 2),
+          )
+        }
       })
       .catch(() => undefined)
+      .finally(() => setEventsLoaded(true))
     fetch('/api/invites', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setInvites((json.data ?? []).slice(0, 2))
       })
       .catch(() => undefined)
+      .finally(() => setInvitesLoaded(true))
     fetch('/api/tickets/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -79,7 +69,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm opacity-90">Good Evening</p>
-            <h2 className="text-2xl font-bold">{greetingName}</h2>
+            <h2 className="text-2xl font-bold">{greetingName || '\u00a0'}</h2>
           </div>
           <div className="flex gap-2">
             <button 
@@ -89,7 +79,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <Bell size={20} />
             </button>
             <button 
-              onClick={() => onNavigate('profile')}
+              onClick={() => onNavigate('profile', { view: 'settings' })}
               className="rounded-full bg-primary-foreground/20 p-2 backdrop-blur hover:bg-primary-foreground/30 transition"
             >
               <Settings size={20} />
@@ -103,7 +93,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="flex items-center justify-between">
             <div className="text-3xl font-bold">
               {balanceVisible
-                ? `Ƀ ${(buBalance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                ? buBalance == null
+                  ? '\u00a0'
+                  : `Ƀ ${formatBu(buBalance)}`
                 : 'Ƀ ••••••'}
             </div>
             <button 
@@ -120,7 +112,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="flex items-center justify-between text-sm">
             <span className="font-mono">
               {balanceVisible
-                ? `≈ ₦${(nairaBalance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                ? nairaBalance == null
+                  ? '\u00a0'
+                  : `≈ ₦${formatNairaPlain(nairaBalance)}`
                 : '≈ ₦••••••'}
             </span>
             <button
@@ -135,7 +129,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         {/* Action Buttons */}
         <div className="flex gap-3">
           <button 
-            onClick={() => onNavigate('wallet')}
+            onClick={() => onNavigate('buy-bu')}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-foreground/20 py-3 backdrop-blur transition hover:bg-primary-foreground/30"
           >
             <span>➕</span>
@@ -180,17 +174,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </button>
         </div>
         <div className="space-y-3">
-          {!ticketsLoaded && myTickets.length === 0 && (
-            <p className="text-sm text-muted-foreground">Loading tickets…</p>
-          )}
-          {ticketsLoaded && myTickets.length === 0 && (
+          {ticketsLoaded && myTickets.length === 0 ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">No upcoming tickets. Past events you paid for are in History.</p>
               <button type="button" onClick={() => onNavigate('history')} className="text-sm font-semibold text-primary">
                 Open history
               </button>
             </div>
-          )}
+          ) : null}
           {myTickets.map((ticket) => (
             <button
               key={ticket.id}
@@ -220,7 +211,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </button>
         </div>
         <div className="space-y-3">
-          {invites.length === 0 && (
+          {invitesLoaded && invites.length === 0 && (
             <p className="text-sm text-muted-foreground">No private invites yet.</p>
           )}
           {invites.map((item) => (
@@ -234,7 +225,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="flex items-start justify-between">
                   <h4 className="font-semibold">{item.event?.title ?? 'Private event'}</h4>
                   <span className="rounded-full bg-primary/20 px-2 py-1 text-xs text-primary">
-                    {item.event ? new Date(item.event.start_time).toLocaleDateString() : ''}
+                    {item.event ? formatEventDate(item.event.start_time) : ''}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{item.event?.venue_name}</p>
@@ -259,7 +250,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </button>
         </div>
         <div className="space-y-3">
-          {publicEvents.length === 0 && (
+          {eventsLoaded && publicEvents.length === 0 && (
             <p className="text-sm text-muted-foreground">No public upcoming events yet.</p>
           )}
           {publicEvents.map((item) => (
@@ -273,22 +264,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="flex items-start justify-between">
                   <h4 className="font-semibold">{item.title}</h4>
                   <span className="rounded-full bg-primary/20 px-2 py-1 text-xs text-primary">
-                    {new Date(item.start_time).toLocaleDateString()}
+                    {formatEventDate(item.start_time)}
                   </span>
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
                     🎫 ₦{Number(item.starting_price ?? 0).toLocaleString()}
                   </p>
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs ${
-                      item.tickets_available
-                        ? 'bg-green-400/20 text-green-400'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {item.tickets_available ? 'Available' : 'Sold out'}
-                  </span>
+                  <EventStatusBadge event={item} remaining={listingRemaining(item)} />
                 </div>
               </div>
             </div>

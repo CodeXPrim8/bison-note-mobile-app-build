@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import type { EventRecord } from '@/lib/types/database'
+import { formatEventDateTime } from '@/lib/datetime'
 
 export function OrganizerEventPicker({
   title,
@@ -38,7 +39,7 @@ export function OrganizerEventPicker({
             <Card className="p-5 transition hover:border-primary/40">
               <p className="font-semibold">{event.title}</p>
               <p className="text-sm text-muted-foreground">
-                {new Date(event.start_time).toLocaleString()} · {event.venue_name}
+                {formatEventDateTime(event.start_time)} · {event.venue_name}
               </p>
             </Card>
           </Link>

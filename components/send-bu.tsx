@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { User, CheckCircle, AlertCircle, Search, QrCode, Sparkles } from 'lucide-react'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { formatEventDateTime } from '@/lib/datetime'
+import { BU_MIN_SPRAY, BU_MIN_TRANSFER, BU_SPRAY_NOTES, buFromNaira, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
+import { useAccount } from '@/components/account-store'
 
 interface UserProfile {
   id: string
@@ -26,6 +29,7 @@ interface BUTransfer {
 }
 
 export default function SendBU() {
+  const { applySpendBu } = useAccount()
   const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history'>('menu')
   const [transferType, setTransferType] = useState<'transfer' | 'tip'>('transfer')
   const [searchQuery, setSearchQuery] = useState('')
@@ -54,9 +58,9 @@ export default function SendBU() {
             id: String(tx.id),
             recipientUsername: String(tx.counterparty ?? ''),
             recipientName: String(tx.description ?? 'ɃU transfer'),
-            amount: Number(tx.amount ?? 0),
+            amount: buFromNaira(Number(tx.amount ?? 0)),
             message: '',
-            date: tx.created_at ? new Date(String(tx.created_at)).toLocaleString() : '',
+            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
             status: 'completed',
             type: String(tx.metadata ?? '').includes('tip') ? 'tip' : 'transfer',
           })),
@@ -108,6 +112,15 @@ export default function SendBU() {
       setMessage('This recipient has no live ɃU account id.')
       return false
     }
+    const minBu = isTip ? BU_MIN_SPRAY : BU_MIN_TRANSFER
+    if (amount + 1e-9 < minBu) {
+      setMessage(
+        isTip
+          ? `Minimum tip is ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`
+          : `Minimum transfer is ${BU_MIN_TRANSFER.toLocaleString('en-NG')} ɃU`,
+      )
+      return false
+    }
     setBusy(true)
     setMessage(null)
     try {
@@ -123,6 +136,7 @@ export default function SendBU() {
         setMessage(json.message ?? 'Transfer failed.')
         return false
       }
+      applySpendBu(amount)
       setTransfers([
         {
           id: String(Date.now()),
@@ -130,7 +144,7 @@ export default function SendBU() {
           recipientName: user.fullName,
           amount,
           message: note,
-          date: new Date().toLocaleString(),
+          date: formatEventDateTime(new Date()),
           status: 'completed',
           type: isTip ? 'tip' : 'transfer',
         },
@@ -288,7 +302,7 @@ export default function SendBU() {
                           </div>
                           <p className="text-xs text-muted-foreground">{transfer.recipientUsername}</p>
                         </div>
-                        <p className="font-bold text-primary">Ƀ {transfer.amount.toLocaleString()}</p>
+                        <p className="font-bold text-primary">Ƀ {formatBu(transfer.amount)}</p>
                       </div>
                     </Card>
                   ))}
@@ -400,14 +414,29 @@ export default function SendBU() {
                 <label className="text-sm font-semibold">Tip Amount (Ƀ)</label>
                 <Input
                   type="number"
-                  placeholder="Enter tip amount"
+                  min={BU_MIN_SPRAY}
+                  step="1"
+                  placeholder={`Minimum ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`}
                   value={tipAmount}
                   onChange={(e) => setTipAmount(e.target.value)}
                   className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
                 />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {BU_SPRAY_NOTES.map((note) => (
+                    <Button
+                      key={note}
+                      type="button"
+                      size="sm"
+                      variant={tipAmount === String(note) ? 'default' : 'outline'}
+                      onClick={() => setTipAmount(String(note))}
+                    >
+                      Ƀ {note.toLocaleString('en-NG')}
+                    </Button>
+                  ))}
+                </div>
                 {tipAmount && !isNaN(Number(tipAmount)) && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Equivalent: ₦{Number(tipAmount).toLocaleString()}
+                    Equivalent: ₦{formatNairaPlain(nairaFromBu(Number(tipAmount)))}
                   </p>
                 )}
               </div>
@@ -424,7 +453,7 @@ export default function SendBU() {
               {message && <p className="text-sm text-destructive">{message}</p>}
               <Button
                 onClick={() => void handleTipSend()}
-                disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) <= 0}
+                disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) + 1e-9 < BU_MIN_SPRAY}
                 className="w-full bg-yellow-400 py-3 text-yellow-900 hover:bg-yellow-400/90"
               >
                 {busy ? 'Sending…' : 'Give Tip'}
@@ -525,7 +554,7 @@ export default function SendBU() {
                           <p className="font-medium">{transfer.recipientName}</p>
                           <p className="text-xs text-muted-foreground">{transfer.recipientUsername}</p>
                         </div>
-                        <p className="font-bold text-primary">Ƀ {transfer.amount.toLocaleString()}</p>
+                        <p className="font-bold text-primary">Ƀ {formatBu(transfer.amount)}</p>
                       </div>
                     </Card>
                   ))}
@@ -592,6 +621,8 @@ export default function SendBU() {
                   <label className="text-sm font-semibold">Amount (Ƀ)</label>
                   <Input
                     type="number"
+                    min={BU_MIN_TRANSFER}
+                    step="1"
                     placeholder="Enter ɃU amount"
                     value={transferForm.amount}
                     onChange={(e) =>
@@ -599,9 +630,22 @@ export default function SendBU() {
                     }
                     className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
                   />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {BU_SPRAY_NOTES.map((note) => (
+                      <Button
+                        key={note}
+                        type="button"
+                        size="sm"
+                        variant={transferForm.amount === String(note) ? 'default' : 'outline'}
+                        onClick={() => setTransferForm({ ...transferForm, amount: String(note) })}
+                      >
+                        Ƀ {note.toLocaleString('en-NG')}
+                      </Button>
+                    ))}
+                  </div>
                   {transferForm.amount && !isNaN(Number(transferForm.amount)) && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Equivalent: ₦{Number(transferForm.amount).toLocaleString()}
+                      Equivalent: ₦{formatNairaPlain(nairaFromBu(Number(transferForm.amount)))}
                     </p>
                   )}
                 </div>
@@ -630,7 +674,12 @@ export default function SendBU() {
                 {message && <p className="text-sm text-destructive">{message}</p>}
                 <Button
                   onClick={() => void handleSendBU()}
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    !transferForm.amount ||
+                    Number.isNaN(Number(transferForm.amount)) ||
+                    Number(transferForm.amount) + 1e-9 < BU_MIN_TRANSFER
+                  }
                   className="w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90"
                 >
                   {busy ? 'Sending…' : 'Send ɃU Now'}
@@ -679,7 +728,7 @@ export default function SendBU() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount:</span>
-                  <span className="font-bold text-primary">Ƀ {transfers[0].amount.toLocaleString()}</span>
+                  <span className="font-bold text-primary">Ƀ {formatBu(transfers[0].amount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status:</span>
@@ -782,10 +831,10 @@ export default function SendBU() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-primary">
-                          Ƀ {transfer.amount.toLocaleString()}
+                          Ƀ {formatBu(transfer.amount)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          ₦{transfer.amount.toLocaleString()}
+                          ₦{formatNairaPlain(nairaFromBu(transfer.amount))}
                         </p>
                       </div>
                     </div>

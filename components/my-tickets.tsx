@@ -9,6 +9,7 @@ import { isCheckedInTicket, isEventUpcoming } from '@/lib/events/sale'
 import { ticketQrScanString } from '@/lib/tickets/qr-generator'
 import { TicketAdmitCard } from '@/components/ticket-admit'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface TicketRow extends TicketRecord {
   event: EventRecord | null
@@ -23,11 +24,12 @@ export default function MyTickets({
   onNavigate?: (page: string) => void
   ticketId?: string
 }) {
-  const [tickets, setTickets] = useState<TicketRow[]>([])
+  const cached = readSessionSnapshot<TicketRow[]>('bu_my_tickets')
+  const [tickets, setTickets] = useState<TicketRow[]>(cached ?? [])
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [selected, setSelected] = useState<TicketRow | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(Boolean(cached))
 
   useEffect(() => {
     let cancelled = false
@@ -43,6 +45,7 @@ export default function MyTickets({
         }
         const list = (json.data ?? []) as TicketRow[]
         setTickets(list)
+        writeSessionSnapshot('bu_my_tickets', list)
         setSelected((current) => {
           const wanted = ticketId || current?.id
           if (!wanted) return current
@@ -80,7 +83,7 @@ export default function MyTickets({
   }, [tickets])
 
   if (!loaded) {
-    return <p className="px-4 py-10 text-sm text-muted-foreground">Loading tickets…</p>
+    return null
   }
 
   const upcoming = tickets.filter((ticket) => isEventUpcoming(ticket.event) || isCheckedInTicket(ticket))

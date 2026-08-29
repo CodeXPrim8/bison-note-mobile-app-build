@@ -5,8 +5,11 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { isEventPast } from '@/lib/events/sale'
+import { formatEventDateTime } from '@/lib/datetime'
+import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface Transaction {
   id: string
@@ -24,42 +27,53 @@ interface HistoryTicket extends TicketRecord {
 }
 
 export default function History() {
+  const cached = readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
   const [filter, setFilter] = useState<'all' | 'topup' | 'purchase' | 'withdrawal' | 'bu_transfer'>('all')
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [pastTickets, setPastTickets] = useState<HistoryTicket[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>(cached?.transactions ?? [])
+  const [pastTickets, setPastTickets] = useState<HistoryTicket[]>(cached?.pastTickets ?? [])
+  const [ready, setReady] = useState(Boolean(cached))
 
   useEffect(() => {
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
-        setTransactions(
-          txs.map((tx) => ({
-            id: String(tx.id),
-            type: (String(tx.type ?? 'bu_transfer') as Transaction['type']),
-            amount: Number(tx.amount ?? 0),
-            date: tx.created_at ? new Date(String(tx.created_at)).toLocaleString() : '',
-            description: String(tx.description ?? 'ɃU movement'),
-            status: 'completed' as const,
-          })),
-        )
+        const next = txs.map((tx) => ({
+          id: String(tx.id),
+          type: String(tx.type ?? 'bu_transfer') as Transaction['type'],
+          amount: Number(tx.amount ?? 0),
+          date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+          description: String(tx.description ?? 'ɃU movement'),
+          status: 'completed' as const,
+        }))
+        setTransactions(next)
+        setReady(true)
+        writeSessionSnapshot('bu_history', {
+          transactions: next,
+          pastTickets:
+            readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
+              ?.pastTickets ?? [],
+        })
       })
-      .catch(() => undefined)
+      .catch(() => setReady(true))
     fetch('/api/tickets/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
         const list = (json.data ?? []) as HistoryTicket[]
-        setPastTickets(
-          list.filter(
-            (ticket) =>
-              isEventPast(ticket.event) &&
-              ticket.status !== 'refunded' &&
-              ticket.status !== 'cancelled',
-          ),
+        const past = list.filter(
+          (ticket) =>
+            isEventPast(ticket.event) && ticket.status !== 'refunded' && ticket.status !== 'cancelled',
         )
+        setPastTickets(past)
+        setReady(true)
+        writeSessionSnapshot('bu_history', {
+          transactions:
+            readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
+              ?.transactions ?? [],
+          pastTickets: past,
+        })
       })
-      .catch(() => undefined)
+      .catch(() => setReady(true))
   }, [])
 
   const filteredTransactions = filter === 'all'
@@ -86,9 +100,11 @@ export default function History() {
         <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Events you attended</h3>
         <div className="mb-8 space-y-3">
           {pastTickets.length === 0 ? (
-            <Card className="border-border/50 bg-card/50 p-6 text-center">
-              <p className="text-sm text-muted-foreground">No past events yet. After a party date passes, paid tickets move here.</p>
-            </Card>
+            ready ? (
+              <Card className="border-border/50 bg-card/50 p-6 text-center">
+                <p className="text-sm text-muted-foreground">No past events yet. After a party date passes, paid tickets move here.</p>
+              </Card>
+            ) : null
           ) : (
             pastTickets.map((ticket) => (
               <TicketFeedbackForm
@@ -126,9 +142,11 @@ export default function History() {
 
         <div className="space-y-3">
           {filteredTransactions.length === 0 ? (
-            <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">No transactions found</p>
-            </Card>
+            ready ? (
+              <Card className="border-border/50 bg-card/50 p-8 text-center">
+                <p className="text-muted-foreground">No transactions found</p>
+              </Card>
+            ) : null
           ) : (
             filteredTransactions.map((tx) => (
               <Card
@@ -163,8 +181,11 @@ export default function History() {
                         : 'text-foreground'
                     }`}
                   >
-                    {tx.type === 'topup' || tx.type === 'purchase' || tx.type === 'bu_transfer' ? '+' : '-'}₦
-                    {tx.amount.toLocaleString()}
+                    {tx.type === 'topup' || tx.type === 'purchase' || tx.type === 'bu_transfer' ? '+' : '-'}
+                    Ƀ {formatBu(buFromNaira(tx.amount))}
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      ₦{formatNairaPlain(tx.amount)}
+                    </span>
                   </span>
                 </div>
               </Card>

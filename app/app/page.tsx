@@ -22,6 +22,7 @@ import SendBU from '@/components/send-bu'
 import ReceiveBU from '@/components/receive-bu'
 import EventInfo from '@/components/event-info'
 import MyTickets from '@/components/my-tickets'
+import { AccountProvider } from '@/components/account-store'
 
 function ticketIdFromPageData(pageData: unknown) {
   if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
@@ -30,7 +31,22 @@ function ticketIdFromPageData(pageData: unknown) {
   return undefined
 }
 
+function profileViewFromPageData(pageData: unknown) {
+  if (!pageData || typeof pageData !== 'object' || !('view' in pageData)) return undefined
+  const view = (pageData as { view?: string }).view
+  if (view === 'settings' || view === 'appearance' || view === 'pnd' || view === 'menu') return view
+  return undefined
+}
+
 export default function MobileApp() {
+  return (
+    <AccountProvider>
+      <MobileAppShell />
+    </AccountProvider>
+  )
+}
+
+function MobileAppShell() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [pageData, setPageData] = useState<unknown>(null)
   const [theme, setTheme] = useState('theme-pink')
@@ -82,6 +98,8 @@ export default function MobileApp() {
     } else if ((page === 'event-info' || page === 'event') && event) {
       setCurrentPage('event-info')
       setPageData(event)
+    } else if (page === 'wallet' || page === 'buy-bu' || page === 'redemption' || page === 'history' || page === 'send-bu') {
+      setCurrentPage(page)
     }
   }, [allowed])
 
@@ -117,7 +135,13 @@ export default function MobileApp() {
           ? 'Vendor'
           : currentPage === 'tickets'
             ? 'Tickets'
-            : currentPage
+            : currentPage === 'buy-bu'
+              ? 'Buy ɃU'
+              : currentPage === 'send-bu'
+                ? 'Send ɃU'
+                : currentPage === 'receive-bu'
+                  ? 'Receive ɃU'
+                  : currentPage
 
   return (
     <div className={`${theme} min-h-screen bg-background text-foreground`}>
@@ -144,11 +168,20 @@ export default function MobileApp() {
         <div>
           {mode === 'user' ? (
             <>
-              {currentPage === 'dashboard' && <Dashboard onNavigate={handleNavigate} />}
+              <div hidden={currentPage !== 'dashboard'}>
+                <Dashboard onNavigate={handleNavigate} />
+              </div>
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
               {currentPage === 'spraying' && <Spraying />}
               {currentPage === 'redemption' && <Redemption />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} />}
+              {currentPage === 'profile' && (
+                <Profile
+                  onNavigate={handleNavigate}
+                  theme={theme}
+                  onThemeChange={setTheme}
+                  initialView={profileViewFromPageData(pageData)}
+                />
+              )}
               {currentPage === 'notifications' && <Notifications />}
               {currentPage === 'buy-bu' && <BuyBU />}
               {currentPage === 'history' && <History />}
@@ -167,7 +200,9 @@ export default function MobileApp() {
             </>
           ) : mode === 'celebrant' ? (
             <>
-              {currentPage === 'dashboard' && <CelebrantDashboard />}
+              <div hidden={currentPage !== 'dashboard'}>
+                <CelebrantDashboard />
+              </div>
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
               {currentPage === 'redemption' && <Redemption />}
               {currentPage === 'tickets' && (
@@ -180,14 +215,30 @@ export default function MobileApp() {
                 <EventInfo eventId={typeof pageData === 'string' ? pageData : undefined} onNavigate={handleNavigate} />
               )}
               {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} />}
+              {currentPage === 'profile' && (
+                <Profile
+                  onNavigate={handleNavigate}
+                  theme={theme}
+                  onThemeChange={setTheme}
+                  initialView={profileViewFromPageData(pageData)}
+                />
+              )}
             </>
           ) : (
             <>
-              {currentPage === 'dashboard' && <VendorDashboard />}
+              <div hidden={currentPage !== 'dashboard'}>
+                <VendorDashboard />
+              </div>
               {currentPage === 'wallet' && <VendorPOS />}
               {currentPage === 'spraying' && <QRScanner />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} />}
+              {currentPage === 'profile' && (
+                <Profile
+                  onNavigate={handleNavigate}
+                  theme={theme}
+                  onThemeChange={setTheme}
+                  initialView={profileViewFromPageData(pageData)}
+                />
+              )}
             </>
           )}
         </div>

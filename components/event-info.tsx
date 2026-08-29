@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, Ticket, Users } from 'lucide-react'
-import { appCheckoutPath, eventOnSale, isEventUpcoming } from '@/lib/events/sale'
+import { appCheckoutPath, eventListingStatus, eventOnSale, listingRemaining } from '@/lib/events/sale'
+import { formatEventDateTime } from '@/lib/datetime'
+import { EventStatusBadge } from '@/components/event-status-badge'
 import type { EventWithTiers } from '@/lib/types/database'
+import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface EventInfoProps {
   eventId?: string
@@ -13,9 +16,10 @@ interface EventInfoProps {
 }
 
 export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
-  const [event, setEvent] = useState<EventWithTiers | null>(null)
+  const cached = eventId ? readSessionSnapshot<EventWithTiers>(`bu_event_${eventId}`) : null
+  const [event, setEvent] = useState<EventWithTiers | null>(cached)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!cached)
 
   useEffect(() => {
     if (!eventId) {
@@ -23,13 +27,21 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
       setError('Event not found')
       return
     }
-    setLoading(true)
+    const snap = readSessionSnapshot<EventWithTiers>(`bu_event_${eventId}`)
+    if (snap) {
+      setEvent(snap)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     fetch(`/api/events/slug/${encodeURIComponent(eventId)}`, { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
         setLoading(false)
         if (json.status && json.data) {
-          setEvent(json.data as EventWithTiers)
+          const next = json.data as EventWithTiers
+          setEvent(next)
+          writeSessionSnapshot(`bu_event_${eventId}`, next)
           setError(null)
           return
         }
@@ -60,8 +72,19 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
     )
   }
 
-  const upcoming = isEventUpcoming(event)
-  const onSale = upcoming && eventOnSale(event.ticket_tiers)
+  return <EventInfoLoaded event={event} onNavigate={onNavigate} />
+}
+
+function EventInfoLoaded({
+  event,
+  onNavigate,
+}: {
+  event: EventWithTiers
+  onNavigate?: (page: string, data?: unknown) => void
+}) {
+  const remaining = listingRemaining(event)
+  const status = eventListingStatus(event, remaining)
+  const onSale = status === 'available' && eventOnSale(event.ticket_tiers)
 
   return (
     <div className="space-y-6 pb-24 pt-4">
@@ -73,12 +96,15 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
       )}
       <div className="px-4">
         <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6">
-          <h1 className="mb-4 text-2xl font-bold">{event.title}</h1>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h1 className="text-2xl font-bold">{event.title}</h1>
+            <EventStatusBadge event={event} remaining={remaining} />
+          </div>
           {event.description && <p className="mb-4 whitespace-pre-wrap text-muted-foreground">{event.description}</p>}
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <Calendar className="h-5 w-5 text-primary" />
-              <p className="font-semibold">{new Date(event.start_time).toLocaleString()}</p>
+              <p className="font-semibold">{formatEventDateTime(event.start_time)}</p>
             </div>
             {(event.venue_name || event.venue_address) && (
               <div className="flex items-center gap-3">
@@ -98,19 +124,17 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
               <p className="text-sm text-muted-foreground">{event.organizer_name ?? event.celebrant_name}</p>
             </div>
           </div>
-          {upcoming ? (
-            onSale ? (
-              <Button className="mt-6 w-full" onClick={() => (window.location.href = appCheckoutPath(event.slug))}>
-                Buy ticket
-              </Button>
-            ) : (
-              <Button className="mt-6 w-full" type="button" disabled>
-                {event.ticket_tiers?.length ? 'Sold out' : 'Tickets not on sale'}
-              </Button>
-            )
-          ) : (
+          {status === 'ended' ? (
             <Button className="mt-6 w-full" type="button" disabled>
               This event has ended
+            </Button>
+          ) : onSale ? (
+            <Button className="mt-6 w-full" onClick={() => (window.location.href = appCheckoutPath(event.slug))}>
+              Buy ticket
+            </Button>
+          ) : (
+            <Button className="mt-6 w-full" type="button" disabled>
+              {status === 'sold_out' || event.ticket_tiers?.length ? 'Sold out' : 'Tickets not on sale'}
             </Button>
           )}
           <Button className="mt-2 w-full" variant="outline" onClick={() => onNavigate?.('events')}>
@@ -134,7 +158,9 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
                   </div>
                   <p className="text-lg font-bold text-primary">₦{Number(tier.price).toLocaleString()}</p>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{left <= 0 ? 'Sold out' : `${left} remaining`}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {status === 'ended' ? 'Event ended' : left <= 0 ? 'Sold out' : `${left} remaining`}
+                </p>
               </Card>
             )
           })}

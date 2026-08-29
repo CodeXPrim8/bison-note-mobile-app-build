@@ -32,7 +32,7 @@ export default function Navigation({ currentPage, onNavigate, mode = 'user' }: N
   const tabs = mode === 'user' ? userTabs : mode === 'celebrant' ? celebrantTabs : vendorTabs
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur">
+    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-md justify-around">
         {tabs.map((tab) => (
           <button

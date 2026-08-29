@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { EventRecord } from '@/lib/types/database'
+import { formatEventDateTime } from '@/lib/datetime'
 
 export default function OrganizerEventsPage() {
   const [events, setEvents] = useState<EventRecord[]>([])
@@ -38,7 +39,7 @@ export default function OrganizerEventsPage() {
                 <div>
                   <h2 className="font-semibold">{event.title}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(event.start_time).toLocaleString()} · {event.venue_name}
+                    {formatEventDateTime(event.start_time)} · {event.venue_name}
                   </p>
                 </div>
                 <div className="flex gap-2">

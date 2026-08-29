@@ -27,11 +27,16 @@ export const initializeTicketSchema = z.object({
     .optional(),
 })
 
-export const initializeDepositSchema = z.object({
-  email: z.string().email(),
-  amount: z.number().positive(),
-  callback_url: z.string().url().optional(),
-})
+export const initializeDepositSchema = z
+  .object({
+    email: z.string().email(),
+    bu: z.number().positive().optional(),
+    amount: z.number().positive().optional(),
+    callback_url: z.string().url().optional(),
+  })
+  .refine((body) => body.bu != null || body.amount != null, {
+    message: 'Enter ɃU to buy, or the naira you will pay by card',
+  })
 
 export const checkinSchema = z
   .object({

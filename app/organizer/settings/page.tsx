@@ -36,12 +36,27 @@ export default function SettingsPage() {
       body: JSON.stringify({
         display_name: name,
         phone,
+        email: email.trim() || '',
         ...(newPin ? { current_pin: currentPin, new_pin: newPin } : {}),
       }),
     })
     const json = await res.json()
     setMessage(json.message)
-    if (json.status) setBuId(json.data?.profile?.phone_e164 ?? buId)
+    if (json.status) {
+      setBuId(json.data?.profile?.phone_e164 ?? buId)
+      setEmail(json.data?.profile?.email ?? '')
+    }
+  }
+
+  async function removeEmail() {
+    const res = await fetch('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: '' }),
+    })
+    const json = await res.json()
+    setMessage(json.message)
+    if (json.status) setEmail('')
   }
 
   return (
@@ -49,10 +64,16 @@ export default function SettingsPage() {
       <h1 className="text-3xl font-bold">Settings</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Same ɃU account as the mobile app. Sign in with your phone number (ɃU ID) and PIN.
+        You can add, change, or remove the email used for receipts and Fund Wallet.
       </p>
       <Card className="mt-6 space-y-3 p-6">
         <Input placeholder="Display name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input placeholder="Email" value={email} disabled />
+        <Input
+          placeholder="Email for receipts and Paystack"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
         <Input placeholder="Phone / ɃU ID" value={phone} onChange={(e) => setPhone(e.target.value)} />
         {buId && <p className="text-xs text-muted-foreground">Normalised ɃU ID: {displayBuId(buId)}</p>}
         <Input
@@ -73,6 +94,11 @@ export default function SettingsPage() {
         />
         {message && <p className="text-sm text-muted-foreground">{message}</p>}
         <Button onClick={save}>Save</Button>
+        {email && (
+          <Button type="button" variant="outline" onClick={() => void removeEmail()}>
+            Remove email
+          </Button>
+        )}
       </Card>
     </div>
   )
