@@ -53,10 +53,21 @@ export function isPaystackConfigured(): boolean {
   return Boolean(optional('PAYSTACK_SECRET_KEY'))
 }
 
+function paystackSecretKind(key: string): 'live' | 'test' | 'unknown' {
+  if (key.startsWith('sk_live_')) return 'live'
+  if (key.startsWith('sk_test_')) return 'test'
+  return 'unknown'
+}
+
 export function getPaystackSecret(): string {
-  const key = optional('PAYSTACK_SECRET_KEY')
+  const key = optional('PAYSTACK_SECRET_KEY')?.trim()
   if (!key) {
     throw new Error('Paystack is not configured')
+  }
+  if (process.env.VERCEL_ENV === 'production' && paystackSecretKind(key) === 'test') {
+    throw new Error(
+      'Paystack test keys cannot take live charges. Set PAYSTACK_SECRET_KEY on Vercel to the live secret (sk_live_).',
+    )
   }
   return key
 }

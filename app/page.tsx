@@ -76,14 +76,14 @@ export default function WebsiteHome() {
             <ol className="mt-6 space-y-4 text-muted-foreground">
               <li>1. Organiser creates a PUBLIC or PRIVATE event.</li>
               <li>2. Guests discover it in Upcoming Events or Invites.</li>
-              <li>3. Paystack confirms payment. ɃU mints tickets with QR + backup code.</li>
-              <li>4. Tickets appear in the ɃU app. Gatekeepers scan at the door.</li>
+              <li>3. After payment, ɃU issues tickets with a QR and backup code, and emails them to the buyer.</li>
+              <li>4. Tickets also appear in the ɃU app. Staff authenticate at the door.</li>
             </ol>
           </div>
           <div>
             <h2 className="text-3xl font-bold">ɃU Gateway</h2>
             <p className="mt-4 text-muted-foreground">
-              Keep your own website. Use ɃU for ticketing, Paystack orchestration, and app delivery.
+              Keep your own website. Use ɃU for ticketing and delivering tickets to guests.
             </p>
             <Button asChild className="mt-6">
               <Link href="/gateway">Developer docs & keys</Link>

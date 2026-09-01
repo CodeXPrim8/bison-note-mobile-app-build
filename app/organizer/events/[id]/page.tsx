@@ -77,7 +77,7 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
             <Link href={`/events/${data.event.slug}`}>Public page</Link>
           </Button>
           <Button asChild>
-            <Link href={`/organizer/events/${id}/checkin`}>Check-in</Link>
+            <Link href={`/organizer/events/${id}/checkin`}>Access</Link>
           </Button>
         </div>
       </div>

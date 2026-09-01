@@ -4,7 +4,7 @@ export const ORGANIZER_NAV = [
   { label: 'Create Event', href: '/organizer/events/create' },
   { label: 'Ticket Sales', href: '/organizer/sales' },
   { label: 'Guests', href: '/organizer/guests' },
-  { label: 'Check-In', href: '/organizer/checkin' },
+  { label: 'Access', href: '/organizer/checkin' },
   { label: 'Transactions', href: '/organizer/transactions' },
   { label: 'Settlements', href: '/organizer/settlements' },
   { label: 'Gateway', href: '/gateway/dashboard' },
@@ -14,6 +14,9 @@ export const ORGANIZER_NAV = [
 
 export function organizerNavActive(pathname: string, href: string) {
   if (href === '/organizer') return pathname === '/organizer'
+  if (href === '/organizer/checkin') {
+    return pathname === href || pathname.startsWith(`${href}/`) || /\/organizer\/events\/[^/]+\/checkin/.test(pathname)
+  }
   const matches = pathname === href || pathname.startsWith(`${href}/`)
   if (!matches) return false
   return !ORGANIZER_NAV.some(
@@ -25,6 +28,7 @@ export function organizerNavActive(pathname: string, href: string) {
 }
 
 export function organizerCurrentLabel(pathname: string) {
+  if (/\/organizer\/events\/[^/]+\/checkin/.test(pathname)) return 'Access'
   const exact = ORGANIZER_NAV.find((item) => item.href === pathname)
   if (exact) return exact.label
   const nested = [...ORGANIZER_NAV].reverse().find((item) => item.href !== '/organizer' && pathname.startsWith(item.href))

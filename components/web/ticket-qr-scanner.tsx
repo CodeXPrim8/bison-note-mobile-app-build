@@ -1,15 +1,18 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { cn } from '@/lib/utils'
 
 export function TicketQrScanner({
   onScan,
   active,
   readerId = 'bu-checkin-reader',
+  className,
 }: {
   onScan: (text: string) => void
   active: boolean
   readerId?: string
+  className?: string
 }) {
   const onScanRef = useRef(onScan)
   onScanRef.current = onScan
@@ -44,5 +47,5 @@ export function TicketQrScanner({
     }
   }, [active, readerId])
 
-  return <div id={readerId} className="overflow-hidden rounded-xl bg-black" />
+  return <div id={readerId} className={cn('h-full min-h-[280px] overflow-hidden bg-black', className)} />
 }

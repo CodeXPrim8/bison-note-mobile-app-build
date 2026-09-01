@@ -132,7 +132,6 @@ export function TicketPass({
                 {admitted ? (
                   <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-8 text-center">
                     <p className="text-lg font-semibold">{eventWelcomeLine(event)}</p>
-                    <p className="mt-2 text-sm text-white/60">This QR is closed so it cannot be used twice.</p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center">
