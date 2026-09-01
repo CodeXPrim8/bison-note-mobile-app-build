@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { EventRecord } from '@/lib/types/database'
 import { formatEventDateTime } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 
 export default function OrganizerEventsPage() {
   const [events, setEvents] = useState<EventRecord[]>([])
@@ -33,22 +34,25 @@ export default function OrganizerEventsPage() {
       {error && <p className="mt-4 text-sm text-muted-foreground">{error}</p>}
       <div className="mt-6 space-y-3">
         {events.map((event) => (
-          <Link key={event.id} href={`/organizer/events/${event.id}`}>
-            <Card className="p-5 transition hover:border-primary/40">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="font-semibold">{event.title}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {formatEventDateTime(event.start_time)} · {event.venue_name}
-                  </p>
-                </div>
+          <Card key={event.id} className="p-5 transition hover:border-primary/40">
+            <div className="flex items-start justify-between gap-4">
+              <Link href={`/organizer/events/${event.id}`} className="min-w-0 flex-1">
+                <h2 className="font-semibold">{event.title}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {formatEventDateTime(event.start_time)} · {eventVenueLabel(event)}
+                </p>
+              </Link>
+              <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
                 <div className="flex gap-2">
                   <Badge variant="outline">{event.visibility}</Badge>
                   <Badge>{event.status}</Badge>
                 </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/organizer/events/${event.id}/edit`}>Edit</Link>
+                </Button>
               </div>
-            </Card>
-          </Link>
+            </div>
+          </Card>
         ))}
       </div>
     </div>

@@ -6,8 +6,10 @@ import { Card } from '@/components/ui/card'
 import type { EventWithTiers } from '@/lib/types/database'
 import { eventCategoryLabel } from '@/lib/schemas/event'
 import { EventStatusBadge } from '@/components/event-status-badge'
-import { isUpcomingListingEvent, listingRemaining, listingStockLabel } from '@/lib/events/sale'
+import { EventTicketList } from '@/components/event-ticket-list'
+import { eventDateHasPassed, isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 
 export function PublicEventsGrid({ limit }: { limit?: number }) {
   const [events, setEvents] = useState<EventWithTiers[]>([])
@@ -47,18 +49,15 @@ export function PublicEventsGrid({ limit }: { limit?: number }) {
                 <p className="text-xs uppercase tracking-wide text-primary">{eventCategoryLabel(event.category) ?? 'Event'}</p>
                 <h3 className="mt-1 text-lg font-semibold">{event.title}</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {formatEventDateTime(event.start_time)} · {event.venue_name}
+                  {formatEventDateTime(event.start_time)} · {eventVenueLabel(event)}
                 </p>
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <p className="font-bold text-primary">
-                    From ₦{Number(event.starting_price ?? 0).toLocaleString()}
-                  </p>
+                <div className="mt-3 flex items-start justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tickets</p>
                   <EventStatusBadge event={event} remaining={remaining} />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {listingStockLabel(event, remaining)}
-                  {event.organizer_name ? ` · ${event.organizer_name}` : ''}
-                </p>
+                <div className="mt-2">
+                  <EventTicketList tiers={event.ticket_tiers} ended={eventDateHasPassed(event)} />
+                </div>
               </div>
             </Card>
           </Link>

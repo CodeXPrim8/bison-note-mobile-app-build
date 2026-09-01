@@ -10,6 +10,7 @@ import {
   resolveLiveCelebrantId,
   withLiveTiers,
 } from '@/lib/events/live'
+import { storedTypesFromInput } from '@/lib/events/ticket-types'
 import { isPublicCatalogEvent } from '@/lib/events/access'
 
 export async function GET() {
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
     const json: unknown = await request.json()
     const body = createEventSchema.parse(json)
     const firstTier = body.ticket_tiers[0]
+    const ticketTypes = storedTypesFromInput(body.ticket_tiers)
     const created = await insertLiveEvent(celebrantId, {
       title: body.title,
       start_time: body.start_time,
@@ -53,9 +55,19 @@ export async function POST(request: Request) {
       cover_image_url: body.cover_image_url,
       visibility: body.visibility,
       category: body.category,
-      capacity: body.capacity ?? firstTier?.quantity_total,
+      capacity: body.capacity ?? body.ticket_tiers.reduce((sum, tier) => sum + (tier.quantity_total || 0), 0),
       ticket_price_bu: firstTier?.price,
       max_tickets: body.ticket_tiers.reduce((sum, tier) => sum + (tier.quantity_total || 0), 0),
+      ticket_types: ticketTypes,
+      organizer_name: body.organizer_name,
+      organizer_info: body.organizer_info,
+      end_time: body.end_time,
+      venue_lat: body.venue_lat,
+      venue_lng: body.venue_lng,
+      contact_email: body.contact_email,
+      contact_phone: body.contact_phone,
+      ticket_sales_start: body.ticket_sales_start,
+      ticket_sales_end: body.ticket_sales_end,
     })
 
     if ('error' in created) {

@@ -167,12 +167,17 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
               value={tierId}
               onChange={(e) => setTierId(e.target.value)}
             >
-              {(event?.ticket_tiers ?? []).map((tier) => (
-                <option key={tier.id} value={tier.id}>
-                  {tier.name} — ₦{Number(tier.price).toLocaleString()}
-                </option>
-              ))}
+              {(event?.ticket_tiers ?? []).map((tier) => {
+                const left = Math.max(0, Number(tier.quantity_total) - Number(tier.quantity_sold))
+                return (
+                  <option key={tier.id} value={tier.id} disabled={left <= 0}>
+                    {tier.name} — ₦{Number(tier.price).toLocaleString()}
+                    {left <= 0 ? ' (sold out)' : ''}
+                  </option>
+                )
+              })}
             </select>
+            <label className="text-sm font-semibold">Quantity</label>
             <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value) || 1)} />
             <Input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />

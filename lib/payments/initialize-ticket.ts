@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
 import { getAppUrl, isPaystackConfigured, isServiceRoleConfigured } from '@/lib/env'
 import { BuyQuoteError, quoteBuyBu, quoteBuyFromChargeNaira } from '@/lib/bu-rate'
@@ -293,7 +293,10 @@ export async function initializeDeposit(input: {
     throw error
   }
 
-  const admin = createAdminClient()
+  const admin = tryCreateAdminClient()
+  if (!admin) {
+    throw new ApiError(503, 'CHECKOUT_UNAVAILABLE', 'Could not start Paystack checkout.')
+  }
   const reference = generateReference('DEPOSIT')
   const checkoutUrl = input.callback_url ?? `${getAppUrl()}/pay/${reference}`
   const depositMeta = {

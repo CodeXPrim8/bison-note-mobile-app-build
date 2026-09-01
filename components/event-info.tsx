@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, Ticket, Users } from 'lucide-react'
 import { appCheckoutPath, eventListingStatus, eventOnSale, listingRemaining } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 import { EventStatusBadge } from '@/components/event-status-badge'
 import type { EventWithTiers } from '@/lib/types/database'
 import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
@@ -109,10 +110,7 @@ function EventInfoLoaded({
             {(event.venue_name || event.venue_address) && (
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-primary" />
-                <p className="font-semibold">
-                  {event.venue_name}
-                  {event.venue_address ? ` · ${event.venue_address}` : ''}
-                </p>
+                <p className="font-semibold">{eventVenueLabel(event)}</p>
               </div>
             )}
             <div className="flex items-center gap-3">

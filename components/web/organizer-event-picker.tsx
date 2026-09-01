@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import type { EventRecord } from '@/lib/types/database'
 import { formatEventDateTime } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 
 export function OrganizerEventPicker({
   title,
@@ -39,7 +40,7 @@ export function OrganizerEventPicker({
             <Card className="p-5 transition hover:border-primary/40">
               <p className="font-semibold">{event.title}</p>
               <p className="text-sm text-muted-foreground">
-                {formatEventDateTime(event.start_time)} · {event.venue_name}
+                {formatEventDateTime(event.start_time)} · {eventVenueLabel(event)}
               </p>
             </Card>
           </Link>

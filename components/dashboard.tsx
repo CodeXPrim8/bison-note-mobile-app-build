@@ -6,6 +6,7 @@ import type { EventInvitation, EventRecord, EventWithTiers, TicketRecord, Ticket
 import { isEventUpcoming, isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
 import { formatEventDate } from '@/lib/datetime'
 import { EventStatusBadge } from '@/components/event-status-badge'
+import { TicketPass } from '@/components/ticket-pass'
 import { useAccount } from '@/components/account-store'
 import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
 
@@ -183,18 +184,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           ) : null}
           {myTickets.map((ticket) => (
-            <button
+            <TicketPass
               key={ticket.id}
-              type="button"
-              onClick={() => onNavigate('tickets', { ticketId: ticket.id })}
-              className="flex w-full items-center justify-between rounded-xl bg-card p-3 text-left transition hover:bg-card/80"
-            >
-              <div>
-                <h4 className="font-semibold">{ticket.event?.title ?? 'Event ticket'}</h4>
-                <p className="text-xs text-muted-foreground">{ticket.tier?.name ?? 'General'}</p>
-              </div>
-              <span className="text-xs font-semibold text-primary">{ticket.display_status ?? 'VALID'}</span>
-            </button>
+              ticket={ticket}
+              variant="mini"
+              onOpen={() => onNavigate('tickets', { ticketId: ticket.id })}
+            />
           ))}
         </div>
       </div>

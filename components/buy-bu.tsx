@@ -13,7 +13,6 @@ import {
   cardBuyRate,
   formatBu,
   formatNairaPlain,
-  formatNairaRate,
   minPurchaseChargeNaira,
   quoteBuyBu,
   quoteBuyFromChargeNaira,
@@ -100,10 +99,6 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
             <div className="space-y-2">
               <h3 className="font-semibold">Rates</h3>
               <p className="text-2xl font-bold text-primary">1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')} to spray or withdraw</p>
-              <p className="text-sm text-muted-foreground">
-                Card price ₦{formatNairaRate(buyRate)} (5%) · covers Paystack collection and bank payouts · minimum{' '}
-                {BU_MIN_PURCHASE.toLocaleString('en-NG')} ɃU (₦{formatNairaPlain(minPurchaseChargeNaira())})
-              </p>
             </div>
           </Card>
           <Card className="border-primary/20 bg-card p-6">
@@ -236,10 +231,6 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
             </div>
           </div>
         </Card>
-        <p className="text-sm text-muted-foreground mb-4">
-          Payment is completed on Paystack. Wallet credit is 1 ɃU = ₦1. The extra on the card is the 5% buy rate
-          that covers Paystack collection and bank payouts.
-        </p>
         {message && <p className="text-sm text-destructive mb-3">{message}</p>}
         <Button
           onClick={() => void handleCheckout()}

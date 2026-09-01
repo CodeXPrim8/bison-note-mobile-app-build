@@ -12,6 +12,7 @@ import {
   liveRemaining,
   mapLiveTicket,
   parseLiveTierId,
+  bumpLiveTicketTypeSold,
   resolveLiveCelebrantId,
   withLiveTiers,
 } from '@/lib/events/live'
@@ -129,6 +130,8 @@ function qrItemsForMint(input: {
   quantity: number
   unitPrice: number
   reference: string
+  tierId?: string
+  tierName?: string
 }) {
   return Array.from({ length: input.quantity }, () => {
     const ticketId = randomUUID()
@@ -138,6 +141,8 @@ function qrItemsForMint(input: {
       event_id: input.eventId,
       checkin_code: checkin,
       pay_ref: input.reference,
+      tier_id: input.tierId,
+      tier_name: input.tierName,
     })
     return { id: ticketId, qr_code_data: qr, checkin_code: checkin, unit_price: input.unitPrice }
   })
@@ -201,15 +206,25 @@ async function mintLiveTickets(input: {
   eventTitle: string
   email: string
   buyerName?: string | null
+  ticketTierId?: string
+  tierName?: string
 }) {
   const existing = await fetchLiveTicketsByPayRef(input.reference)
   if (existing.length) return existing
+
+  const tierId = input.ticketTierId ?? `${input.eventId}:general`
+  const { row, packed } = await loadLiveEvent(input.eventId)
+  const selected = packed.ticket_tiers.find((tier) => tier.id === tierId) ?? packed.ticket_tiers[0]
+  const typeRemaining = liveRemaining(selected ?? { quantity_total: 0, quantity_sold: 0 })
+  if (typeRemaining < input.quantity) soldOutError(tierId, typeRemaining)
 
   const items = qrItemsForMint({
     eventId: input.eventId,
     quantity: input.quantity,
     unitPrice: input.unitPrice,
     reference: input.reference,
+    tierId,
+    tierName: input.tierName ?? selected?.name,
   })
   const db = createDataClient()
   const rpc = await db.rpc('bu_fulfill_live_tickets', {
@@ -221,22 +236,25 @@ async function mintLiveTickets(input: {
     p_qr_items: items.map((item) => ({ id: item.id, qr_code_data: parseQrPayload(item.qr_code_data) })),
   })
 
+  const afterMint = async (minted: TicketRecord[]) => {
+    await bumpLiveTicketTypeSold(input.eventId, tierId, input.quantity)
+    void sendTicketEmail({
+      to: input.email,
+      buyerName: input.buyerName ?? 'Guest',
+      eventTitle: input.eventTitle,
+      tickets: minted,
+    }).catch((err) => console.error('ticket email failed', err))
+    return minted
+  }
+
   if (!rpc.error && rpc.data != null) {
     const minted = asLiveTicketRows(rpc.data).map(mapLiveTicket).filter((ticket) => ticket.id)
-    if (minted.length) {
-      void sendTicketEmail({
-        to: input.email,
-        buyerName: input.buyerName ?? 'Guest',
-        eventTitle: input.eventTitle,
-        tickets: minted,
-      }).catch((err) => console.error('ticket email failed', err))
-      return minted
-    }
+    if (minted.length) return afterMint(minted)
     throw new ApiError(503, 'TICKET_MINT_FAILED', `Could not mint a live ticket. ${LIVE_TICKETS_SQL_HINT}`)
   }
 
   if (rpc.error && /sold out/i.test(rpc.error.message)) {
-    soldOutError(`${input.eventId}:general`, 0)
+    soldOutError(tierId, 0)
   }
   const rpcNeedsFallback =
     isMissingRpc(rpc.error?.message) ||
@@ -254,15 +272,13 @@ async function mintLiveTickets(input: {
   const claimedOk = !claimed.error && claimed.data === true
   if (!claimedOk) {
     if (claimed.error && !isMissingRpc(claimed.error.message)) {
-      soldOutError(`${input.eventId}:general`, 0)
+      soldOutError(tierId, 0)
     }
     if (!claimed.error && claimed.data !== true && claimed.data != null) {
-      soldOutError(`${input.eventId}:general`, 0)
+      soldOutError(tierId, 0)
     }
-    const { packed } = await loadLiveEvent(input.eventId)
-    const remaining = liveRemaining(packed.ticket_tiers[0] ?? { quantity_total: 0, quantity_sold: 0 })
-    if (remaining < input.quantity) soldOutError(`${input.eventId}:general`, remaining)
-    const sold = Number(packed.ticket_tiers[0]?.quantity_sold ?? 0)
+    if (typeRemaining < input.quantity) soldOutError(tierId, typeRemaining)
+    const sold = Number(row.tickets_sold ?? 0)
     const lock = await db
       .from('events')
       .update({ tickets_sold: sold + input.quantity })
@@ -276,13 +292,7 @@ async function mintLiveTickets(input: {
   }
 
   const minted = await insertLiveTicketsDirect(input.eventId, input.buyerId, input.unitPrice, items)
-  void sendTicketEmail({
-    to: input.email,
-    buyerName: input.buyerName ?? 'Guest',
-    eventTitle: input.eventTitle,
-    tickets: minted,
-  }).catch((err) => console.error('ticket email failed', err))
-  return minted
+  return afterMint(minted)
 }
 
 export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
@@ -350,6 +360,8 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
       eventTitle: packed.title,
       email: input.email,
       buyerName: input.buyer_name,
+      ticketTierId: tier.id,
+      tierName: tier.name,
     })
     return {
       authorization_url: returnToApp
@@ -436,6 +448,7 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
 
   const meta = verified.metadata ?? {}
   const eventId = String(meta.event_id ?? parseLiveTierId(String(meta.ticket_tier_id ?? '')) ?? '')
+  const ticketTierId = String(meta.ticket_tier_id ?? '') || (eventId ? `${eventId}:general` : '')
   const quantity = Math.max(1, Number(meta.quantity ?? 1))
   const buyerId = String(meta.buyer_id ?? '')
   const email = String(meta.email ?? verified.customer?.email ?? '')
@@ -448,7 +461,7 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
     throw new ApiError(404, 'NOT_FOUND', 'Payment not found')
   }
 
-  const tier = await fetchLiveTierPrice(`${eventId}:general`)
+  const tier = await fetchLiveTierPrice(ticketTierId)
   if (!tier) throw new ApiError(404, 'EVENT_NOT_FOUND', 'Event not found')
   const quote = quoteTicketTotal(Number.isFinite(unitPrice) ? unitPrice : Number(tier.price), quantity)
   const paidNaira = Number(verified.amount) / 100
@@ -465,6 +478,8 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
     eventTitle,
     email,
     buyerName: name,
+    ticketTierId: tier.id,
+    tierName: tier.name,
   })
 
   return {
@@ -491,9 +506,21 @@ function evaluateLiveTicket(ticket: TicketRecord): Pick<CheckinResult, 'status' 
 }
 
 async function enrichLiveCheckin(ticket: TicketRecord, eventTitle?: string) {
+  let tierName: string | undefined
+  try {
+    const parsed = ticket.qr_code_data ? parseTicketQr(ticket.qr_code_data) : null
+    if (parsed?.tier_name) tierName = parsed.tier_name
+    if (!tierName && ticket.event_id) {
+      const { packed } = await loadLiveEvent(ticket.event_id)
+      const tier = packed.ticket_tiers.find((item) => item.id === ticket.tier_id)
+      if (tier?.name) tierName = tier.name
+    }
+  } catch {
+    tierName = undefined
+  }
   return {
     event_title: eventTitle,
-    tier_name: 'General',
+    tier_name: tierName || 'General',
     buyer_name: ticket.buyer_name ?? ticket.buyer_email ?? undefined,
   }
 }

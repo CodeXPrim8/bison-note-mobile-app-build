@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { SiteHeader } from '@/components/web/site-chrome'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
-import { publicTicketStatus } from '@/lib/types/database'
 import { ticketQrScanString } from '@/lib/tickets/qr-generator'
 import { isCheckedInTicket, isEventUpcoming, isEventPast } from '@/lib/events/sale'
 import { TicketAdmitCard } from '@/components/ticket-admit'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
+import { TicketPass } from '@/components/ticket-pass'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 
 interface TicketRow extends TicketRecord {
@@ -34,11 +33,15 @@ export default function TicketsClient() {
         if (cancelled) return
         setLoaded(true)
         if (!json.status) {
-          setMessage(json.message ?? 'Sign in to see your tickets.')
+          setTickets((current) => {
+            if (!current.length) setMessage(json.message ?? 'Sign in to see your tickets.')
+            return current
+          })
           return
         }
         const list = (json.data ?? []) as TicketRow[]
         setTickets(list)
+        setMessage(null)
         const wanted = new URLSearchParams(window.location.search).get('id')
         setSelected((current) => {
           const id = wanted || current?.id
@@ -48,7 +51,10 @@ export default function TicketsClient() {
       } catch {
         if (!cancelled) {
           setLoaded(true)
-          setMessage('Could not load tickets')
+          setTickets((current) => {
+            if (!current.length) setMessage('Could not load tickets')
+            return current
+          })
         }
       }
     }
@@ -66,7 +72,11 @@ export default function TicketsClient() {
       for (const ticket of tickets) {
         if (isCheckedInTicket(ticket)) continue
         if (ticket.qr_code_data || ticket.checkin_code) {
-          next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), { width: 280, margin: 1 })
+          next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), {
+            width: 420,
+            margin: 1,
+            color: { dark: '#111111', light: '#ffffff' },
+          })
         }
       }
       setQrs(next)
@@ -80,11 +90,18 @@ export default function TicketsClient() {
   return (
     <div className="theme-pink min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <main className="mx-auto max-w-xl px-4 py-12">
-        <h1 className="text-3xl font-bold">My tickets</h1>
-        {message && <p className="mt-4 text-sm text-muted-foreground">{message}</p>}
+      <main className="mx-auto max-w-lg px-4 py-12">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">Gate pass</p>
+        <h1 className="mt-1 text-3xl font-bold">My tickets</h1>
+        {upcoming.length > 0 && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {upcoming.length} upcoming {upcoming.length === 1 ? 'pass' : 'passes'} · tap a ticket to show the QR
+          </p>
+        )}
+        {message && upcoming.length === 0 && <p className="mt-4 text-sm text-muted-foreground">{message}</p>}
         {loaded && upcoming.length === 0 && (
-          <Card className="mt-8 p-8 text-center">
+          <div className="mt-10 rounded-3xl border border-white/10 bg-card p-10 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-2xl">🎫</div>
             <h2 className="text-xl font-bold">No upcoming tickets</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {history.length
@@ -92,35 +109,23 @@ export default function TicketsClient() {
                 : "You don't have any event tickets yet."}
             </p>
             {!history.length && (
-              <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to discover your next experience.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to discover your next night out.</p>
             )}
-            <Button asChild className="mt-4">
+            <Button asChild className="mt-5">
               <a href="/events">Explore Events</a>
             </Button>
-          </Card>
-        )}
-        <div className="mt-6 space-y-3">
-          {upcoming.map((ticket) => (
-              <Card key={ticket.id} className="cursor-pointer p-4" onClick={() => setSelected(ticket)}>
-                <p className="font-semibold">{ticket.event?.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {ticket.tier?.name} · {ticket.ticket_number}
-                </p>
-                <p className="mt-1 text-xs text-primary">
-                  {isCheckedInTicket(ticket)
-                    ? 'CHECKED IN'
-                    : ticket.display_status ?? publicTicketStatus(ticket.status, ticket.event?.end_time)}
-                </p>
-              </Card>
-            ))}
-        </div>
-        {selected && !isEventPast(selected.event) && (
-          <div className="mt-6">
-            <TicketAdmitCard ticket={selected} qr={qrs[selected.id]} onClose={() => setSelected(null)} />
           </div>
         )}
+        <div className="mt-8 space-y-5">
+          {upcoming.map((ticket) => (
+            <TicketPass key={ticket.id} ticket={ticket} variant="list" onOpen={() => setSelected(ticket)} />
+          ))}
+        </div>
+        {selected && !isEventPast(selected.event) && (
+          <TicketAdmitCard ticket={selected} qr={qrs[selected.id]} onClose={() => setSelected(null)} />
+        )}
         {history.length > 0 && (
-          <div className="mt-12">
+          <div className="mt-14">
             <h2 className="text-xl font-bold">History</h2>
             <p className="mt-1 text-sm text-muted-foreground">Events you paid for that have already ended.</p>
             <div className="mt-4 space-y-3">

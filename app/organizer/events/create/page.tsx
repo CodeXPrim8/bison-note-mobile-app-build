@@ -4,21 +4,17 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '@/lib/schemas/event'
 import { clearDraft, loadDraft, saveDraft } from '@/lib/forms/draft'
-import { CoverImageField } from '@/components/cover-image-field'
+import {
+  EventEditorFields,
+  emptyEventForm,
+  emptyTier,
+  namedTiers,
+  type EventFormFields,
+  type TierDraft,
+} from '@/components/event-editor-fields'
 
 const CREATE_EVENT_DRAFT_KEY = 'bu-create-event-draft'
-
-interface TierDraft {
-  name: string
-  price: string
-  quantity_total: string
-  description: string
-  max_per_buyer: string
-}
 
 export default function CreateEventPage() {
   const router = useRouter()
@@ -26,43 +22,22 @@ export default function CreateEventPage() {
   const [error, setError] = useState<string | null>(null)
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC')
   const [status, setStatus] = useState<'draft' | 'published'>('published')
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    organizer_name: '',
-    organizer_info: '',
-    category: 'other',
-    start_time: '',
-    end_time: '',
-    venue_name: '',
-    venue_address: '',
-    venue_lat: '',
-    venue_lng: '',
-    capacity: '',
-    contact_email: '',
-    contact_phone: '',
-    cover_image_url: '',
-    ticket_sales_start: '',
-    ticket_sales_end: '',
-  })
-  const [tiers, setTiers] = useState<TierDraft[]>([
-    { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' },
-  ])
+  const [form, setForm] = useState<EventFormFields>(emptyEventForm)
+  const [tiers, setTiers] = useState<TierDraft[]>([emptyTier()])
   const [draftReady, setDraftReady] = useState(false)
 
   useEffect(() => {
     const draft = loadDraft<{
       visibility?: 'PUBLIC' | 'PRIVATE'
       status?: 'draft' | 'published'
-      form?: typeof form
+      form?: EventFormFields
       tiers?: TierDraft[]
     }>(CREATE_EVENT_DRAFT_KEY)
     if (draft?.visibility) setVisibility(draft.visibility)
     if (draft?.status) setStatus(draft.status)
     if (draft?.form) setForm((current) => ({ ...current, ...draft.form }))
     if (draft?.tiers?.length) {
-      const first = draft.tiers[0]
-      setTiers([{ ...first, name: 'General' }])
+      setTiers(draft.tiers.map((tier) => ({ ...emptyTier(), ...tier })))
     }
     setDraftReady(true)
   }, [])
@@ -72,13 +47,23 @@ export default function CreateEventPage() {
     saveDraft(CREATE_EVENT_DRAFT_KEY, { visibility, status, form, tiers })
   }, [draftReady, visibility, status, form, tiers])
 
-  function set<K extends keyof typeof form>(key: K, value: string) {
+  function set<K extends keyof EventFormFields>(key: K, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  function patchTier(index: number, patch: Partial<TierDraft>) {
+    setTiers((current) => current.map((tier, i) => (i === index ? { ...tier, ...patch } : tier)))
   }
 
   async function submit(nextStatus: 'draft' | 'published' = status) {
     setBusy(true)
     setError(null)
+    const ticketTiers = namedTiers(tiers)
+    if (!ticketTiers.length) {
+      setBusy(false)
+      setError('Name at least one ticket type and set its price.')
+      return
+    }
     const payload = {
       ...form,
       cover_image_url: form.cover_image_url || null,
@@ -86,22 +71,16 @@ export default function CreateEventPage() {
       contact_phone: form.contact_phone || null,
       venue_lat: form.venue_lat ? Number(form.venue_lat) : null,
       venue_lng: form.venue_lng ? Number(form.venue_lng) : null,
-      capacity: form.capacity ? Number(form.capacity) : null,
+      capacity: form.capacity
+        ? Number(form.capacity)
+        : ticketTiers.reduce((sum, tier) => sum + (tier.quantity_total || 0), 0),
       start_time: form.start_time ? new Date(form.start_time).toISOString() : new Date().toISOString(),
       end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
       ticket_sales_start: form.ticket_sales_start ? new Date(form.ticket_sales_start).toISOString() : null,
       ticket_sales_end: form.ticket_sales_end ? new Date(form.ticket_sales_end).toISOString() : null,
       visibility,
       status: nextStatus,
-      ticket_tiers: [
-        {
-          name: 'General',
-          price: Number(tiers[0]?.price) || 0,
-          quantity_total: Number(tiers[0]?.quantity_total) || 0,
-          description: tiers[0]?.description,
-          max_per_buyer: Number(tiers[0]?.max_per_buyer) || 6,
-        },
-      ],
+      ticket_tiers: ticketTiers,
     }
     const res = await fetch('/api/events', {
       method: 'POST',
@@ -136,92 +115,39 @@ export default function CreateEventPage() {
             event.preventDefault()
           }}
         >
-        <Input placeholder="Event name" value={form.title} onChange={(e) => set('title', e.target.value)} />
-        <Textarea placeholder="Description" value={form.description} onChange={(e) => set('description', e.target.value)} />
-        <CoverImageField value={form.cover_image_url} onChange={(url) => set('cover_image_url', url)} />
-        <div className="grid gap-3 md:grid-cols-2">
-          <Input placeholder="Organiser name" value={form.organizer_name} onChange={(e) => set('organizer_name', e.target.value)} />
-          <Input placeholder="Organiser info" value={form.organizer_info} onChange={(e) => set('organizer_info', e.target.value)} />
-        </div>
-        <select className="w-full rounded-md border border-border bg-secondary px-3 py-2" value={form.category} onChange={(e) => set('category', e.target.value)}>
-          {EVENT_CATEGORIES.map((category) => (
-            <option key={category} value={category}>
-              {EVENT_CATEGORY_LABELS[category]}
-            </option>
-          ))}
-        </select>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm">Start <Input type="datetime-local" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} /></label>
-          <label className="text-sm">End <Input type="datetime-local" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} /></label>
-        </div>
-        <Input placeholder="Venue name" value={form.venue_name} onChange={(e) => set('venue_name', e.target.value)} />
-        <Input placeholder="Full location" value={form.venue_address} onChange={(e) => set('venue_address', e.target.value)} />
-        <div className="grid gap-3 md:grid-cols-3">
-          <Input placeholder="Lat" value={form.venue_lat} onChange={(e) => set('venue_lat', e.target.value)} />
-          <Input placeholder="Lng" value={form.venue_lng} onChange={(e) => set('venue_lng', e.target.value)} />
-          <Input placeholder="Capacity" value={form.capacity} onChange={(e) => set('capacity', e.target.value)} />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Input placeholder="Contact email" value={form.contact_email} onChange={(e) => set('contact_email', e.target.value)} />
-          <Input placeholder="Contact phone" value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm">Sales open <Input type="datetime-local" value={form.ticket_sales_start} onChange={(e) => set('ticket_sales_start', e.target.value)} /></label>
-          <label className="text-sm">Sales close <Input type="datetime-local" value={form.ticket_sales_end} onChange={(e) => set('ticket_sales_end', e.target.value)} /></label>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant={visibility === 'PUBLIC' ? 'default' : 'outline'} onClick={() => setVisibility('PUBLIC')}>
-            Public event
-          </Button>
-          <Button type="button" variant={visibility === 'PRIVATE' ? 'default' : 'outline'} onClick={() => setVisibility('PRIVATE')}>
-            Private / invite only
-          </Button>
-        </div>
-        <div className="space-y-3">
-          <p className="font-semibold">Tickets</p>
-          <p className="text-sm text-muted-foreground">
-            Live ɃU stores one General price on the event. Separate VIP or table inventory needs a new table.
-          </p>
-          <div className="grid gap-2 md:grid-cols-2">
-            <label className="text-sm">
-              Ticket price (₦)
-              <Input
-                placeholder="0 for free"
-                type="number"
-                min={0}
-                value={tiers[0]?.price ?? ''}
-                onChange={(e) => {
-                  const next = [...tiers]
-                  next[0] = { ...(next[0] ?? { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' }), name: 'General', price: e.target.value }
-                  setTiers(next)
-                }}
-              />
-            </label>
-            <label className="text-sm">
-              Tickets for sale
-              <Input
-                placeholder="How many can be sold"
-                type="number"
-                min={0}
-                value={tiers[0]?.quantity_total ?? ''}
-                onChange={(e) => {
-                  const next = [...tiers]
-                  next[0] = { ...(next[0] ?? { name: 'General', price: '', quantity_total: '', description: '', max_per_buyer: '6' }), name: 'General', quantity_total: e.target.value }
-                  setTiers(next)
-                }}
-              />
-            </label>
+          <EventEditorFields
+            form={form}
+            set={set}
+            visibility={visibility}
+            setVisibility={setVisibility}
+            tiers={tiers}
+            patchTier={patchTier}
+            setTiers={setTiers}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setStatus('published')
+                void submit('published')
+              }}
+            >
+              Publish
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setStatus('draft')
+                void submit('draft')
+              }}
+            >
+              Save draft
+            </Button>
           </div>
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex gap-2">
-          <Button type="button" disabled={busy} onClick={() => { setStatus('published'); void submit('published') }}>
-            Publish
-          </Button>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => { setStatus('draft'); void submit('draft') }}>
-            Save draft
-          </Button>
-        </div>
         </form>
       </Card>
     </div>

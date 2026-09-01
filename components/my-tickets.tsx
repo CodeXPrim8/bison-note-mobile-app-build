@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
-import { publicTicketStatus } from '@/lib/types/database'
 import { isCheckedInTicket, isEventUpcoming } from '@/lib/events/sale'
 import { ticketQrScanString } from '@/lib/tickets/qr-generator'
 import { TicketAdmitCard } from '@/components/ticket-admit'
+import { TicketPass } from '@/components/ticket-pass'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
@@ -40,11 +39,15 @@ export default function MyTickets({
         if (cancelled) return
         setLoaded(true)
         if (!json.status) {
-          setMessage(json.message ?? 'Sign in to see tickets.')
+          setTickets((current) => {
+            if (!current.length) setMessage(json.message ?? 'Sign in to see tickets.')
+            return current
+          })
           return
         }
         const list = (json.data ?? []) as TicketRow[]
         setTickets(list)
+        setMessage(null)
         writeSessionSnapshot('bu_my_tickets', list)
         setSelected((current) => {
           const wanted = ticketId || current?.id
@@ -56,7 +59,10 @@ export default function MyTickets({
       } catch {
         if (!cancelled) {
           setLoaded(true)
-          setMessage('Could not load tickets')
+          setTickets((current) => {
+            if (!current.length) setMessage('Could not load tickets')
+            return current
+          })
         }
       }
     }
@@ -74,7 +80,11 @@ export default function MyTickets({
       for (const ticket of tickets) {
         if (isCheckedInTicket(ticket)) continue
         if (ticket.qr_code_data || ticket.checkin_code) {
-          next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), { width: 280, margin: 1 })
+          next[ticket.id] = await QRCode.toDataURL(ticketQrScanString(ticket), {
+            width: 420,
+            margin: 1,
+            color: { dark: '#111111', light: '#ffffff' },
+          })
         }
       }
       setQrs(next)
@@ -91,7 +101,8 @@ export default function MyTickets({
 
   if (upcoming.length === 0) {
     return (
-      <div className="px-4 pb-24 pt-8 text-center">
+      <div className="px-4 pb-24 pt-10 text-center">
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-2xl">🎫</div>
         <h2 className="text-2xl font-bold">No upcoming tickets</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {pastCount
@@ -99,9 +110,9 @@ export default function MyTickets({
             : "You don't have any event tickets yet."}
         </p>
         {!pastCount && (
-          <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to find your next experience.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to find your next night out.</p>
         )}
-        {message && <p className="mt-3 text-xs text-muted-foreground">{message}</p>}
+        {message && !pastCount && <p className="mt-3 text-xs text-muted-foreground">{message}</p>}
         <Button className="mt-6" onClick={() => onNavigate?.(pastCount ? 'history' : 'events')}>
           {pastCount ? 'Open history' : 'Explore Events'}
         </Button>
@@ -110,20 +121,16 @@ export default function MyTickets({
   }
 
   return (
-    <div className="space-y-4 px-4 pb-24 pt-4">
-      <h2 className="text-xl font-bold">My tickets</h2>
+    <div className="space-y-5 px-4 pb-24 pt-4">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">Gate pass</p>
+        <h2 className="mt-1 text-2xl font-bold">My tickets</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {upcoming.length} upcoming {upcoming.length === 1 ? 'pass' : 'passes'}
+        </p>
+      </div>
       {upcoming.map((ticket) => (
-        <Card key={ticket.id} className="cursor-pointer p-4" onClick={() => setSelected(ticket)}>
-          <p className="font-semibold">{ticket.event?.title}</p>
-          <p className="text-sm text-muted-foreground">
-            {ticket.tier?.name} · {ticket.ticket_number}
-          </p>
-          <p className="mt-1 text-xs text-primary">
-            {isCheckedInTicket(ticket)
-              ? 'CHECKED IN'
-              : ticket.display_status ?? publicTicketStatus(ticket.status, ticket.event?.end_time)}
-          </p>
-        </Card>
+        <TicketPass key={ticket.id} ticket={ticket} variant="list" onOpen={() => setSelected(ticket)} />
       ))}
       {selected && (
         <TicketAdmitCard ticket={selected} qr={qrs[selected.id]} onClose={() => setSelected(null)} />

@@ -34,6 +34,12 @@ export function eventCategoryLabel(category: string | null | undefined) {
 }
 
 export const ticketTierInputSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9_-]{1,40}$/)
+    .optional(),
   name: z.string().min(1).max(80),
   price: z.number().min(0),
   quantity_total: z.number().int().min(0),
@@ -72,8 +78,10 @@ export const createEventSchema = z.object({
   celebrant_name: z.string().max(160).optional().nullable(),
   commission_rate: z.number().min(0).max(1).optional(),
   paystack_subaccount_code: z.string().optional().nullable(),
-  ticket_tiers: z.array(ticketTierInputSchema).min(1),
+  ticket_tiers: z.array(ticketTierInputSchema).min(1).max(20),
 })
+
+export const updateEventSchema = createEventSchema
 
 export const gatewayCreateEventSchema = createEventSchema.extend({
   callback_base_url: z.string().url().optional(),

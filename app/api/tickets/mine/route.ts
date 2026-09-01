@@ -31,10 +31,10 @@ export async function GET() {
         return {
           ...ticket,
           event: packed,
-          tier: packed?.ticket_tiers?.[0] ?? null,
+          tier: packed?.ticket_tiers?.find((tier) => tier.id === ticket.tier_id) ?? packed?.ticket_tiers?.[0] ?? null,
           display_status: publicTicketStatus(
             ticket.status,
-            packed ? eventEndsAt(packed).toISOString() : packed?.end_time,
+            packed ? eventEndsAt(packed).toISOString() : undefined,
           ),
         }
       }),

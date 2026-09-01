@@ -11,6 +11,7 @@ import { EventStatusBadge } from '@/components/event-status-badge'
 import { eventCategoryLabel } from '@/lib/schemas/event'
 import { eventDateHasPassed, listingRemaining } from '@/lib/events/sale'
 import { formatEventSchedule } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 import { BU_SITE_NAME } from '@/lib/brand'
 
 export const dynamic = 'force-dynamic'
@@ -78,10 +79,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
           <p className="mt-3 text-muted-foreground" suppressHydrationWarning>
             {formatEventSchedule(record.start_time, record.end_time)}
           </p>
-          <p className="mt-1 text-muted-foreground">
-            {record.venue_name}
-            {record.venue_address ? ` · ${record.venue_address}` : ''}
-          </p>
+          <p className="mt-1 text-muted-foreground">{eventVenueLabel(record)}</p>
           {record.venue_lat != null && record.venue_lng != null && (
             <a
               className="mt-2 inline-block text-sm text-primary"

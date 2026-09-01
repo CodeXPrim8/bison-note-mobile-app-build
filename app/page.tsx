@@ -59,7 +59,7 @@ export default function WebsiteHome() {
         {[
           { title: 'Create your event', body: 'Weddings, concerts, club nights, conferences — publish in minutes.' },
           { title: 'Private invites', body: 'Invite guests by ɃU ID. Private events never hit Upcoming Events.' },
-          { title: 'Ticketing', body: 'Live ɃU events sell one General ticket type at a set price and cap. VIP or table inventory needs a new table.' },
+          { title: 'Ticketing', body: 'Name ticket types and set a price and quantity for each. Buyers choose Regular, VIP, Table, and so on at checkout.' },
           { title: 'QR check-in', body: 'Scan at the gate. Valid, already used, refunded — decided server-side.' },
         ].map((item) => (
           <Card key={item.title} className="border-primary/20 p-6">

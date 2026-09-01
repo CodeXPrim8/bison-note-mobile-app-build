@@ -71,6 +71,9 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
+            <Link href={`/organizer/events/${id}/edit`}>Edit event</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href={`/events/${data.event.slug}`}>Public page</Link>
           </Button>
           <Button asChild>
@@ -90,7 +93,7 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
         <Button asChild variant="outline"><Link href={`/organizer/events/${id}/tickets`}>Ticket sales</Link></Button>
         <Button asChild variant="outline"><Link href={`/organizer/events/${id}/guests`}>Guests & comments</Link></Button>
       </div>
-      <h2 className="mt-10 font-semibold">Tiers</h2>
+      <h2 className="mt-10 font-semibold">Ticket types</h2>
       <div className="mt-3 space-y-2">
         {data.ticket_tiers.map((tier) => (
           <Card key={tier.id} className="flex items-center justify-between p-4">

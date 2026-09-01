@@ -7,6 +7,8 @@ export interface TicketQrPayload {
   checkin_code: string
   qr_token?: string
   pay_ref?: string
+  tier_id?: string
+  tier_name?: string
 }
 
 const LIVE_PAY_REF = /BU_LIVE_[A-Z0-9]{10,}/i
@@ -25,6 +27,8 @@ export function ticketQrPayload(input: Omit<TicketQrPayload, 'type'>): string {
     checkin_code: input.checkin_code,
   }
   if (input.pay_ref) payload.pay_ref = input.pay_ref
+  if (input.tier_id) payload.tier_id = input.tier_id
+  if (input.tier_name) payload.tier_name = input.tier_name
   return JSON.stringify(payload)
 }
 
@@ -41,7 +45,14 @@ export function ticketQrScanString(input: {
   const checkin = parsed?.checkin_code || input.checkin_code || ''
   const payRef = parsed?.pay_ref || extractLivePayRef(input.qr_code_data) || input.payment_id || undefined
   if (ticketId && eventId && checkin) {
-    return ticketQrPayload({ ticket_id: ticketId, event_id: eventId, checkin_code: checkin, pay_ref: payRef })
+    return ticketQrPayload({
+      ticket_id: ticketId,
+      event_id: eventId,
+      checkin_code: checkin,
+      pay_ref: payRef,
+      tier_id: parsed?.tier_id,
+      tier_name: parsed?.tier_name,
+    })
   }
   return input.qr_code_data || ticketQrPayload({ ticket_id: ticketId, event_id: eventId, checkin_code: checkin, pay_ref: payRef })
 }
@@ -73,6 +84,8 @@ export function parseTicketQr(raw: string): TicketQrPayload | null {
       checkin_code: checkin,
       qr_token: parsed.qr_token ? String(parsed.qr_token) : undefined,
       pay_ref: ref,
+      tier_id: parsed.tier_id ? String(parsed.tier_id) : undefined,
+      tier_name: parsed.tier_name ? String(parsed.tier_name) : undefined,
     }
   } catch {
     if (!payRef) return null

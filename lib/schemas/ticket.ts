@@ -1,13 +1,12 @@
 import { z } from 'zod'
+import { LIVE_TIER_ID_RE } from '@/lib/events/ticket-types'
 
-/** Live ɃU stores one General price per event. Website ticket IDs are `{eventId}:general`. */
+/** Live ticket IDs are `{eventId}:{typeKey}` (e.g. `{uuid}:vip`). Website UUIDs still work. */
 export const ticketTierIdSchema = z
   .string()
   .min(1)
   .refine(
-    (id) =>
-      z.string().uuid().safeParse(id).success ||
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:general$/i.test(id),
+    (id) => z.string().uuid().safeParse(id).success || LIVE_TIER_ID_RE.test(id),
     'Invalid ticket type',
   )
 

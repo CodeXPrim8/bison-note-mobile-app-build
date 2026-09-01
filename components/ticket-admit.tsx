@@ -1,51 +1,42 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { eventWelcomeLine, isCheckedInTicket } from '@/lib/events/sale'
-import { publicTicketStatus } from '@/lib/types/database'
-import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
+import { TicketPass, type TicketPassTicket } from '@/components/ticket-pass'
 
 export function TicketAdmitCard({
   ticket,
   qr,
   onClose,
 }: {
-  ticket: TicketRecord & { event?: EventRecord | null; tier?: TicketTier | null; display_status?: string }
+  ticket: TicketPassTicket
   qr?: string
   onClose?: () => void
 }) {
-  const admitted = isCheckedInTicket(ticket)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose?.()
+    }
+    window.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
+    }
+  }, [onClose])
 
   return (
-    <Card className="p-6 text-center">
-      <h2 className="text-xl font-bold">{ticket.event?.title}</h2>
-      {admitted ? (
-        <>
-          <p className="mt-4 text-lg font-semibold text-primary">{eventWelcomeLine(ticket.event)}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This ticket is checked in. The QR code is closed so it cannot be used twice.
-          </p>
-          <p className="mt-3 text-xs font-semibold uppercase text-primary">Checked in</p>
-        </>
-      ) : (
-        <>
-          {qr && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qr} alt="Ticket QR" className="mx-auto mt-4 h-56 w-56 rounded bg-white p-2" />
-          )}
-          <p className="mt-4 font-mono text-2xl tracking-[0.25em]">{ticket.checkin_code}</p>
-          <p className="text-xs text-muted-foreground">Backup check-in code · event access only</p>
-          <p className="mt-2 text-xs text-primary">
-            {ticket.display_status ?? publicTicketStatus(ticket.status, ticket.event?.end_time)}
-          </p>
-        </>
-      )}
-      {onClose && (
-        <Button className="mt-4" variant="ghost" onClick={onClose}>
-          Close
-        </Button>
-      )}
-    </Card>
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/80 backdrop-blur-md">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close ticket" onClick={onClose} />
+      <div className="relative mx-auto flex min-h-full max-w-sm flex-col justify-center px-4 py-10">
+        <TicketPass ticket={ticket} qr={qr} variant="full" />
+        {onClose && (
+          <Button className="relative z-10 mt-5" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }

@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Calendar, MapPin, Ticket, Search } from 'lucide-react'
-import { isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
+import { Calendar, MapPin, Search } from 'lucide-react'
+import { eventDateHasPassed, isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
 import { formatEventDate } from '@/lib/datetime'
+import { eventVenueLabel } from '@/lib/events/event-details'
 import { EventStatusBadge } from '@/components/event-status-badge'
+import { EventTicketList } from '@/components/event-ticket-list'
 import type { EventWithTiers } from '@/lib/types/database'
 import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
@@ -53,7 +55,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
     return (
       event.title.toLowerCase().includes(q) ||
       (event.description ?? '').toLowerCase().includes(q) ||
-      (event.venue_name ?? '').toLowerCase().includes(q)
+      (eventVenueLabel(event) ?? '').toLowerCase().includes(q)
     )
   })
 
@@ -88,19 +90,15 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                   </div>
                 </div>
                 <p className="line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4 text-primary" />
-                    {event.venue_name}
-                  </span>
-                  <span className="font-bold text-primary">₦{Number(event.starting_price ?? 0).toLocaleString()}</span>
+                <div className="mt-2 flex items-center gap-1 text-sm">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  {eventVenueLabel(event)}
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Ticket className="h-3 w-3" />
-                  {listingRemaining(event) <= 0
-                    ? 'Sold out'
-                    : `${listingRemaining(event)} remaining`}
-                  <Calendar className="ml-2 h-3 w-3" />
+                <div className="mt-3">
+                  <EventTicketList tiers={event.ticket_tiers} ended={eventDateHasPassed(event)} />
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
                   {event.organizer_name ?? event.celebrant_name}
                 </div>
               </Card>

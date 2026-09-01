@@ -3,15 +3,35 @@ import { buFromNaira } from '@/lib/bu-rate'
 import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  liveTierId,
+  parseLiveTierId,
+  parseLiveTierKey,
+  parseStoredTicketTypes,
+  needsNamedTicketTypesColumn,
+  mergeStoredTicketTypes,
+  storedTypesFromTiers,
+  ticketTiersFromStored,
+  type StoredTicketType,
+} from '@/lib/events/ticket-types'
+import {
+  buildEventFormDetails,
+  eventFormDetailsHasValues,
+  parseEventFormDetails,
+  withFormSidecar,
+  type EventFormDetails,
+} from '@/lib/events/event-details'
 
-export function liveTierId(eventId: string) {
-  return `${eventId}:general`
-}
+export { liveTierId, parseLiveTierId, parseLiveTierKey } from '@/lib/events/ticket-types'
 
-export function parseLiveTierId(tierId: string): string | null {
-  if (!tierId.endsWith(':general')) return null
-  return tierId.slice(0, -':general'.length)
-}
+export const TICKET_TYPES_SQL_HINT =
+  'Run supabase/migrations/0012_event_ticket_types.sql in the live ɃU Supabase SQL editor, then try again.'
+
+export const UPDATE_EVENT_SQL_HINT =
+  'Run supabase/migrations/0013_bu_update_event.sql in the live ɃU Supabase SQL editor, then try again.'
+
+export const EVENT_DETAILS_SQL_HINT =
+  'Run supabase/migrations/0014_event_details.sql in the live ɃU Supabase SQL editor, then try again.'
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.length ? value : fallback
@@ -49,7 +69,12 @@ export function mapLiveEvent(row: Record<string, unknown>): EventRecord {
   const id = asString(row.id)
   const title = asString(row.title) || asString(row.name, 'Event')
   const start = asIso(row.start_time ?? row.date)
-  const location = asString(row.venue_name) || asString(row.location) || null
+  const extra = parseEventFormDetails(row)
+  const venueName =
+    extra.venue_name ||
+    asString(row.venue_name) ||
+    (extra.venue_address ? null : asString(row.location)) ||
+    null
   return {
     id,
     organizer_id: (asString(row.organizer_id) || asString(row.celebrant_id) || null) as string | null,
@@ -57,22 +82,22 @@ export function mapLiveEvent(row: Record<string, unknown>): EventRecord {
     title,
     slug: asString(row.slug) || id,
     description: asString(row.description) || null,
-    venue_name: location,
-    venue_address: asString(row.venue_address) || asString(row.location) || null,
-    venue_lat: row.venue_lat == null ? null : asNumber(row.venue_lat),
-    venue_lng: row.venue_lng == null ? null : asNumber(row.venue_lng),
+    venue_name: venueName,
+    venue_address: extra.venue_address || asString(row.venue_address) || null,
+    venue_lat: extra.venue_lat ?? (row.venue_lat == null ? null : asNumber(row.venue_lat)),
+    venue_lng: extra.venue_lng ?? (row.venue_lng == null ? null : asNumber(row.venue_lng)),
     start_time: start,
-    end_time: row.end_time ? asIso(row.end_time) : null,
+    end_time: extra.end_time || (row.end_time ? asIso(row.end_time) : null),
     cover_image_url: asString(row.cover_image_url) || asString(row.image_url) || null,
     status: statusOf(row),
     visibility: visibilityOf(row),
     category: asString(row.category) || null,
-    ticket_sales_start: row.ticket_sales_start ? asIso(row.ticket_sales_start) : null,
-    ticket_sales_end: row.ticket_sales_end ? asIso(row.ticket_sales_end) : null,
-    contact_email: asString(row.contact_email) || null,
-    contact_phone: asString(row.contact_phone) || null,
-    organizer_name: asString(row.organizer_name) || asString(row.vendor_name) || null,
-    organizer_info: asString(row.organizer_info) || null,
+    ticket_sales_start: extra.ticket_sales_start || (row.ticket_sales_start ? asIso(row.ticket_sales_start) : null),
+    ticket_sales_end: extra.ticket_sales_end || (row.ticket_sales_end ? asIso(row.ticket_sales_end) : null),
+    contact_email: extra.contact_email || asString(row.contact_email) || null,
+    contact_phone: extra.contact_phone || asString(row.contact_phone) || null,
+    organizer_name: extra.organizer_name || asString(row.organizer_name) || asString(row.vendor_name) || null,
+    organizer_info: extra.organizer_info || asString(row.organizer_info) || null,
     is_gateway_event: Boolean(row.is_gateway_event || row.gateway_id),
     paystack_subaccount_code: asString(row.paystack_subaccount_code) || null,
     commission_rate: asNumber(row.commission_rate),
@@ -86,10 +111,10 @@ export function mapLiveEvent(row: Record<string, unknown>): EventRecord {
 }
 
 export function liveEventTiers(row: Record<string, unknown>, event: EventRecord): TicketTier[] {
-  if (!row.tickets_enabled && row.ticket_price_bu == null && !row.max_tickets) {
-    if (Array.isArray(row.ticket_tiers)) return row.ticket_tiers as TicketTier[]
-    return []
-  }
+  const named = parseStoredTicketTypes(row.ticket_types)
+  if (named.length) return ticketTiersFromStored(event.id, named)
+  if (Array.isArray(row.ticket_tiers) && row.ticket_tiers.length) return row.ticket_tiers as TicketTier[]
+  if (!row.tickets_enabled && row.ticket_price_bu == null && !row.max_tickets) return []
   const now = new Date().toISOString()
   return [
     {
@@ -106,7 +131,7 @@ export function liveEventTiers(row: Record<string, unknown>, event: EventRecord)
       description: null,
       benefits: null,
       max_per_buyer: 6,
-      metadata: {},
+      metadata: { key: 'general' },
       created_at: now,
       updated_at: now,
     },
@@ -132,6 +157,8 @@ function parseQrMeta(raw: unknown) {
       qr_token: null,
       pay_ref: null,
       type: null,
+      tier_id: null,
+      tier_name: null,
       checked_in: false,
       checked_in_at: null,
       guest_comment: null,
@@ -147,6 +174,8 @@ function parseQrMeta(raw: unknown) {
     qr_token: asString(obj.qr_token) || null,
     pay_ref: asString(obj.pay_ref) || asString(obj.reference) || null,
     type: asString(obj.type) || null,
+    tier_id: asString(obj.tier_id) || null,
+    tier_name: asString(obj.tier_name) || null,
     checked_in: checkedIn,
     checked_in_at: asString(obj.checked_in_at) || null,
     guest_comment: asString(obj.guest_comment) || null,
@@ -182,7 +211,7 @@ export function mapLiveTicket(row: Record<string, unknown>): TicketRecord {
     id: asString(row.id),
     ticket_number: asString(row.ticket_number) || null,
     event_id: eventId,
-    tier_id: asString(row.tier_id) || liveTierId(eventId),
+    tier_id: asString(row.tier_id) || asString(qrMeta.tier_id) || liveTierId(eventId),
     payment_id: asString(row.payment_id) || asString(row.transfer_id) || qrMeta.pay_ref || null,
     buyer_user_id: asString(row.buyer_user_id) || asString(row.buyer_id) || null,
     buyer_email: asString(row.buyer_email),
@@ -394,7 +423,29 @@ export async function fetchLiveTierPrice(tierId: string, db: SupabaseClient = cr
   const { data, error } = await db.from('events').select('*').eq('id', eventId).maybeSingle()
   if (error || !data) return null
   const packed = withLiveTiers(data as Record<string, unknown>)
-  return packed.ticket_tiers[0] ?? null
+  const exact = packed.ticket_tiers.find((tier) => tier.id === tierId)
+  if (exact) return exact
+  if (parseLiveTierKey(tierId) === 'general' && packed.ticket_tiers.length === 1) {
+    return packed.ticket_tiers[0]
+  }
+  return null
+}
+
+export async function bumpLiveTicketTypeSold(
+  eventId: string,
+  tierId: string,
+  qty: number,
+  db: SupabaseClient = createDataClient(),
+) {
+  const key = parseLiveTierKey(tierId)
+  const { data } = await db.from('events').select('ticket_types').eq('id', eventId).maybeSingle()
+  const row = (data as Record<string, unknown> | null) ?? {}
+  const types = parseStoredTicketTypes(row.ticket_types)
+  if (!types.length) return
+  const next: StoredTicketType[] = types.map((type) =>
+    type.key === key ? { ...type, quantity_sold: type.quantity_sold + qty } : type,
+  )
+  await db.from('events').update({ ticket_types: withFormSidecar(next, parseEventFormDetails(row)) }).eq('id', eventId)
 }
 
 function liveCreateError(message: string) {
@@ -428,24 +479,130 @@ export async function resolveLiveCelebrantId(input: {
   return null
 }
 
+function isMissingTicketTypesColumn(message?: string) {
+  return /ticket_types/i.test(message ?? '') && /column|schema cache|does not exist/i.test(message ?? '')
+}
+
+function isMissingDetailsColumn(message?: string) {
+  return /\bdetails\b/i.test(message ?? '') && /column|schema cache|does not exist/i.test(message ?? '')
+}
+
+function isMissingRpc(message?: string) {
+  return /could not find the function|PGRST202|schema cache/i.test(message ?? '')
+}
+
+type EventWriteInput = {
+  title: string
+  start_time: string
+  venue_name?: string | null
+  venue_address?: string | null
+  description?: string | null
+  cover_image_url?: string | null
+  visibility?: EventVisibility
+  category?: string | null
+  capacity?: number | null
+  ticket_price_bu?: number
+  max_tickets?: number
+  organizer_name?: string | null
+  organizer_info?: string | null
+  end_time?: string | null
+  venue_lat?: number | null
+  venue_lng?: number | null
+  contact_email?: string | null
+  contact_phone?: string | null
+  ticket_sales_start?: string | null
+  ticket_sales_end?: string | null
+}
+
+function detailsFromWriteInput(input: EventWriteInput): EventFormDetails {
+  return buildEventFormDetails({
+    organizer_name: input.organizer_name,
+    organizer_info: input.organizer_info,
+    end_time: input.end_time,
+    venue_name: input.venue_name,
+    venue_address: input.venue_address,
+    venue_lat: input.venue_lat,
+    venue_lng: input.venue_lng,
+    contact_email: input.contact_email,
+    contact_phone: input.contact_phone,
+    ticket_sales_start: input.ticket_sales_start,
+    ticket_sales_end: input.ticket_sales_end,
+  })
+}
+
+async function persistLiveTicketTypes(
+  eventId: string,
+  types: StoredTicketType[],
+  details: EventFormDetails,
+  db: SupabaseClient,
+): Promise<{ ok: true } | { ok: false; missingColumn: boolean; error?: string }> {
+  const payload: Record<string, unknown> = {
+    ticket_types: withFormSidecar(types, details),
+    details,
+  }
+  let updated = await db.from('events').update(payload).eq('id', eventId)
+  if (updated.error && isMissingDetailsColumn(updated.error.message)) {
+    const { details: _omit, ...withoutDetails } = payload
+    updated = await db.from('events').update(withoutDetails).eq('id', eventId)
+  }
+  if (!updated.error) return { ok: true }
+  if (isMissingTicketTypesColumn(updated.error.message)) {
+    const detailsOnly = await db.from('events').update({ details }).eq('id', eventId)
+    if (!detailsOnly.error) return { ok: true }
+    if (isMissingDetailsColumn(detailsOnly.error.message)) {
+      return { ok: false, missingColumn: true }
+    }
+    return { ok: false, missingColumn: false, error: detailsOnly.error.message }
+  }
+  return { ok: false, missingColumn: false, error: updated.error.message }
+}
+
+async function persistEventFormDetails(
+  eventId: string,
+  celebrantId: string | null,
+  types: StoredTicketType[] | undefined,
+  details: EventFormDetails,
+  db: SupabaseClient,
+): Promise<{ ok: true } | { error: string }> {
+  if (types?.length) {
+    const saved = await persistLiveTicketTypes(eventId, types, details, db)
+    if (saved.ok) return { ok: true }
+    if (!saved.missingColumn && saved.error) return { error: liveCreateError(saved.error) }
+  } else {
+    const detailsOnly = await db.from('events').update({ details }).eq('id', eventId)
+    if (!detailsOnly.error) return { ok: true }
+    if (detailsOnly.error.message && !isMissingDetailsColumn(detailsOnly.error.message)) {
+      return { error: liveCreateError(detailsOnly.error.message) }
+    }
+  }
+
+  if (celebrantId) {
+    const rpc = await db.rpc('bu_set_event_details', {
+      p_event_id: eventId,
+      p_celebrant_id: celebrantId,
+      p_details: details,
+    })
+    if (!rpc.error) return { ok: true }
+    if (!isMissingRpc(rpc.error.message) && !isMissingDetailsColumn(rpc.error.message)) {
+      return { error: liveCreateError(rpc.error.message) }
+    }
+  }
+
+  if (eventFormDetailsHasValues(details)) {
+    return { error: `Could not keep the extra event fields. ${EVENT_DETAILS_SQL_HINT}` }
+  }
+  return { ok: true }
+}
+
 export async function insertLiveEvent(
   userId: string,
-  input: {
-    title: string
-    start_time: string
-    venue_name?: string | null
-    venue_address?: string | null
-    description?: string | null
-    cover_image_url?: string | null
-    visibility?: EventVisibility
-    category?: string | null
-    capacity?: number | null
-    ticket_price_bu?: number
-    max_tickets?: number
-  },
+  input: EventWriteInput & { ticket_types?: StoredTicketType[] },
   db: SupabaseClient = createDataClient(),
 ) {
-  const payload = {
+  const types = input.ticket_types?.length ? input.ticket_types : undefined
+  const details = detailsFromWriteInput(input)
+  const storedTypes = types?.length ? withFormSidecar(types, details) : undefined
+  const payload: Record<string, unknown> = {
     celebrant_id: userId,
     name: input.title,
     date: input.start_time,
@@ -460,10 +617,42 @@ export async function insertLiveEvent(
     ticket_price_bu: input.ticket_price_bu ?? 0,
     max_tickets: input.max_tickets ?? input.capacity ?? 0,
     tickets_sold: 0,
+    details,
+  }
+  if (storedTypes) payload.ticket_types = storedTypes
+
+  const finish = async (row: Record<string, unknown>) => {
+    const id = asString(row.id)
+    const extras = await persistEventFormDetails(id, userId, types, details, db)
+    if ('error' in extras) return extras
+    if (types?.length && !parseStoredTicketTypes(row.ticket_types).length && needsNamedTicketTypesColumn(types)) {
+      const saved = await persistLiveTicketTypes(id, types, details, db)
+      if (!saved.ok && saved.missingColumn) {
+        return { error: `Could not save named ticket types. ${TICKET_TYPES_SQL_HINT}` }
+      }
+    }
+    const reloaded = await db.from('events').select('*').eq('id', id).maybeSingle()
+    if (reloaded.data) return { row: reloaded.data as Record<string, unknown> }
+    return { row }
   }
 
-  const inserted = await db.from('events').insert(payload).select('*').single()
-  if (!inserted.error && inserted.data) return { row: inserted.data as Record<string, unknown> }
+  let inserted = await db.from('events').insert(payload).select('*').single()
+  if (inserted.error && isMissingDetailsColumn(inserted.error.message)) {
+    const { details: _omit, ...withoutDetails } = payload
+    inserted = await db.from('events').insert(withoutDetails).select('*').single()
+  }
+  if (inserted.error && storedTypes && isMissingTicketTypesColumn(inserted.error.message)) {
+    if (types && needsNamedTicketTypesColumn(types)) {
+      return { error: `Could not save named ticket types. ${TICKET_TYPES_SQL_HINT}` }
+    }
+    const { ticket_types: _omit, ...withoutTypes } = payload
+    inserted = await db.from('events').insert(withoutTypes).select('*').single()
+    if (inserted.error && isMissingDetailsColumn(inserted.error.message)) {
+      const { details: _omitDetails, ticket_types: _omitTypes, ...core } = payload
+      inserted = await db.from('events').insert(core).select('*').single()
+    }
+  }
+  if (!inserted.error && inserted.data) return finish(inserted.data as Record<string, unknown>)
 
   const rpc = await db.rpc('bu_create_event', {
     p_celebrant_id: userId,
@@ -483,8 +672,93 @@ export async function insertLiveEvent(
     return { error: liveCreateError(inserted.error?.message || rpc.error.message) }
   }
   const created = await db.from('events').select('*').eq('id', rpc.data).maybeSingle()
-  if (created.data) return { row: created.data as Record<string, unknown> }
+  if (created.data) return finish(created.data as Record<string, unknown>)
   return { error: 'Event created but could not be loaded' }
+}
+
+export async function updateLiveEvent(
+  eventId: string,
+  celebrantId: string,
+  input: EventWriteInput & {
+    ticket_types?: Array<{ name: string; price: number; quantity_total: number; key?: string }>
+  },
+  db: SupabaseClient = createDataClient(),
+): Promise<{ row: Record<string, unknown> } | { error: string; code?: 'NOT_FOUND' | 'FORBIDDEN' | 'VALIDATION' }> {
+  const existing = await fetchEventRowBySlug(eventId, db)
+  if (!existing) return { error: 'Event not found', code: 'NOT_FOUND' }
+  const packed = withLiveTiers(existing)
+  const owner = asString(existing.celebrant_id) || packed.organizer_id
+  if (owner !== celebrantId) return { error: 'Not the organizer', code: 'FORBIDDEN' }
+
+  const previousTypes = parseStoredTicketTypes(existing.ticket_types)
+  const existingTypes = previousTypes.length ? previousTypes : storedTypesFromTiers(packed.ticket_tiers)
+  const merged = mergeStoredTicketTypes(input.ticket_types ?? [], existingTypes)
+  if ('error' in merged) return { error: merged.error, code: 'VALIDATION' }
+  const types = merged.types
+  const details = detailsFromWriteInput(input)
+  const storedTypes = withFormSidecar(types, details)
+
+  const payload: Record<string, unknown> = {
+    name: input.title,
+    date: input.start_time,
+    location: input.venue_name || input.venue_address || null,
+    description: input.description ?? null,
+    image_url: input.cover_image_url ?? null,
+    is_public: input.visibility !== 'PRIVATE',
+    strictly_by_invitation: input.visibility === 'PRIVATE',
+    category: input.category ?? null,
+    max_guests: input.capacity ?? null,
+    tickets_enabled: true,
+    ticket_price_bu: input.ticket_price_bu ?? types[0]?.price ?? 0,
+    max_tickets: input.max_tickets ?? types.reduce((sum, type) => sum + type.quantity_total, 0),
+    ticket_types: storedTypes,
+    details,
+  }
+
+  const finish = async (row: Record<string, unknown>) => {
+    const extras = await persistEventFormDetails(packed.id, celebrantId, types, details, db)
+    if ('error' in extras) return extras
+    const reloaded = await db.from('events').select('*').eq('id', packed.id).maybeSingle()
+    if (reloaded.data) return { row: reloaded.data as Record<string, unknown> }
+    return { row }
+  }
+
+  let updated = await db.from('events').update(payload).eq('id', packed.id).select('*').maybeSingle()
+  if (updated.error && isMissingDetailsColumn(updated.error.message)) {
+    const { details: _omit, ...withoutDetails } = payload
+    updated = await db.from('events').update(withoutDetails).eq('id', packed.id).select('*').maybeSingle()
+  }
+  if (updated.error && isMissingTicketTypesColumn(updated.error.message)) {
+    const { ticket_types: _omit, details: _omitDetails, ...withoutTypes } = payload
+    updated = await db.from('events').update(withoutTypes).eq('id', packed.id).select('*').maybeSingle()
+  }
+  if (!updated.error && updated.data) return finish(updated.data as Record<string, unknown>)
+
+  const rpc = await db.rpc('bu_update_event', {
+    p_event_id: packed.id,
+    p_celebrant_id: celebrantId,
+    p_name: input.title,
+    p_date: input.start_time,
+    p_location: payload.location,
+    p_description: payload.description,
+    p_image_url: payload.image_url,
+    p_is_public: payload.is_public,
+    p_invite_only: payload.strictly_by_invitation,
+    p_category: payload.category,
+    p_max_guests: payload.max_guests,
+    p_ticket_price_bu: payload.ticket_price_bu,
+    p_max_tickets: payload.max_tickets,
+    p_ticket_types: storedTypes,
+  })
+  if (rpc.error) {
+    if (isMissingRpc(rpc.error.message)) {
+      return { error: `Could not update this event. ${UPDATE_EVENT_SQL_HINT}` }
+    }
+    return { error: liveCreateError(updated.error?.message || rpc.error.message) }
+  }
+  const reloaded = await db.from('events').select('*').eq('id', packed.id).maybeSingle()
+  if (reloaded.data) return finish(reloaded.data as Record<string, unknown>)
+  return { error: 'Event updated but could not be loaded' }
 }
 
 export async function fetchLiveWallet(userId: string) {
