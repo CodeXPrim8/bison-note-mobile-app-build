@@ -112,7 +112,7 @@ export function AccessGate({ eventId }: { eventId: string }) {
     if (!value) return
     const now = Date.now()
     if (busyRef.current || verdictOpenRef.current) return
-    if (lastScanRef.current.value === value && now - lastScanRef.current.at < 2500) return
+    if (lastScanRef.current.value === value && now - lastScanRef.current.at < 1600) return
     lastScanRef.current = { value, at: now }
     busyRef.current = true
     setBusy(true)
@@ -168,7 +168,7 @@ export function AccessGate({ eventId }: { eventId: string }) {
         )}
       >
         <div className="relative h-[min(52vh,380px)] min-h-[240px]">
-          {camera && !verdict ? (
+          {camera ? (
             <TicketQrScanner
               active={camera}
               className="absolute inset-0 h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
@@ -205,17 +205,14 @@ export function AccessGate({ eventId }: { eventId: string }) {
           )}
 
           {verdict && (
-            <button
-              type="button"
+            <div
               key={stampKey}
-              aria-label={verdict.allowed ? 'ACCESS' : 'DENIED'}
               className={cn(
                 'absolute inset-0 z-20 flex flex-col items-center justify-center bg-black px-6 text-center',
                 verdict.allowed
                   ? 'bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.45)_0%,#050505_62%)]'
                   : 'bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.5)_0%,#050505_62%)]',
               )}
-              onClick={dismiss}
             >
               <span
                 className={cn(
@@ -243,8 +240,14 @@ export function AccessGate({ eventId }: { eventId: string }) {
                 <p className="mt-3 text-sm text-red-50/80">{verdict.reason}</p>
               )}
               {!verdict.allowed && meta && <p className="mt-1 text-xs text-white/45">{meta}</p>}
-              <p className="mt-8 text-[10px] uppercase tracking-[0.28em] text-white/40">Tap for next guest</p>
-            </button>
+              <button
+                type="button"
+                onClick={dismiss}
+                className="mt-8 rounded-full border border-white/25 bg-white/10 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-white"
+              >
+                Scan next ticket
+              </button>
+            </div>
           )}
         </div>
       </div>

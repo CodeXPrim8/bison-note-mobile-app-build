@@ -85,12 +85,12 @@ export async function checkInTicket(input: {
   gatekeeperId?: string | null
   confirm?: boolean
 }): Promise<CheckinResult> {
-  const live = await lookupLiveTicketForCheckin(input)
+  const live = await checkInLiveTicket(input)
   if (live.ticket || live.message !== 'INVALID TICKET') {
-    return checkInLiveTicket(input)
+    return live
   }
   if (!isServiceRoleConfigured()) {
-    return checkInLiveTicket(input)
+    return live
   }
 
   const admin = createAdminClient()

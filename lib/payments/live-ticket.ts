@@ -531,22 +531,9 @@ function evaluateLiveTicket(ticket: TicketRecord): Pick<CheckinResult, 'status' 
   return { status: 'valid', message: 'VALID TICKET' }
 }
 
-async function enrichLiveCheckin(ticket: TicketRecord, eventTitle?: string) {
-  let tierName: string | undefined
-  try {
-    const parsed = ticket.qr_code_data ? parseTicketQr(ticket.qr_code_data) : null
-    if (parsed?.tier_name) tierName = parsed.tier_name
-    if (!tierName && ticket.event_id) {
-      const { packed } = await loadLiveEvent(ticket.event_id)
-      const tier = packed.ticket_tiers.find((item) => item.id === ticket.tier_id)
-      if (tier?.name) tierName = tier.name
-    }
-  } catch {
-    tierName = undefined
-  }
+function enrichLiveCheckin(ticket: TicketRecord, parsed: ReturnType<typeof parseTicketQr>) {
   return {
-    event_title: eventTitle,
-    tier_name: tierName || 'General',
+    tier_name: parsed?.tier_name || undefined,
     buyer_name: ticket.buyer_name ?? ticket.buyer_email ?? undefined,
   }
 }
@@ -599,30 +586,6 @@ export async function lookupLiveTicketForCheckin(input: {
     }
   }
 
-  if (!row && payRef) {
-    const rpc = await db.rpc('bu_lookup_event_ticket', { p_event_id: input.eventId, p_code: payRef })
-    if (!rpc.error && rpc.data) {
-      row = asLiveTicketRows(rpc.data)[0] ?? null
-    }
-  }
-
-  if (!row) {
-    const listed = await db.from('tickets').select('*').eq('event_id', input.eventId)
-    const needle = (payRef || code || ticketId).toUpperCase()
-    const match = ((listed.data as Record<string, unknown>[] | null) ?? []).find((candidate) => {
-      const ticket = mapLiveTicket(candidate)
-      const blob = `${ticket.id} ${ticket.checkin_code ?? ''} ${ticket.qr_code_data ?? ''} ${ticket.payment_id ?? ''}`.toUpperCase()
-      return (
-        (ticketId && ticket.id === ticketId) ||
-        (code && ticket.checkin_code?.toUpperCase() === code.toUpperCase()) ||
-        ticket.qr_code_data === input.qrPayload ||
-        ticket.qr_code_data === input.checkinCode ||
-        (needle && blob.includes(needle))
-      )
-    })
-    if (match) row = match
-  }
-
   if (!row) {
     return { status: 'invalid', message: 'INVALID TICKET' }
   }
@@ -641,17 +604,17 @@ export async function checkInLiveTicket(input: {
   confirm?: boolean
 }): Promise<CheckinResult> {
   const looked = await lookupLiveTicketForCheckin(input)
-  const event = await fetchEventRowBySlug(input.eventId)
-  const title = event ? withLiveTiers(event).title : undefined
+  const parsed = parseTicketQr(input.qrPayload || input.checkinCode || looked.ticket?.qr_code_data || '')
+  const extra = looked.ticket ? enrichLiveCheckin(looked.ticket, parsed) : {}
   if (!looked.ticket || looked.status !== 'valid') {
-    return { ...looked, ...(looked.ticket ? await enrichLiveCheckin(looked.ticket, title) : {}) }
+    return { ...looked, ...extra }
   }
   if (!input.confirm) {
     return {
       status: 'valid',
       ticket: looked.ticket,
       message: 'VALID TICKET',
-      ...(await enrichLiveCheckin(looked.ticket, title)),
+      ...extra,
     }
   }
 
@@ -670,7 +633,7 @@ export async function checkInLiveTicket(input: {
       status: 'checked_in',
       ticket: updated,
       message: 'CHECKED IN',
-      ...(await enrichLiveCheckin(updated, title)),
+      ...enrichLiveCheckin(updated, parsed),
     }
   }
 
