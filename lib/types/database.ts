@@ -1,4 +1,4 @@
-export type UserRole = 'guest' | 'celebrant' | 'vendor' | 'merchant' | 'organizer'
+export type UserRole = 'guest' | 'celebrant' | 'vendor' | 'merchant' | 'organizer' | 'super_admin' | 'admin'
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'ended'
 export type EventVisibility = 'PUBLIC' | 'PRIVATE'
 export type TicketStatus = 'reserved' | 'paid' | 'refunded' | 'cancelled' | 'checked_in'
@@ -67,6 +67,8 @@ export interface EventRecord {
   celebrant_name: string | null
   celebrant_wallet_id: string | null
   capacity: number | null
+  affiliate_enabled: boolean
+  affiliate_commission_pct: number
   created_at: string
   updated_at: string
 }
@@ -138,6 +140,7 @@ export interface PaymentMetadata {
   buyer_name?: string
   buyer_phone?: string
   custom?: Record<string, unknown>
+  affiliate_code?: string
   bu?: number
   credit_naira?: number
   charge_naira?: number

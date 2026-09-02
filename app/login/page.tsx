@@ -24,16 +24,15 @@ export default function LoginPage() {
   useEffect(() => {
     const next = safeNextPath(new URLSearchParams(window.location.search).get('next'))
     setNextPath(next)
-    const draft = loadDraft<{ phone?: string; name?: string; mode?: 'login' | 'signup' }>(LOGIN_DRAFT_KEY)
+    const draft = loadDraft<{ phone?: string; name?: string }>(LOGIN_DRAFT_KEY)
     if (draft?.phone) setPhone(draft.phone)
     if (draft?.name) setName(draft.name)
-    if (draft?.mode) setMode(draft.mode)
     setDraftReady(true)
   }, [])
 
   useEffect(() => {
     if (!draftReady) return
-    saveDraft(LOGIN_DRAFT_KEY, { phone, name, mode })
+    saveDraft(LOGIN_DRAFT_KEY, { phone, name })
   }, [draftReady, phone, name, mode])
 
   async function submit() {
@@ -76,8 +75,13 @@ export default function LoginPage() {
             : { display_name: name, phone, pin, role: 'guest' },
         ),
       })
-      const json = (await res.json()) as { status: boolean; message: string }
+      const json = (await res.json()) as { status: boolean; message: string; code?: string }
       setBusy(false)
+      if (json.code === 'BU_ID_TAKEN' || /already registered/i.test(json.message || '')) {
+        setMode('login')
+        setMessage('This ɃU ID is already registered. Log in with your PIN.')
+        return
+      }
       setMessage(json.message || (res.ok ? 'Signed in' : 'Could not sign in'))
       if (json.status) {
         window.location.assign(nextPath)
@@ -101,6 +105,11 @@ export default function LoginPage() {
             }}
           >
             <h1 className="text-center text-2xl font-bold">{mode === 'login' ? 'Login' : 'Register'}</h1>
+            <p className="text-center text-sm text-muted-foreground">
+              {mode === 'login'
+                ? 'Use the phone number and PIN from the account you already created. You do not register again.'
+                : 'Create one ɃU account. If this phone is already registered, you will be asked to log in instead.'}
+            </p>
             {mode === 'signup' && (
               <div className="space-y-1">
                 <p className="text-sm font-medium">Full name *</p>

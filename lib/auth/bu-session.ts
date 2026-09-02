@@ -47,6 +47,11 @@ function asRole(role: string | null | undefined): UserRole {
   if (role === 'guest' || role === 'celebrant' || role === 'vendor' || role === 'merchant' || role === 'organizer') {
     return role
   }
+  const value = String(role ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  if (value === 'admin') return 'admin'
   return 'guest'
 }
 

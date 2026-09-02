@@ -8,15 +8,34 @@ import { isSupabaseConfigured } from '@/lib/env'
 import { normalizePhone } from '@/lib/phone'
 import { contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
 import { attachBuSession, readBuSession } from '@/lib/auth/bu-session'
+import { resolveLiveCelebrantId } from '@/lib/events/live'
+import { getAccountRolesForViewer } from '@/lib/account/roles'
 import type { Profile } from '@/lib/types/database'
 
 export async function GET() {
   try {
     const user = await getSessionUser()
-    if (!user) return successResponse({ user: null, profile: null })
+    if (!user) return successResponse({ user: null, profile: null, roles: null })
     const profile = await getProfile(user.id)
     const email = profile?.email ?? contactEmail(user.email)
-    return successResponse({ user: { id: user.id, email }, profile })
+    const session = await readBuSession()
+    let rolesPayload = null
+    try {
+      const liveId = await resolveLiveCelebrantId({
+        id: user.id,
+        email,
+        phone: session?.phone_e164 || session?.phone || profile?.phone_e164 || profile?.phone || null,
+      })
+      const roles = await getAccountRolesForViewer(liveId || user.id, session)
+      rolesPayload = roles
+    } catch {
+      rolesPayload = null
+    }
+    return successResponse({
+      user: { id: user.id, email },
+      profile,
+      roles: rolesPayload,
+    })
   } catch (error) {
     return handleRouteError(error)
   }

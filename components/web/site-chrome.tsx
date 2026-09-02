@@ -3,15 +3,22 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { AffiliateCapture } from '@/components/web/affiliate-capture'
+import { AdSlot } from '@/components/web/ad-slot'
 
 interface MeResponse {
   status: boolean
-  data?: { user: { id: string; email?: string | null } | null; profile: { display_name?: string | null } | null }
+  data?: {
+    user: { id: string; email?: string | null } | null
+    profile: { display_name?: string | null } | null
+    roles?: { is_affiliate?: boolean; is_organizer?: boolean } | null
+  }
 }
 
 export function SiteHeader() {
   const [signedIn, setSignedIn] = useState(false)
   const [name, setName] = useState<string | null>(null)
+  const [isAffiliate, setIsAffiliate] = useState(false)
 
   useEffect(() => {
     fetch('/api/me', { credentials: 'include' })
@@ -20,6 +27,7 @@ export function SiteHeader() {
         if (json.status && json.data?.user) {
           setSignedIn(true)
           setName(json.data.profile?.display_name ?? json.data.user.email ?? 'Account')
+          setIsAffiliate(Boolean(json.data.roles?.is_affiliate))
         }
       })
       .catch(() => undefined)
@@ -32,6 +40,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/90 backdrop-blur">
+      <AffiliateCapture />
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
@@ -45,6 +54,9 @@ export function SiteHeader() {
           </Link>
           <Link href="/organizer" className="hover:text-foreground">
             Organisers
+          </Link>
+          <Link href="/affiliate" className="hover:text-foreground">
+            {isAffiliate ? 'Affiliate desk' : 'Affiliate'}
           </Link>
           <Link href="/gateway" className="hover:text-foreground">
             Gateway
@@ -76,6 +88,9 @@ export function SiteHeader() {
           )}
         </div>
       </div>
+      <div className="mx-auto max-w-6xl px-4 pb-2">
+        <AdSlot slot="web_header" />
+      </div>
     </header>
   )
 }
@@ -91,6 +106,7 @@ export function SiteFooter() {
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <Link href="/events">Discover events</Link>
           <Link href="/organizer/events/create">Create event</Link>
+          <Link href="/affiliate">Affiliate</Link>
           <Link href="/gateway">Gateway</Link>
           <Link href="/app">Mobile app</Link>
         </div>

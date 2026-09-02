@@ -22,6 +22,7 @@ export const initializeTicketSchema = z.object({
       buyer_name: z.string().max(160).optional(),
       phone: z.string().max(32).optional(),
       custom: z.record(z.unknown()).optional(),
+      affiliate_code: z.string().max(32).optional(),
     })
     .optional(),
 })

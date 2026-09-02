@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
-import { BU_NAIRA_VALUE, buFromNaira } from '@/lib/bu-rate'
+import { buFromNaira, getBuNairaValue } from '@/lib/bu-rate'
 
 export async function transferBu(input: {
   fromUserId: string
@@ -19,7 +19,7 @@ export async function transferBu(input: {
     p_description: input.isTip ? 'Tip' : 'BU transfer',
     p_counterparty: input.toUserId,
     p_event_id: input.eventId ?? null,
-    p_metadata: { kind: input.isTip ? 'tip' : 'transfer', bu, naira: input.amount, value_rate: BU_NAIRA_VALUE },
+    p_metadata: { kind: input.isTip ? 'tip' : 'transfer', bu, naira: input.amount, value_rate: getBuNairaValue() },
   })
   if (error) {
     if (error.message?.includes('INSUFFICIENT_FUNDS')) {
@@ -33,6 +33,6 @@ export async function transferBu(input: {
     p_type: type,
     p_description: input.isTip ? 'Tip received' : 'BU received',
     p_event_id: input.eventId ?? null,
-    p_metadata: { from: input.fromUserId, bu, naira: input.amount, value_rate: BU_NAIRA_VALUE },
+    p_metadata: { from: input.fromUserId, bu, naira: input.amount, value_rate: getBuNairaValue() },
   })
 }

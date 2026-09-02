@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs'
 import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import { authEmailsFromBuId, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
 import { isSupabaseConfigured } from '@/lib/env'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
+import { liveAccountExistsForPhone } from '@/lib/auth/legacy-login'
 
 const schema = z.object({
   display_name: z.string().min(2).max(80),
@@ -34,7 +35,7 @@ function needsEmailConfirm(message: string) {
 
 function throwSignupError(message: string): never {
   if (alreadyRegistered(message)) {
-    throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered')
+    throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
   }
   if (rateLimited(message)) {
     throw new ApiError(
@@ -74,10 +75,24 @@ export async function POST(request: Request) {
     }
 
     const admin = tryCreateAdminClient()
+    if (await liveAccountExistsForPhone(body.phone)) {
+      throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
+    }
     if (admin) {
-      const { data: existing } = await admin.from('profiles').select('id').eq('phone_e164', phoneE164).maybeSingle()
-      if (existing) {
-        throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered')
+      const variants = phoneLookupVariants(body.phone)
+      for (const variant of variants) {
+        const byE164 = await admin.from('profiles').select('id').eq('phone_e164', variant).maybeSingle()
+        const byPhone = await admin.from('profiles').select('id').eq('phone', variant).maybeSingle()
+        if (byE164.data || byPhone.data) {
+          throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
+        }
+      }
+      if (ticketEmail) {
+        const byEmail = await admin.from('profiles').select('id').eq('email', ticketEmail).maybeSingle()
+        const byLiveEmail = await admin.from('users').select('id').eq('email', ticketEmail).maybeSingle()
+        if (byEmail.data || byLiveEmail.data) {
+          throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
+        }
       }
     }
 
@@ -103,7 +118,10 @@ export async function POST(request: Request) {
           break
         }
         lastError = error?.message ?? lastError
-        if (error && !invalidEmail(error.message) && !alreadyRegistered(error.message)) {
+        if (error && alreadyRegistered(error.message)) {
+          throwSignupError(error.message)
+        }
+        if (error && !invalidEmail(error.message)) {
           throwSignupError(error.message)
         }
       }

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { CoverImageField } from '@/components/cover-image-field'
 import { EVENT_CATEGORIES, EVENT_CATEGORY_LABELS } from '@/lib/schemas/event'
 
@@ -83,6 +84,10 @@ export function EventEditorFields({
   tiers,
   patchTier,
   setTiers,
+  affiliateEnabled,
+  setAffiliateEnabled,
+  affiliateCommissionPct,
+  setAffiliateCommissionPct,
 }: {
   form: EventFormFields
   set: <K extends keyof EventFormFields>(key: K, value: string) => void
@@ -91,6 +96,10 @@ export function EventEditorFields({
   tiers: TierDraft[]
   patchTier: (index: number, patch: Partial<TierDraft>) => void
   setTiers: (next: TierDraft[] | ((current: TierDraft[]) => TierDraft[])) => void
+  affiliateEnabled: boolean
+  setAffiliateEnabled: (value: boolean) => void
+  affiliateCommissionPct: string
+  setAffiliateCommissionPct: (value: string) => void
 }) {
   return (
     <>
@@ -169,6 +178,32 @@ export function EventEditorFields({
         <Button type="button" variant={visibility === 'PRIVATE' ? 'default' : 'outline'} onClick={() => setVisibility('PRIVATE')}>
           Private / invite only
         </Button>
+      </div>
+      <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-semibold">Affiliate resale</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Let affiliates sell this event with their link. Commission comes out of the ticket price and credits that
+              affiliate’s ɃU wallet. Your organiser wallet still receives the rest. Off by default.
+            </p>
+          </div>
+          <Switch checked={affiliateEnabled} onCheckedChange={(checked) => setAffiliateEnabled(checked === true)} />
+        </div>
+        {affiliateEnabled && (
+          <label className="block text-sm">
+            Commission %
+            <Input
+              type="number"
+              min={0}
+              max={80}
+              step={0.5}
+              value={affiliateCommissionPct}
+              onChange={(e) => setAffiliateCommissionPct(e.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">0–80%. Example: 10% of ₦5,000 is ₦500 to the affiliate.</span>
+          </label>
+        )}
       </div>
       <div className="space-y-3">
         <p className="font-semibold">Ticket types</p>

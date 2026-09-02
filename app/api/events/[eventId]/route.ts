@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/api/session'
 import { updateEventSchema } from '@/lib/schemas/event'
 import { auditFromRequest } from '@/lib/api/audit-request'
 import { readBuSession } from '@/lib/auth/bu-session'
-import { fetchLiveEventDashboard, resolveLiveCelebrantId, updateLiveEvent, withLiveTiers } from '@/lib/events/live'
+import { deleteLiveEvent, fetchLiveEventDashboard, resolveLiveCelebrantId, updateLiveEvent, withLiveTiers } from '@/lib/events/live'
 
 export async function GET(_request: Request, context: { params: Promise<{ eventId: string }> }) {
   try {
@@ -59,6 +59,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ event
       contact_phone: body.contact_phone,
       ticket_sales_start: body.ticket_sales_start,
       ticket_sales_end: body.ticket_sales_end,
+      affiliate_enabled: body.affiliate_enabled,
+      affiliate_commission_pct: body.affiliate_commission_pct,
     })
 
     if ('error' in updated) {
@@ -71,6 +73,36 @@ export async function PATCH(request: Request, context: { params: Promise<{ event
     await auditFromRequest(request, { actorUserId: user.id, statusCode: 200 })
     const packed = withLiveTiers(updated.row)
     return successResponse({ event_id: packed.id, slug: packed.slug, visibility: packed.visibility }, 'Event updated')
+  } catch (error) {
+    return handleRouteError(error)
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ eventId: string }> }) {
+  try {
+    const user = await requireUser()
+    const session = await readBuSession()
+    const celebrantId = await resolveLiveCelebrantId({
+      id: user.id,
+      email: user.email,
+      phone: session?.phone_e164 || session?.phone || null,
+    })
+    if (!celebrantId) {
+      throw new ApiError(
+        403,
+        'NOT_LIVE_USER',
+        'This signed-in account is not a live ɃU user. Sign out, then sign in with your ɃU ID (phone number) and PIN from the live ɃU app.',
+      )
+    }
+    const { eventId } = await context.params
+    const deleted = await deleteLiveEvent(eventId, celebrantId)
+    if ('error' in deleted) {
+      if (deleted.code === 'NOT_FOUND') throw new ApiError(404, 'NOT_FOUND', deleted.error)
+      if (deleted.code === 'FORBIDDEN') throw new ApiError(403, 'FORBIDDEN', deleted.error)
+      throw new ApiError(503, 'EVENT_DELETE_FAILED', deleted.error)
+    }
+    await auditFromRequest(request, { actorUserId: user.id, statusCode: 200 })
+    return successResponse({ event_id: eventId }, 'Event deleted')
   } catch (error) {
     return handleRouteError(error)
   }

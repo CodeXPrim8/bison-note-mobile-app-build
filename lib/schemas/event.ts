@@ -78,6 +78,8 @@ export const createEventSchema = z.object({
   celebrant_name: z.string().max(160).optional().nullable(),
   commission_rate: z.number().min(0).max(1).optional(),
   paystack_subaccount_code: z.string().optional().nullable(),
+  affiliate_enabled: z.boolean().optional().default(false),
+  affiliate_commission_pct: z.number().min(0).max(80).optional().default(10),
   ticket_tiers: z.array(ticketTierInputSchema).min(1).max(20),
 })
 

@@ -12,6 +12,8 @@ import {
 } from '@/lib/events/live'
 import { storedTypesFromInput } from '@/lib/events/ticket-types'
 import { isPublicCatalogEvent } from '@/lib/events/access'
+import { enableAccountRole } from '@/lib/account/roles'
+import { getUserControl, listUserControls } from '@/lib/admin/platform'
 
 export async function GET() {
   try {
@@ -19,7 +21,14 @@ export async function GET() {
       return successResponse([])
     }
     const rows = await fetchPublicEventRows()
-    const list = rows.map(withLiveTiers).filter(isPublicCatalogEvent)
+    const controls = await listUserControls()
+    const blocked = new Set(
+      controls.filter((row) => row.organizer_suspended || row.suspended || row.deleted_at).map((row) => row.user_id),
+    )
+    const list = rows
+      .map(withLiveTiers)
+      .filter(isPublicCatalogEvent)
+      .filter((event) => !blocked.has(event.organizer_id))
     return successResponse(list)
   } catch (error) {
     return handleRouteError(error)
@@ -41,6 +50,10 @@ export async function POST(request: Request) {
         'NOT_LIVE_USER',
         'This signed-in account is not a live ɃU user. Sign out, then sign in with your ɃU ID (phone number) and PIN from the live ɃU app.',
       )
+    }
+    const control = await getUserControl(celebrantId)
+    if (control.suspended || control.deleted_at || control.organizer_suspended) {
+      throw new ApiError(403, 'ORGANIZER_SUSPENDED', 'This organiser is suspended and cannot publish events.')
     }
     const json: unknown = await request.json()
     const body = createEventSchema.parse(json)
@@ -68,6 +81,8 @@ export async function POST(request: Request) {
       contact_phone: body.contact_phone,
       ticket_sales_start: body.ticket_sales_start,
       ticket_sales_end: body.ticket_sales_end,
+      affiliate_enabled: body.affiliate_enabled,
+      affiliate_commission_pct: body.affiliate_commission_pct,
     })
 
     if ('error' in created) {
@@ -79,6 +94,7 @@ export async function POST(request: Request) {
       )
     }
 
+    await enableAccountRole(celebrantId, 'organizer').catch(() => undefined)
     await auditFromRequest(request, { actorUserId: user.id, statusCode: 201 })
     const packed = withLiveTiers(created.row)
     return successResponse({ event_id: packed.id, slug: packed.slug, visibility: packed.visibility }, 'Event created', 201)

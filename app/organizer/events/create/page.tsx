@@ -24,6 +24,8 @@ export default function CreateEventPage() {
   const [status, setStatus] = useState<'draft' | 'published'>('published')
   const [form, setForm] = useState<EventFormFields>(emptyEventForm)
   const [tiers, setTiers] = useState<TierDraft[]>([emptyTier()])
+  const [affiliateEnabled, setAffiliateEnabled] = useState(false)
+  const [affiliateCommissionPct, setAffiliateCommissionPct] = useState('10')
   const [draftReady, setDraftReady] = useState(false)
 
   useEffect(() => {
@@ -32,6 +34,8 @@ export default function CreateEventPage() {
       status?: 'draft' | 'published'
       form?: EventFormFields
       tiers?: TierDraft[]
+      affiliateEnabled?: boolean
+      affiliateCommissionPct?: string
     }>(CREATE_EVENT_DRAFT_KEY)
     if (draft?.visibility) setVisibility(draft.visibility)
     if (draft?.status) setStatus(draft.status)
@@ -39,13 +43,15 @@ export default function CreateEventPage() {
     if (draft?.tiers?.length) {
       setTiers(draft.tiers.map((tier) => ({ ...emptyTier(), ...tier })))
     }
+    if (typeof draft?.affiliateEnabled === 'boolean') setAffiliateEnabled(draft.affiliateEnabled)
+    if (draft?.affiliateCommissionPct) setAffiliateCommissionPct(draft.affiliateCommissionPct)
     setDraftReady(true)
   }, [])
 
   useEffect(() => {
     if (!draftReady) return
-    saveDraft(CREATE_EVENT_DRAFT_KEY, { visibility, status, form, tiers })
-  }, [draftReady, visibility, status, form, tiers])
+    saveDraft(CREATE_EVENT_DRAFT_KEY, { visibility, status, form, tiers, affiliateEnabled, affiliateCommissionPct })
+  }, [draftReady, visibility, status, form, tiers, affiliateEnabled, affiliateCommissionPct])
 
   function set<K extends keyof EventFormFields>(key: K, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -81,6 +87,8 @@ export default function CreateEventPage() {
       visibility,
       status: nextStatus,
       ticket_tiers: ticketTiers,
+      affiliate_enabled: affiliateEnabled,
+      affiliate_commission_pct: Number(affiliateCommissionPct) || 0,
     }
     const res = await fetch('/api/events', {
       method: 'POST',
@@ -123,6 +131,10 @@ export default function CreateEventPage() {
             tiers={tiers}
             patchTier={patchTier}
             setTiers={setTiers}
+            affiliateEnabled={affiliateEnabled}
+            setAffiliateEnabled={setAffiliateEnabled}
+            affiliateCommissionPct={affiliateCommissionPct}
+            setAffiliateCommissionPct={setAffiliateCommissionPct}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">

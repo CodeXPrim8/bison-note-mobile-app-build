@@ -5,9 +5,18 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { DeleteEventButton } from '@/components/organizer/delete-event-button'
 
 interface EventDash {
-  event: { id: string; title: string; slug: string; visibility: string; status: string }
+  event: {
+    id: string
+    title: string
+    slug: string
+    visibility: string
+    status: string
+    affiliate_enabled?: boolean
+    affiliate_commission_pct?: number
+  }
   stats: {
     tickets_sold: number
     revenue: number
@@ -67,6 +76,11 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
           <div className="mt-2 flex gap-2">
             <Badge>{data.event.visibility}</Badge>
             <Badge variant="outline">{data.event.status}</Badge>
+            {data.event.affiliate_enabled ? (
+              <Badge variant="outline">Affiliate {data.event.affiliate_commission_pct ?? 0}%</Badge>
+            ) : (
+              <Badge variant="outline">Affiliate off</Badge>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -79,6 +93,12 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
           <Button asChild>
             <Link href={`/organizer/events/${id}/checkin`}>Access</Link>
           </Button>
+          <DeleteEventButton
+            eventId={id}
+            title={data.event.title}
+            ticketsSold={data.stats.tickets_sold}
+            size="default"
+          />
         </div>
       </div>
       <div className="mt-8 grid gap-4 sm:grid-cols-3">

@@ -16,6 +16,7 @@ import {
   type EventFormFields,
   type TierDraft,
 } from '@/components/event-editor-fields'
+import { DeleteEventButton } from '@/components/organizer/delete-event-button'
 
 export default function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -26,6 +27,8 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC')
   const [form, setForm] = useState<EventFormFields>(emptyEventForm)
   const [tiers, setTiers] = useState<TierDraft[]>([emptyTier()])
+  const [affiliateEnabled, setAffiliateEnabled] = useState(false)
+  const [affiliateCommissionPct, setAffiliateCommissionPct] = useState('10')
 
   useEffect(() => {
     let cancelled = false
@@ -64,6 +67,8 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
           ticket_sales_start: toDatetimeLocalValue(event.ticket_sales_start),
           ticket_sales_end: toDatetimeLocalValue(event.ticket_sales_end),
         })
+        setAffiliateEnabled(Boolean(event.affiliate_enabled))
+        setAffiliateCommissionPct(String(event.affiliate_commission_pct ?? 10))
         setTiers(
           ticketTiers.length
             ? ticketTiers.map((tier) => ({
@@ -125,6 +130,8 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
       visibility,
       status: 'published',
       ticket_tiers: ticketTiers,
+      affiliate_enabled: affiliateEnabled,
+      affiliate_commission_pct: Number(affiliateCommissionPct) || 0,
     }
     const res = await fetch(`/api/events/${id}`, {
       method: 'PATCH',
@@ -183,6 +190,10 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
             tiers={tiers}
             patchTier={patchTier}
             setTiers={setTiers}
+            affiliateEnabled={affiliateEnabled}
+            setAffiliateEnabled={setAffiliateEnabled}
+            affiliateCommissionPct={affiliateCommissionPct}
+            setAffiliateCommissionPct={setAffiliateCommissionPct}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
@@ -192,6 +203,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
             <Button asChild type="button" variant="outline">
               <Link href={`/organizer/events/${id}`}>Cancel</Link>
             </Button>
+            <DeleteEventButton eventId={id} title={form.title || 'this event'} size="default" />
           </div>
         </form>
       </Card>

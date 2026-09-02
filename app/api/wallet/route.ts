@@ -2,26 +2,30 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { getProfile, requireUser } from '@/lib/api/session'
 import { initializeDepositSchema } from '@/lib/schemas/ticket'
 import { initializeDeposit } from '@/lib/payments/initialize-ticket'
-import { fetchLiveWallet } from '@/lib/events/live'
+import { fetchLiveWallet, resolveLiveCelebrantId } from '@/lib/events/live'
 import { publicBuRates } from '@/lib/bu-rate'
 import { contactEmail } from '@/lib/auth/pin'
-import { createDataClient } from '@/lib/supabase/data'
+import { readBuSession } from '@/lib/auth/bu-session'
+import { getPlatformSettings } from '@/lib/admin/platform'
+import { listWalletHistory } from '@/lib/wallet/history'
 
 export async function GET() {
   try {
     const user = await requireUser()
-    const wallet = await fetchLiveWallet(user.id)
-    const db = createDataClient()
-    const txs = await db
-      .from('bu_transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50)
+    await getPlatformSettings()
+    const session = await readBuSession()
+    const liveId =
+      (await resolveLiveCelebrantId({
+        id: user.id,
+        email: user.email,
+        phone: session?.phone_e164 || session?.phone || null,
+      })) || user.id
+    const wallet = await fetchLiveWallet(liveId)
+    const transactions = await listWalletHistory(liveId, 200)
     return successResponse({
       wallet,
       rates: publicBuRates(),
-      transactions: txs.error ? [] : (txs.data ?? []),
+      transactions,
     })
   } catch (error) {
     return handleRouteError(error)

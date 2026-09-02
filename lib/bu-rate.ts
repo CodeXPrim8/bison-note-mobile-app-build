@@ -15,6 +15,17 @@ export const BU_MIN_WITHDRAW = 5000
 export const BU_SPRAY_NOTES = [200, 500, 1000] as const
 export const BU_BUY_PRESETS = [2000, 5000, 10000, 20000, 50000] as const
 
+let runtimeBuNairaValue = BU_NAIRA_VALUE
+
+export function setRuntimeBuNairaValue(value: number) {
+  if (!Number.isFinite(value) || value <= 0 || value > 1000) return
+  runtimeBuNairaValue = roundMoney(value, 4)
+}
+
+export function getBuNairaValue() {
+  return runtimeBuNairaValue
+}
+
 export class BuyQuoteError extends Error {
   readonly code: string
 
@@ -64,11 +75,12 @@ export function minPurchaseChargeNaira(): number {
 }
 
 export function nairaFromBu(bu: number): number {
-  return roundMoney(bu * BU_NAIRA_VALUE)
+  return roundMoney(bu * getBuNairaValue())
 }
 
 export function buFromNaira(naira: number): number {
-  return roundMoney(naira / BU_NAIRA_VALUE, 2)
+  const rate = getBuNairaValue()
+  return roundMoney(naira / (rate || 1), 2)
 }
 
 /**
@@ -84,7 +96,7 @@ export function paystackTransferFeeNaira(amountNaira: number): number {
 
 export function publicBuRates() {
   return {
-    value: BU_NAIRA_VALUE,
+    value: getBuNairaValue(),
     buy: cardBuyRate(),
     buy_max: BU_NAIRA_BUY_MAX,
     min_purchase_bu: BU_MIN_PURCHASE,
@@ -111,7 +123,7 @@ export function quoteBuyBu(bu: number): BuyQuote {
   return {
     bu: roundedBu,
     buyRate,
-    valueRate: BU_NAIRA_VALUE,
+    valueRate: getBuNairaValue(),
     chargeNaira: roundMoney(roundedBu * buyRate),
     creditNaira: nairaFromBu(roundedBu),
   }

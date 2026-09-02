@@ -9,6 +9,7 @@ import { EventStatusBadge } from '@/components/event-status-badge'
 import { TicketPass } from '@/components/ticket-pass'
 import { useAccount } from '@/components/account-store'
 import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { AdSlot } from '@/components/web/ad-slot'
 
 interface OwnedTicket extends TicketRecord {
   event: EventRecord | null
@@ -144,6 +145,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             <span className="font-semibold">Send ɃU</span>
           </button>
         </div>
+      </div>
+
+      <div className="px-4">
+        <AdSlot slot="app_home" />
       </div>
 
       {/* Quick Access - Moved before events */}

@@ -12,6 +12,8 @@ export type EventFormDetails = {
   contact_phone: string | null
   ticket_sales_start: string | null
   ticket_sales_end: string | null
+  affiliate_enabled: boolean
+  affiliate_commission_pct: number
 }
 
 function asTrimmed(value: unknown): string | null {
@@ -33,6 +35,16 @@ function asIso(value: unknown): string | null {
   return Number.isFinite(time) ? new Date(time).toISOString() : text
 }
 
+function asFlag(value: unknown): boolean {
+  return value === true || value === 'true' || value === 1 || value === '1'
+}
+
+function asPct(value: unknown, fallback = 10): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(80, Math.max(0, Math.round(n * 100) / 100))
+}
+
 export function emptyEventFormDetails(): EventFormDetails {
   return {
     organizer_name: null,
@@ -46,6 +58,8 @@ export function emptyEventFormDetails(): EventFormDetails {
     contact_phone: null,
     ticket_sales_start: null,
     ticket_sales_end: null,
+    affiliate_enabled: false,
+    affiliate_commission_pct: 10,
   }
 }
 
@@ -62,6 +76,8 @@ export function buildEventFormDetails(input: Partial<EventFormDetails>): EventFo
     contact_phone: asTrimmed(input.contact_phone),
     ticket_sales_start: asIso(input.ticket_sales_start),
     ticket_sales_end: asIso(input.ticket_sales_end),
+    affiliate_enabled: asFlag(input.affiliate_enabled),
+    affiliate_commission_pct: asPct(input.affiliate_commission_pct),
   }
 }
 
@@ -84,6 +100,8 @@ function parseDetailsObject(raw: unknown): EventFormDetails | null {
     contact_phone: row.contact_phone as string | null,
     ticket_sales_start: row.ticket_sales_start as string | null,
     ticket_sales_end: row.ticket_sales_end as string | null,
+    affiliate_enabled: asFlag(row.affiliate_enabled),
+    affiliate_commission_pct: asPct(row.affiliate_commission_pct),
   })
 }
 

@@ -3,6 +3,7 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
 import { BU_MIN_SPRAY, BU_MIN_TRANSFER, nairaFromBu } from '@/lib/bu-rate'
 import { transferBu } from '@/lib/wallet'
+import { getPlatformSettings } from '@/lib/admin/platform'
 
 const schema = z.object({
   to_user_id: z.string().uuid(),
@@ -14,6 +15,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
+    await getPlatformSettings()
     const body = schema.parse(await request.json())
     const sprayLike = Boolean(body.event_id || body.is_tip)
     const minBu = sprayLike ? BU_MIN_SPRAY : BU_MIN_TRANSFER

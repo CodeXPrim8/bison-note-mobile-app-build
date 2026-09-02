@@ -5,6 +5,7 @@ import type { Profile } from '@/lib/types/database'
 import { profileFromBuSession, readBuSession } from '@/lib/auth/bu-session'
 import { contactEmail } from '@/lib/auth/pin'
 import { createDataClient } from '@/lib/supabase/data'
+import { isOwnerSuperAdmin } from '@/lib/account/roles'
 
 export async function getSessionUser() {
   const legacy = await readBuSession()
@@ -47,15 +48,30 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     try {
       const live = await createDataClient()
         .from('users')
-        .select('email, phone_number, first_name, last_name, account_name')
+        .select('email, phone_number, first_name, last_name, account_name, role')
         .eq('id', userId)
         .maybeSingle()
       const row = live.data as Record<string, unknown> | null
+      const liveRole = asOptionalString(row?.role)
+      const phone = asOptionalString(row?.phone_number) ?? profile?.phone_e164 ?? profile?.phone ?? legacy?.phone_e164 ?? legacy?.phone
+      const resolvedRole: Profile['role'] | null = isOwnerSuperAdmin(userId, phone)
+        ? 'super_admin'
+        : liveRole === 'guest' ||
+            liveRole === 'celebrant' ||
+            liveRole === 'vendor' ||
+            liveRole === 'merchant' ||
+            liveRole === 'organizer' ||
+            liveRole === 'admin'
+          ? liveRole
+          : liveRole === 'superadmin' || liveRole === 'super_admin'
+            ? 'guest'
+            : null
       if (row && profile) {
         profile = {
           ...profile,
           email: contactEmail(asOptionalString(row.email)) ?? contactEmail(profile.email),
           phone: asOptionalString(row.phone_number) ?? profile.phone,
+          role: resolvedRole ?? profile.role,
         }
       } else if (row && !profile) {
         const display =
@@ -65,7 +81,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
         const now = new Date().toISOString()
         profile = {
           id: userId,
-          role: 'guest',
+          role: resolvedRole ?? 'guest',
           display_name: display,
           username: null,
           phone: asOptionalString(row.phone_number),
@@ -80,7 +96,14 @@ export async function getProfile(userId: string): Promise<Profile | null> {
       // Live users table is optional for website-only accounts.
     }
   }
-  if (profile) profile = { ...profile, email: contactEmail(profile.email) }
+  if (profile) {
+    const phone = profile.phone_e164 || profile.phone || legacy?.phone_e164 || legacy?.phone
+    profile = {
+      ...profile,
+      email: contactEmail(profile.email),
+      role: isOwnerSuperAdmin(userId, phone) ? 'super_admin' : profile.role === 'super_admin' ? 'guest' : profile.role,
+    }
+  }
   return profile
 }
 

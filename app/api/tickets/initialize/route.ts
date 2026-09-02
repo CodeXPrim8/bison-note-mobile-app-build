@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
       buyer_name: body.metadata?.buyer_name,
       buyer_phone: body.metadata?.phone || session?.phone_e164 || session?.phone || undefined,
       custom: body.metadata?.custom,
+      affiliate_code: body.metadata?.affiliate_code,
       user_id: user?.id ?? null,
     })
 

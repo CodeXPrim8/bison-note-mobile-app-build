@@ -26,6 +26,7 @@ export interface InitializeTicketInput {
   buyer_name?: string
   buyer_phone?: string
   custom?: Record<string, unknown>
+  affiliate_code?: string | null
   user_id?: string | null
   merchant?: GatewayMerchant | null
 }
@@ -174,6 +175,7 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
     buyer_name: input.buyer_name,
     buyer_phone: input.buyer_phone,
     custom: input.custom,
+    affiliate_code: input.affiliate_code,
   }
 
   const callbackUrl = input.callback_url ?? `${getAppUrl()}/pay/${reference}`

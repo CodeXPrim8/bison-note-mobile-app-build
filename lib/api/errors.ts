@@ -57,6 +57,17 @@ export function handleRouteError(error: unknown): NextResponse<ApiErrorBody> {
     console.error(error.message)
     return errorResponse(503, 'AUTH_UNAVAILABLE', 'Could not start Paystack checkout.')
   }
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
+    const message = (error as { message: string }).message
+    const code = (error as { code?: string }).code
+    if (code === '42501' || /row-level security|permission denied/i.test(message)) {
+      return errorResponse(
+        503,
+        'ADMIN_SQL_REQUIRED',
+        'Run supabase/migrations/0018_super_admin_writes.sql in the ɃU SQL editor so Super Admin can save settings.',
+      )
+    }
+  }
   console.error(error)
   return errorResponse(500, 'INTERNAL_ERROR', 'Something went wrong')
 }

@@ -1,8 +1,10 @@
 import { z } from 'zod'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
-import { BU_NAIRA_VALUE, quoteWithdrawBu, WalletAmountError } from '@/lib/bu-rate'
+import { getBuNairaValue, quoteWithdrawBu, WalletAmountError } from '@/lib/bu-rate'
+import { getPlatformSettings, getUserControl } from '@/lib/admin/platform'
+import { createDataClient } from '@/lib/supabase/data'
 
 const schema = z.object({
   amount: z.number().positive().optional(),
@@ -17,6 +19,12 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
+    const db = tryCreateAdminClient() ?? createDataClient()
+    const control = await getUserControl(user.id, db)
+    if (control.suspended || control.deleted_at) {
+      throw new ApiError(403, 'ACCOUNT_SUSPENDED', 'This ɃU account is suspended.')
+    }
+    const settings = await getPlatformSettings(db)
     const body = schema.parse(await request.json())
     let quote
     try {
@@ -27,7 +35,7 @@ export async function POST(request: Request) {
       }
       throw error
     }
-    const admin = createAdminClient()
+    const admin = tryCreateAdminClient() ?? createAdminClient()
     const { error } = await admin.rpc('debit_wallet', {
       p_user_id: user.id,
       p_amount: quote.naira,
@@ -39,7 +47,7 @@ export async function POST(request: Request) {
         bank_naira: quote.bankNaira,
         paystack_transfer_fee: quote.paystackFee,
         fee_absorbed: true,
-        value_rate: BU_NAIRA_VALUE,
+        value_rate: getBuNairaValue(),
         bank_name: body.bank_name,
         account_number_last4: body.account_number.slice(-4),
         account_name: body.account_name,
@@ -51,6 +59,18 @@ export async function POST(request: Request) {
       }
       throw new ApiError(500, 'WITHDRAW_FAILED', error.message)
     }
+    const status = settings.withdrawal_mode === 'manual' ? 'pending' : 'approved'
+    await db.from('bu_withdrawals').insert({
+      user_id: user.id,
+      bu: quote.bu,
+      naira: quote.naira,
+      bank_name: body.bank_name,
+      account_number: body.account_number,
+      account_name: body.account_name,
+      status,
+      mode: settings.withdrawal_mode,
+      reviewed_at: status === 'approved' ? new Date().toISOString() : null,
+    })
     return successResponse(
       {
         ok: true,
@@ -58,8 +78,9 @@ export async function POST(request: Request) {
         naira: quote.naira,
         bank_naira: quote.bankNaira,
         paystack_transfer_fee: quote.paystackFee,
+        status,
       },
-      'Withdrawal queued',
+      status === 'pending' ? 'Withdrawal sent for Super Admin approval' : 'Withdrawal queued',
     )
   } catch (error) {
     return handleRouteError(error)

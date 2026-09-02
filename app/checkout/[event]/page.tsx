@@ -10,6 +10,7 @@ import { formatNaira } from '@/lib/money'
 import { clearDraft, loadDraft, saveDraft } from '@/lib/forms/draft'
 import { eventDateHasPassed } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
+import { checkoutPath, currentAffiliateCode, persistAffiliateCode, readAffiliateCodeFromSearch } from '@/lib/affiliate/track'
 import type { EventRecord, TicketTier } from '@/lib/types/database'
 
 interface Quote {
@@ -37,7 +38,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
 
   useEffect(() => {
     params.then(({ event: value }) => setSlug(value))
-    setFromApp(new URLSearchParams(window.location.search).get('from') === 'app')
+    const search = new URLSearchParams(window.location.search)
+    setFromApp(search.get('from') === 'app')
+    persistAffiliateCode(readAffiliateCodeFromSearch(window.location.search))
   }, [params])
 
   useEffect(() => {
@@ -119,14 +122,21 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         email,
         ticket_tier_id: tierId,
         quantity,
-        metadata: { buyer_name: name, phone, custom: fromApp ? { next: '/app' } : undefined },
+        metadata: {
+          buyer_name: name,
+          phone,
+          custom: fromApp ? { next: '/app' } : undefined,
+          affiliate_code: currentAffiliateCode() || undefined,
+        },
       }),
     })
     const json = await res.json()
     setBusy(false)
     if (res.status === 401) {
-      const checkoutPath = fromApp ? `/checkout/${slug}?from=app` : `/checkout/${slug}`
-      window.location.assign(`/login?next=${encodeURIComponent(checkoutPath)}`)
+      const affiliate = currentAffiliateCode()
+      const checkoutHref = checkoutPath(slug, affiliate)
+      const checkoutNext = fromApp ? `${checkoutHref}${checkoutHref.includes('?') ? '&' : '?'}from=app` : checkoutHref
+      window.location.assign(`/login?next=${encodeURIComponent(checkoutNext)}`)
       return
     }
     if (!json.status) {

@@ -104,3 +104,10 @@ export async function verifyLegacyBuPin(
   }
   return { session: toSession(row) }
 }
+
+/** True when this phone is already a ɃU account (live users table). */
+export async function liveAccountExistsForPhone(phone: string): Promise<boolean> {
+  const row = await rowForPhone(phone)
+  if (!row || 'missingVerifier' in row) return false
+  return Boolean(row.id)
+}

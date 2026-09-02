@@ -3,6 +3,7 @@ import { SiteFooter, SiteHeader } from '@/components/web/site-chrome'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { PublicEventsGrid } from '@/components/web/public-events-grid'
+import { AdSlot } from '@/components/web/ad-slot'
 
 export default function WebsiteHome() {
   return (
@@ -41,6 +42,10 @@ export default function WebsiteHome() {
           </div>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-4 pt-6">
+        <AdSlot slot="web_home" />
+      </div>
 
       <section className="mx-auto max-w-6xl px-4 py-16">
         <div className="mb-8 flex items-end justify-between">

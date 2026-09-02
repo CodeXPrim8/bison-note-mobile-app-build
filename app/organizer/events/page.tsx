@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import type { EventRecord } from '@/lib/types/database'
 import { formatEventDateTime } from '@/lib/datetime'
 import { eventVenueLabel } from '@/lib/events/event-details'
+import { DeleteEventButton } from '@/components/organizer/delete-event-button'
 
 export default function OrganizerEventsPage() {
   const [events, setEvents] = useState<EventRecord[]>([])
@@ -50,6 +51,12 @@ export default function OrganizerEventsPage() {
                 <Button asChild size="sm" variant="outline">
                   <Link href={`/organizer/events/${event.id}/edit`}>Edit</Link>
                 </Button>
+                <DeleteEventButton
+                  eventId={event.id}
+                  title={event.title}
+                  redirectTo={null}
+                  onDeleted={() => setEvents((current) => current.filter((item) => item.id !== event.id))}
+                />
               </div>
             </div>
           </Card>

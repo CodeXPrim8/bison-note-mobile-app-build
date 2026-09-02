@@ -9,6 +9,14 @@ import { clientIp, rateLimit } from '@/lib/api/rate-limit'
 import { isSupabaseConfigured } from '@/lib/env'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
+import { getUserControl } from '@/lib/admin/platform'
+
+async function assertActiveAccount(userId: string) {
+  const control = await getUserControl(userId)
+  if (control.deleted_at || control.suspended) {
+    throw new ApiError(403, 'ACCOUNT_SUSPENDED', 'This ɃU account is suspended.')
+  }
+}
 
 const schema = z
   .object({
@@ -45,6 +53,7 @@ export async function POST(request: Request) {
     if (body.phone) {
       const legacy = await verifyLegacyBuPin(body.phone, body.pin)
       if ('session' in legacy) {
+        await assertActiveAccount(legacy.session.id)
         await writeBuSession(legacy.session)
         if (legacy.session.email) {
           const withWrapped = await supabase.auth.signInWithPassword({
@@ -106,6 +115,7 @@ export async function POST(request: Request) {
             const phone = (legacyUser.phone_number as string | null) ?? email
             const legacy = await verifyLegacyBuPin(phone, body.pin)
             if ('session' in legacy) {
+              await assertActiveAccount(legacy.session.id)
               await writeBuSession(legacy.session)
               return attachBuSession(successResponse({ user: { id: legacy.session.id, email: legacy.session.email } }, 'Signed in'), legacy.session)
             }
@@ -134,6 +144,7 @@ export async function POST(request: Request) {
           phone_e164: (data.user.user_metadata?.phone_e164 as string | undefined) ?? null,
           role: (data.user.user_metadata?.role as string | undefined) || 'guest',
         }
+        await assertActiveAccount(session.id)
         await writeBuSession(session)
         return attachBuSession(successResponse({ user: { id: session.id, email: session.email } }, 'Signed in'), session)
       }

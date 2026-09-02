@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
 import { formatEventDateTime } from '@/lib/datetime'
 import { useAccount } from '@/components/account-store'
+import { AdSlot } from '@/components/web/ad-slot'
 import {
   BU_BUY_PRESETS,
   BU_MIN_PURCHASE,
@@ -58,13 +59,15 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
         if (json.data?.wallet) applyWallet(json.data.wallet)
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransactions(
-          txs.map((tx) => ({
-            id: String(tx.id),
-            type: String(tx.type ?? tx.kind ?? 'transfer'),
-            amount: Number(tx.amount ?? 0),
-            date: String(tx.created_at ?? tx.date ?? ''),
-            description: String(tx.description ?? tx.type ?? 'ɃU movement'),
-          })),
+          txs
+            .map((tx) => ({
+              id: String(tx.id),
+              type: String(tx.type ?? tx.kind ?? 'transfer'),
+              amount: Number(tx.amount ?? 0),
+              date: String(tx.created_at ?? tx.date ?? ''),
+              description: String(tx.description ?? tx.type ?? 'ɃU movement'),
+            }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         )
       })
       .catch(() => undefined)
@@ -127,6 +130,8 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
           1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')} to spray or withdraw. Card buy ₦{formatNairaRate(cardBuyRate())}.
         </p>
       </Card>
+
+      <AdSlot slot="app_wallet" />
 
       <div className="grid grid-cols-2 gap-3">
         <Button

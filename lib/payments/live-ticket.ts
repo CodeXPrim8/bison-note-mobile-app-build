@@ -17,6 +17,7 @@ import {
   withLiveTiers,
 } from '@/lib/events/live'
 import { sendTicketEmail } from '@/lib/email/tickets'
+import { creditTicketSaleShares } from '@/lib/sales/credits'
 import {
   initializeTransaction,
   nairaToKobo,
@@ -39,6 +40,7 @@ interface LiveInitializeInput {
   buyer_phone?: string
   user_id?: string | null
   custom?: Record<string, unknown>
+  affiliate_code?: string | null
 }
 
 export const LIVE_TICKET_REF_PREFIX = 'BU_LIVE_'
@@ -399,6 +401,10 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
         phone: input.buyer_phone ?? '',
         unit_price: Number(tier.price),
         event_title: packed.title,
+        affiliate_code: input.affiliate_code ?? '',
+        organiser_id: packed.organizer_id ?? '',
+        affiliate_enabled: packed.affiliate_enabled,
+        affiliate_commission_pct: packed.affiliate_commission_pct,
       },
     })
     return {
@@ -481,6 +487,26 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
     ticketTierId: tier.id,
     tierName: tier.name,
   })
+
+  const eventRow = await fetchEventRowBySlug(eventId)
+  const packed = eventRow ? withLiveTiers(eventRow) : null
+  const organiserId = String(meta.organiser_id || packed?.organizer_id || '')
+  const ticketNaira = (Number.isFinite(unitPrice) ? unitPrice : Number(tier.price)) * quantity
+  if (organiserId) {
+    try {
+      await creditTicketSaleShares({
+        reference,
+        eventId,
+        organiserUserId: organiserId,
+        ticketNaira,
+        affiliateEnabled: meta.affiliate_enabled === true || meta.affiliate_enabled === 'true' || Boolean(packed?.affiliate_enabled),
+        affiliateCommissionPct: Number(meta.affiliate_commission_pct ?? packed?.affiliate_commission_pct ?? 0),
+        affiliateCode: String(meta.affiliate_code || '') || null,
+      })
+    } catch (error) {
+      console.error('creditTicketSaleShares after ticket mint', error)
+    }
+  }
 
   return {
     payment: livePayment(reference, tickets, {

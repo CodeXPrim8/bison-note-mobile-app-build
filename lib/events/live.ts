@@ -1,6 +1,7 @@
 import type { EventRecord, EventStatus, EventVisibility, Payment, TicketRecord, TicketStatus, TicketTier } from '@/lib/types/database'
-import { buFromNaira } from '@/lib/bu-rate'
 import { createDataClient } from '@/lib/supabase/data'
+import { tryCreateAdminClient } from '@/lib/supabase/admin'
+import { buFromNaira } from '@/lib/bu-rate'
 import { readBuSession } from '@/lib/auth/bu-session'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -33,6 +34,9 @@ export const UPDATE_EVENT_SQL_HINT =
 export const EVENT_DETAILS_SQL_HINT =
   'Run supabase/migrations/0014_event_details.sql in the live ɃU Supabase SQL editor, then try again.'
 
+export const DELETE_EVENT_SQL_HINT =
+  'Run supabase/migrations/0022_bu_delete_event.sql in the live ɃU Supabase SQL editor, then try again.'
+
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.length ? value : fallback
 }
@@ -49,6 +53,16 @@ function asIso(value: unknown): string {
     return value
   }
   return new Date().toISOString()
+}
+
+function nairaFromWalletRow(row: Record<string, unknown>) {
+  return Math.max(
+    asNumber(row.naira),
+    asNumber(row.naira_available),
+    asNumber(row.naira_balance),
+    asNumber(row.balance),
+    asNumber(row.bu_balance),
+  )
 }
 
 function visibilityOf(row: Record<string, unknown>): EventVisibility {
@@ -105,6 +119,8 @@ export function mapLiveEvent(row: Record<string, unknown>): EventRecord {
     celebrant_name: asString(row.celebrant_name) || null,
     celebrant_wallet_id: asString(row.celebrant_wallet_id) || null,
     capacity: row.capacity == null && row.max_guests == null ? null : asNumber(row.capacity ?? row.max_guests),
+    affiliate_enabled: extra.affiliate_enabled,
+    affiliate_commission_pct: extra.affiliate_commission_pct,
     created_at: asIso(row.created_at),
     updated_at: asIso(row.updated_at ?? row.created_at),
   }
@@ -266,27 +282,29 @@ export async function fetchLiveTicketsByPayRef(reference: string, db: SupabaseCl
 }
 
 export function ticketsAsPayments(tickets: TicketRecord[]): Payment[] {
-  return tickets.map((ticket) => ({
-    id: ticket.id,
-    reference: ticket.id,
-    paystack_reference: null,
-    user_id: ticket.buyer_user_id,
-    merchant_id: null,
-    event_id: ticket.event_id,
-    kind: 'ticket',
-    amount: ticket.amount_paid,
-    currency: 'NGN',
-    status: ticket.status === 'refunded' ? 'failed' : 'success',
-    buyer_email: ticket.buyer_email || '—',
-    buyer_name: ticket.buyer_name,
-    buyer_phone: ticket.buyer_phone,
-    callback_url: null,
-    authorization_url: null,
-    metadata: { event_id: ticket.event_id, quantity: 1 },
-    fulfilled_at: ticket.created_at,
-    created_at: ticket.created_at,
-    updated_at: ticket.updated_at,
-  }))
+  return [...tickets]
+    .sort((a, b) => Date.parse(b.created_at || '0') - Date.parse(a.created_at || '0'))
+    .map((ticket) => ({
+      id: ticket.id,
+      reference: ticket.id,
+      paystack_reference: null,
+      user_id: ticket.buyer_user_id,
+      merchant_id: null,
+      event_id: ticket.event_id,
+      kind: 'ticket',
+      amount: ticket.amount_paid,
+      currency: 'NGN',
+      status: ticket.status === 'refunded' ? 'failed' : 'success',
+      buyer_email: ticket.buyer_email || '—',
+      buyer_name: ticket.buyer_name,
+      buyer_phone: ticket.buyer_phone,
+      callback_url: null,
+      authorization_url: null,
+      metadata: { event_id: ticket.event_id, quantity: 1 },
+      fulfilled_at: ticket.created_at,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+    }))
 }
 
 function isMissingColumn(error: { message?: string; code?: string } | null) {
@@ -512,6 +530,8 @@ type EventWriteInput = {
   contact_phone?: string | null
   ticket_sales_start?: string | null
   ticket_sales_end?: string | null
+  affiliate_enabled?: boolean
+  affiliate_commission_pct?: number
 }
 
 function detailsFromWriteInput(input: EventWriteInput): EventFormDetails {
@@ -527,6 +547,8 @@ function detailsFromWriteInput(input: EventWriteInput): EventFormDetails {
     contact_phone: input.contact_phone,
     ticket_sales_start: input.ticket_sales_start,
     ticket_sales_end: input.ticket_sales_end,
+    affiliate_enabled: input.affiliate_enabled,
+    affiliate_commission_pct: input.affiliate_commission_pct,
   })
 }
 
@@ -761,25 +783,121 @@ export async function updateLiveEvent(
   return { error: 'Event updated but could not be loaded' }
 }
 
+function asRpcObject(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+async function eventStillExists(eventId: string, db: SupabaseClient) {
+  const row = await db.from('events').select('id').eq('id', eventId).maybeSingle()
+  return Boolean(row.data)
+}
+
+async function deleteEventChildren(eventId: string, db: SupabaseClient) {
+  for (const table of ['event_check_ins', 'event_invitations', 'invites', 'ticket_tiers', 'tickets'] as const) {
+    await db.from(table).delete().eq('event_id', eventId)
+  }
+}
+
+async function callDeleteEventRpc(
+  db: SupabaseClient,
+  eventId: string,
+  celebrantId: string,
+): Promise<
+  | { ok: true }
+  | { missing: true }
+  | { error: string; code?: 'NOT_FOUND' | 'FORBIDDEN' }
+> {
+  const rpc = await db.rpc('bu_delete_event', { p_event_id: eventId, p_celebrant_id: celebrantId })
+  if (rpc.error) {
+    if (isMissingRpc(rpc.error.message)) return { missing: true }
+    const message = rpc.error.message || ''
+    if (/not found/i.test(message)) return { error: 'Event not found', code: 'NOT_FOUND' }
+    if (/not the organizer/i.test(message)) return { error: 'Not the organizer', code: 'FORBIDDEN' }
+    return { error: liveCreateError(message) }
+  }
+  const payload = asRpcObject(rpc.data)
+  if (payload?.ok === false) {
+    const code = asString(payload.code)
+    if (code === 'NOT_FOUND') return { error: 'Event not found', code: 'NOT_FOUND' }
+    if (code === 'FORBIDDEN') return { error: 'Not the organizer', code: 'FORBIDDEN' }
+    return { error: asString(payload.error, 'Could not delete this event') }
+  }
+  return { ok: true }
+}
+
+export async function deleteLiveEvent(
+  eventId: string,
+  celebrantId: string,
+): Promise<{ ok: true } | { error: string; code?: 'NOT_FOUND' | 'FORBIDDEN' }> {
+  const data = createDataClient()
+  const admin = tryCreateAdminClient()
+  const existing = await fetchEventRowBySlug(eventId, admin ?? data)
+  if (!existing) return { error: 'Event not found', code: 'NOT_FOUND' }
+  const packed = withLiveTiers(existing)
+  const owner = asString(existing.celebrant_id) || packed.organizer_id
+  if (owner !== celebrantId) return { error: 'Not the organizer', code: 'FORBIDDEN' }
+
+  const rpcClients = admin ? [admin, data] : [data]
+  for (const client of rpcClients) {
+    const result = await callDeleteEventRpc(client, packed.id, celebrantId)
+    if ('ok' in result) {
+      if (!(await eventStillExists(packed.id, admin ?? data))) return { ok: true }
+    }
+    if ('error' in result) return result
+  }
+
+  const writers = admin ? [admin, data] : [data]
+  for (const client of writers) {
+    await deleteEventChildren(packed.id, client)
+    const removed = await client.from('events').delete().eq('id', packed.id)
+    if (removed.error && !/schema cache|does not exist|relation/i.test(removed.error.message)) {
+      continue
+    }
+    if (!(await eventStillExists(packed.id, admin ?? data))) return { ok: true }
+  }
+
+  return { error: `Could not delete this event. ${DELETE_EVENT_SQL_HINT}` }
+}
+
 export async function fetchLiveWallet(userId: string) {
-  const db = createDataClient()
-  const { data, error } = await db.from('wallets').select('*').eq('user_id', userId).maybeSingle()
-  if (error || !data) {
+  const empty = {
+    id: userId,
+    user_id: userId,
+    bu_balance: 0,
+    naira_available: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  if (!userId) return empty
+
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const rpc = await db.rpc('bu_get_wallet', { p_user_id: userId })
+  if (!rpc.error && rpc.data && typeof rpc.data === 'object' && !Array.isArray(rpc.data)) {
+    const row = rpc.data as Record<string, unknown>
+    const nairaLedger = nairaFromWalletRow(row)
     return {
       id: userId,
       user_id: userId,
-      bu_balance: 0,
-      naira_available: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      bu_balance: buFromNaira(nairaLedger),
+      naira_available: nairaLedger,
+      created_at: empty.created_at,
+      updated_at: empty.updated_at,
     }
   }
+
+  const { data, error } = await db.from('wallets').select('*').eq('user_id', userId).maybeSingle()
+  if (error || !data) return empty
   const row = data as Record<string, unknown>
-  const nairaLedger =
-    asNumber(row.balance) ||
-    asNumber(row.naira_balance) ||
-    asNumber(row.naira_available) ||
-    asNumber(row.bu_balance)
+  const nairaLedger = nairaFromWalletRow(row)
   return {
     id: asString(row.id, userId),
     user_id: userId,

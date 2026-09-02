@@ -5,6 +5,8 @@ import { ticketQrPayload } from '@/lib/tickets/qr-generator'
 import { enqueueMerchantWebhook } from '@/lib/webhooks/merchant'
 import { sendTicketEmail } from '@/lib/email/tickets'
 import { normalizePhone } from '@/lib/phone'
+import { parseEventFormDetails } from '@/lib/events/event-details'
+import { creditTicketSaleShares } from '@/lib/sales/credits'
 import type { EventRecord, GatewayMerchant, Payment, TicketRecord, TicketTier } from '@/lib/types/database'
 
 async function uniqueCheckinCode(admin: ReturnType<typeof createAdminClient>): Promise<string> {
@@ -153,6 +155,25 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
     const { data: event } = await admin.from('events').select('*').eq('id', eventId).maybeSingle()
     const { data: tiers } = await admin.from('ticket_tiers').select('*').eq('event_id', eventId)
     const soldOut = ((tiers as TicketTier[]) ?? []).every((tier) => tier.quantity_sold >= tier.quantity_total)
+    const eventRow = (event as Record<string, unknown> | null) ?? null
+    const organiserId = String(eventRow?.organizer_id || eventRow?.celebrant_id || '')
+    const extra = eventRow ? parseEventFormDetails(eventRow) : null
+    const ticketNaira = paidTickets.reduce((sum, ticket) => sum + Number(ticket.amount_paid || 0), 0)
+    if (organiserId && ticketNaira > 0) {
+      try {
+        await creditTicketSaleShares({
+          reference,
+          eventId,
+          organiserUserId: organiserId,
+          ticketNaira,
+          affiliateEnabled: Boolean(extra?.affiliate_enabled),
+          affiliateCommissionPct: extra?.affiliate_commission_pct ?? 0,
+          affiliateCode: typeof meta.affiliate_code === 'string' ? meta.affiliate_code : null,
+        })
+      } catch (error) {
+        console.error('creditTicketSaleShares after fulfill', error)
+      }
+    }
 
     if (buyerUserId || phoneE164) {
       let inviteUpdate = admin

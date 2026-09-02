@@ -16,6 +16,7 @@ interface Transaction {
   type: 'topup' | 'purchase' | 'withdrawal' | 'bu_transfer' | 'ticket_purchase'
   amount: number
   date: string
+  createdAt: number
   description: string
   status: 'completed' | 'pending' | 'failed'
 }
@@ -37,14 +38,37 @@ export default function History() {
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        const next = txs.map((tx) => ({
-          id: String(tx.id),
-          type: String(tx.type ?? 'bu_transfer') as Transaction['type'],
-          amount: Number(tx.amount ?? 0),
-          date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-          description: String(tx.description ?? 'ɃU movement'),
-          status: 'completed' as const,
-        }))
+        if (!json.status) {
+          setReady(true)
+          return
+        }
+        const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
+        const next = txs.map((tx) => {
+          const raw = String(tx.type ?? 'bu_transfer')
+          const type: Transaction['type'] =
+            raw === 'organiser_sale' ||
+            raw === 'affiliate_commission' ||
+            raw === 'deposit' ||
+            raw === 'topup' ||
+            raw === 'spray_credit' ||
+            raw === 'refund'
+              ? 'topup'
+              : raw === 'withdrawal'
+                ? 'withdrawal'
+                : raw === 'ticket_purchase' || raw === 'purchase'
+                  ? 'purchase'
+                  : 'bu_transfer'
+          return {
+            id: String(tx.id),
+            type,
+            amount: Number(tx.amount ?? 0),
+            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+            createdAt: new Date(String(tx.created_at ?? '')).getTime() || 0,
+            description: String(tx.description ?? 'ɃU movement'),
+            status: 'completed' as const,
+          }
+        })
+        next.sort((a, b) => b.createdAt - a.createdAt)
         setTransactions(next)
         setReady(true)
         writeSessionSnapshot('bu_history', {
@@ -60,10 +84,12 @@ export default function History() {
         const json = await res.json()
         if (!json.status) return
         const list = (json.data ?? []) as HistoryTicket[]
-        const past = list.filter(
-          (ticket) =>
-            isEventPast(ticket.event) && ticket.status !== 'refunded' && ticket.status !== 'cancelled',
-        )
+        const past = list
+          .filter(
+            (ticket) =>
+              isEventPast(ticket.event) && ticket.status !== 'refunded' && ticket.status !== 'cancelled',
+          )
+          .sort((a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''))
         setPastTickets(past)
         setReady(true)
         writeSessionSnapshot('bu_history', {
@@ -76,9 +102,9 @@ export default function History() {
       .catch(() => setReady(true))
   }, [])
 
-  const filteredTransactions = filter === 'all'
-    ? transactions
-    : transactions.filter((tx) => tx.type === filter)
+  const filteredTransactions = (filter === 'all' ? transactions : transactions.filter((tx) => tx.type === filter))
+    .slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 
   const getTransactionIcon = (type: string) => {
     return type === 'topup' || type === 'refund' || type === 'bu_transfer' || type === 'purchase'
@@ -97,28 +123,8 @@ export default function History() {
       <div className="px-4">
         <h2 className="text-xl font-bold mb-4">History</h2>
 
-        <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Events you attended</h3>
-        <div className="mb-8 space-y-3">
-          {pastTickets.length === 0 ? (
-            ready ? (
-              <Card className="border-border/50 bg-card/50 p-6 text-center">
-                <p className="text-sm text-muted-foreground">No past events yet. After a party date passes, paid tickets move here.</p>
-              </Card>
-            ) : null
-          ) : (
-            pastTickets.map((ticket) => (
-              <TicketFeedbackForm
-                key={ticket.id}
-                ticket={ticket}
-                onSaved={(updated) =>
-                  setPastTickets((list) => list.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)))
-                }
-              />
-            ))
-          )}
-        </div>
-
         <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Transaction history</h3>
+        <p className="mb-3 text-xs text-muted-foreground">Newest first. Scroll down for older movements.</p>
 
         <div className="flex gap-2 overflow-x-auto mb-4 pb-2">
           {[
@@ -189,6 +195,27 @@ export default function History() {
                   </span>
                 </div>
               </Card>
+            ))
+          )}
+        </div>
+
+        <h3 className="mb-3 mt-10 text-sm font-semibold text-muted-foreground">Events you attended</h3>
+        <div className="mb-8 space-y-3">
+          {pastTickets.length === 0 ? (
+            ready ? (
+              <Card className="border-border/50 bg-card/50 p-6 text-center">
+                <p className="text-sm text-muted-foreground">No past events yet. After a party date passes, paid tickets move here.</p>
+              </Card>
+            ) : null
+          ) : (
+            pastTickets.map((ticket) => (
+              <TicketFeedbackForm
+                key={ticket.id}
+                ticket={ticket}
+                onSaved={(updated) =>
+                  setPastTickets((list) => list.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)))
+                }
+              />
             ))
           )}
         </div>

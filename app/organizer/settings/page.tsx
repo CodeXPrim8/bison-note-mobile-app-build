@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -66,6 +67,20 @@ export default function SettingsPage() {
         Same ɃU account as the mobile app. Sign in with your phone number (ɃU ID) and PIN.
         You can add, change, or remove the email used for receipts and Fund Wallet.
       </p>
+      <Card className="mt-6 space-y-3 p-6">
+        <p className="font-semibold">Roles on this account</p>
+        <p className="text-sm text-muted-foreground">
+          Organiser and affiliate are registrations on this ɃU ID. Money never moves to a different user.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/organizer/events/create">Create events as organiser</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/affiliate">Open affiliate desk</Link>
+          </Button>
+        </div>
+      </Card>
       <Card className="mt-6 space-y-3 p-6">
         <Input placeholder="Display name" value={name} onChange={(e) => setName(e.target.value)} />
         <Input
