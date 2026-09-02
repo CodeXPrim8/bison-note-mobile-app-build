@@ -1,12 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ORGANIZER_NAV, organizerCurrentLabel, organizerNavActive } from '@/lib/organizer-nav'
+import { MobileNavDrawer } from '@/components/web/mobile-nav-drawer'
 import { cn } from '@/lib/utils'
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
@@ -35,7 +32,6 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function OrganizerNav() {
   const pathname = usePathname()
-  const [open, setOpen] = useState(false)
   const current = organizerCurrentLabel(pathname)
 
   return (
@@ -52,22 +48,9 @@ export function OrganizerNav() {
           ɃU Organiser
         </Link>
         <p className="min-w-0 truncate text-sm text-muted-foreground">{current}</p>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2">
-              <Menu className="h-4 w-4" />
-              Menu
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-[min(20rem,88vw)] bg-background p-0">
-            <SheetHeader className="border-b border-border px-4 py-4 text-left">
-              <SheetTitle className="text-primary">ɃU Organiser</SheetTitle>
-            </SheetHeader>
-            <div className="p-3">
-              <NavLinks onNavigate={() => setOpen(false)} />
-            </div>
-          </SheetContent>
-        </Sheet>
+        <MobileNavDrawer id="organizer-mobile-nav" title="ɃU Organiser">
+          {(close) => <NavLinks onNavigate={close} />}
+        </MobileNavDrawer>
       </header>
     </>
   )
