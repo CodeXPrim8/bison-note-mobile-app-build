@@ -27,12 +27,14 @@ export default function GuestsPage({ params }: { params: Promise<{ id: string }>
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setInvites(json.data)
+        else setInvites([])
       })
       .catch(() => undefined)
     fetch(`/api/events/${id}/attendees`)
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setTickets(json.data.tickets ?? [])
+        else setTickets([])
       })
       .catch(() => undefined)
   }

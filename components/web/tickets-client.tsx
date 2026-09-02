@@ -33,10 +33,8 @@ export default function TicketsClient() {
         if (cancelled) return
         setLoaded(true)
         if (!json.status) {
-          setTickets((current) => {
-            if (!current.length) setMessage(json.message ?? 'Sign in to see your tickets.')
-            return current
-          })
+          setTickets([])
+          setMessage(json.message ?? 'Sign in to see your tickets.')
           return
         }
         const list = (json.data ?? []) as TicketRow[]

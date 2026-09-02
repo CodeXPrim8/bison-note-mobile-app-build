@@ -1,34 +1,35 @@
 import { authenticateMerchant } from '@/lib/api/gateway-auth'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { ApiError, handleRouteError, successResponse } from '@/lib/api/errors'
-import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
+import { handleRouteError, successResponse } from '@/lib/api/errors'
+import { assertMerchantOwnsEvent } from '@/lib/gateway/merchant'
+import { fetchTicketsForEvents, liveRemaining } from '@/lib/events/live'
+import { parseLiveTierKey } from '@/lib/events/ticket-types'
+import { applyGatewayCors, gatewayOptions } from '@/lib/gateway/initialize'
+
+export async function OPTIONS(request: Request) {
+  return gatewayOptions(request)
+}
 
 export async function GET(request: Request, context: { params: Promise<{ event_id: string }> }) {
   try {
     const merchant = await authenticateMerchant(request)
     const { event_id } = await context.params
-    const admin = createAdminClient()
-    const { data: event } = await admin.from('events').select('*').eq('id', event_id).maybeSingle()
-    if (!event || (event as EventRecord).merchant_id !== merchant.id) {
-      throw new ApiError(404, 'NOT_FOUND', 'Event not found')
-    }
-    const [{ data: tiers }, { data: tickets }] = await Promise.all([
-      admin.from('ticket_tiers').select('*').eq('event_id', event_id),
-      admin.from('tickets').select('*').eq('event_id', event_id).in('status', ['paid', 'checked_in']),
-    ])
-    const paid = (tickets as TicketRecord[]) ?? []
-    return successResponse({
-      event_id,
+    const packed = await assertMerchantOwnsEvent(merchant, event_id)
+    const tickets = await fetchTicketsForEvents([packed.id])
+    const paid = tickets.filter((ticket) => ticket.status !== 'cancelled' && ticket.status !== 'refunded')
+    const response = successResponse({
+      event_id: packed.id,
       tickets_sold: paid.length,
-      revenue: paid.reduce((sum, t) => sum + Number(t.amount_paid), 0),
-      checked_in: paid.filter((t) => t.status === 'checked_in').length,
-      tiers: ((tiers as TicketTier[]) ?? []).map((tier) => ({
+      revenue: paid.reduce((sum, ticket) => sum + Number(ticket.amount_paid), 0),
+      checked_in: paid.filter((ticket) => ticket.status === 'checked_in').length,
+      ticket_types: packed.ticket_tiers.map((tier) => ({
         id: tier.id,
+        ticket_type: parseLiveTierKey(tier.id),
         name: tier.name,
-        sold: tier.quantity_sold,
-        remaining: tier.quantity_total - tier.quantity_sold,
+        sold: Number(tier.quantity_sold),
+        remaining: liveRemaining(tier),
       })),
     })
+    return applyGatewayCors(response, request, merchant)
   } catch (error) {
     return handleRouteError(error)
   }

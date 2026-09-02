@@ -87,10 +87,14 @@ export function getPaystackWebhookSecret(): string {
   return optional('PAYSTACK_WEBHOOK_SECRET') ?? getPaystackSecret()
 }
 
+export function isResendConfigured(): boolean {
+  return Boolean(optional('RESEND_API_KEY'))
+}
+
 export function getResendConfig() {
   return {
     apiKey: optional('RESEND_API_KEY'),
-    from: optional('RESEND_FROM') ?? 'Bison Note <tickets@bu.app>',
+    from: optional('RESEND_FROM') ?? 'ɃU <beth.t@example.com>',
   }
 }
 

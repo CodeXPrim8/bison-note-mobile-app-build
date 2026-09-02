@@ -9,7 +9,7 @@ import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
-import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import { readSessionSnapshot, writeSessionSnapshot, bindAccountSnapshots } from '@/lib/session-snapshot'
 
 interface Transaction {
   id: string
@@ -28,78 +28,90 @@ interface HistoryTicket extends TicketRecord {
 }
 
 export default function History() {
-  const cached = readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
   const [filter, setFilter] = useState<'all' | 'topup' | 'purchase' | 'withdrawal' | 'bu_transfer'>('all')
-  const [transactions, setTransactions] = useState<Transaction[]>(cached?.transactions ?? [])
-  const [pastTickets, setPastTickets] = useState<HistoryTicket[]>(cached?.pastTickets ?? [])
-  const [ready, setReady] = useState(Boolean(cached))
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [pastTickets, setPastTickets] = useState<HistoryTicket[]>([])
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    fetch('/api/wallet', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        if (!json.status) {
+    let cancelled = false
+    async function load() {
+      try {
+        const meRes = await fetch('/api/me', { credentials: 'include' })
+        const me = await meRes.json()
+        const userId = me.status ? String(me.data?.user?.id || '') : ''
+        bindAccountSnapshots(userId || null)
+        if (cancelled) return
+        if (!userId) {
+          setTransactions([])
+          setPastTickets([])
           setReady(true)
           return
         }
-        const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
-        const next = txs.map((tx) => {
-          const raw = String(tx.type ?? 'bu_transfer')
-          const type: Transaction['type'] =
-            raw === 'organiser_sale' ||
-            raw === 'affiliate_commission' ||
-            raw === 'deposit' ||
-            raw === 'topup' ||
-            raw === 'spray_credit' ||
-            raw === 'refund'
-              ? 'topup'
-              : raw === 'withdrawal'
-                ? 'withdrawal'
-                : raw === 'ticket_purchase' || raw === 'purchase'
-                  ? 'purchase'
-                  : 'bu_transfer'
-          return {
-            id: String(tx.id),
-            type,
-            amount: Number(tx.amount ?? 0),
-            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-            createdAt: new Date(String(tx.created_at ?? '')).getTime() || 0,
-            description: String(tx.description ?? 'ɃU movement'),
-            status: 'completed' as const,
-          }
-        })
-        next.sort((a, b) => b.createdAt - a.createdAt)
-        setTransactions(next)
-        setReady(true)
-        writeSessionSnapshot('bu_history', {
-          transactions: next,
-          pastTickets:
-            readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
-              ?.pastTickets ?? [],
-        })
-      })
-      .catch(() => setReady(true))
-    fetch('/api/tickets/mine', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        if (!json.status) return
-        const list = (json.data ?? []) as HistoryTicket[]
-        const past = list
-          .filter(
-            (ticket) =>
-              isEventPast(ticket.event) && ticket.status !== 'refunded' && ticket.status !== 'cancelled',
-          )
-          .sort((a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''))
+        const cached = readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
+        if (cached) {
+          setTransactions(cached.transactions ?? [])
+          setPastTickets(cached.pastTickets ?? [])
+        }
+
+        const [walletRes, ticketsRes] = await Promise.all([
+          fetch('/api/wallet', { credentials: 'include' }),
+          fetch('/api/tickets/mine', { credentials: 'include' }),
+        ])
+        const walletJson = await walletRes.json()
+        const ticketsJson = await ticketsRes.json()
+        if (cancelled) return
+
+        const nextTx: Transaction[] = walletJson.status
+          ? ((walletJson.data?.transactions ?? []) as Array<Record<string, unknown>>).map((tx) => {
+              const raw = String(tx.type ?? 'bu_transfer')
+              const type: Transaction['type'] =
+                raw === 'organiser_sale' ||
+                raw === 'affiliate_commission' ||
+                raw === 'deposit' ||
+                raw === 'topup' ||
+                raw === 'spray_credit' ||
+                raw === 'refund'
+                  ? 'topup'
+                  : raw === 'withdrawal'
+                    ? 'withdrawal'
+                    : raw === 'ticket_purchase' || raw === 'purchase'
+                      ? 'purchase'
+                      : 'bu_transfer'
+              return {
+                id: String(tx.id),
+                type,
+                amount: Number(tx.amount ?? 0),
+                date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+                createdAt: new Date(String(tx.created_at ?? '')).getTime() || 0,
+                description: String(tx.description ?? 'ɃU movement'),
+                status: 'completed' as const,
+              }
+            })
+          : []
+        nextTx.sort((a, b) => b.createdAt - a.createdAt)
+
+        const past = ticketsJson.status
+          ? ((ticketsJson.data ?? []) as HistoryTicket[])
+              .filter(
+                (ticket) =>
+                  isEventPast(ticket.event) && ticket.status !== 'refunded' && ticket.status !== 'cancelled',
+              )
+              .sort((a, b) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''))
+          : []
+
+        setTransactions(nextTx)
         setPastTickets(past)
         setReady(true)
-        writeSessionSnapshot('bu_history', {
-          transactions:
-            readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
-              ?.transactions ?? [],
-          pastTickets: past,
-        })
-      })
-      .catch(() => setReady(true))
+        writeSessionSnapshot('bu_history', { transactions: nextTx, pastTickets: past })
+      } catch {
+        if (!cancelled) setReady(true)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const filteredTransactions = (filter === 'all' ? transactions : transactions.filter((tx) => tx.type === filter))

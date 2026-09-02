@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { initializeTicketSchema } from '@/lib/schemas/ticket'
 import { initializeTicketPurchase } from '@/lib/payments/initialize-ticket'
-import { handleRouteError, successResponse } from '@/lib/api/errors'
+import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { clientIp, rateLimit } from '@/lib/api/rate-limit'
@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
 
     const user = await requireUser()
     const session = await readBuSession()
+    if (!body.ticket_tier_id) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Pass ticket_tier_id')
+    }
     const result = await initializeTicketPurchase({
       email: body.email,
       amount: body.amount,

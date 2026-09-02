@@ -23,6 +23,7 @@ export async function GET() {
     const wallet = await fetchLiveWallet(liveId)
     const transactions = await listWalletHistory(liveId, 200)
     return successResponse({
+      user_id: liveId,
       wallet,
       rates: publicBuRates(),
       transactions,

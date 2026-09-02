@@ -21,6 +21,7 @@ export default function EventTicketsPage({ params }: { params: Promise<{ id: str
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setTickets(json.data.tickets ?? [])
+        else setTickets([])
       })
       .catch(() => undefined)
   }, [id])

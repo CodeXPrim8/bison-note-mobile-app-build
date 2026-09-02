@@ -46,9 +46,13 @@ export default function EventDashboardPage({ params }: { params: Promise<{ id: s
           return
         }
         setError(json.message ?? 'Could not load this event')
+        setData(null)
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load this event')
+        if (!cancelled) {
+          setError('Could not load this event')
+          setData(null)
+        }
       })
     return () => {
       cancelled = true

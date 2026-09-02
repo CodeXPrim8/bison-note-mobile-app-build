@@ -21,7 +21,7 @@ interface ReceivedTransfer {
 }
 
 export default function ReceiveBU() {
-  const { displayName: accountName } = useAccount()
+  const { displayName: accountName, userId } = useAccount()
   const [mode, setMode] = useState<'menu' | 'qr' | 'history'>('menu')
   const [qrValue, setQrValue] = useState('')
   const [qrImage, setQrImage] = useState('')
@@ -34,6 +34,13 @@ export default function ReceiveBU() {
   }, [accountName])
 
   useEffect(() => {
+    if (!userId) {
+      setQrValue('')
+      setQrImage('')
+      setBuIdLabel('')
+      setReceivedTransfers([])
+      return
+    }
     fetch('/api/me', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -58,6 +65,10 @@ export default function ReceiveBU() {
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setReceivedTransfers([])
+          return
+        }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setReceivedTransfers(
           txs.map((tx) => ({
@@ -70,8 +81,8 @@ export default function ReceiveBU() {
           })),
         )
       })
-      .catch(() => undefined)
-  }, [])
+      .catch(() => setReceivedTransfers([]))
+  }, [userId, accountName])
 
   const handleCopyQR = () => {
     if (qrValue) void navigator.clipboard.writeText(qrValue)

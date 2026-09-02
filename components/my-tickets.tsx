@@ -8,7 +8,7 @@ import { ticketQrScanString } from '@/lib/tickets/qr-generator'
 import { TicketAdmitCard } from '@/components/ticket-admit'
 import { TicketPass } from '@/components/ticket-pass'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
-import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import { readSessionSnapshot, writeSessionSnapshot, bindAccountSnapshots } from '@/lib/session-snapshot'
 
 interface TicketRow extends TicketRecord {
   event: EventRecord | null
@@ -23,26 +23,34 @@ export default function MyTickets({
   onNavigate?: (page: string) => void
   ticketId?: string
 }) {
-  const cached = readSessionSnapshot<TicketRow[]>('bu_my_tickets')
-  const [tickets, setTickets] = useState<TicketRow[]>(cached ?? [])
+  const [tickets, setTickets] = useState<TicketRow[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [selected, setSelected] = useState<TicketRow | null>(null)
-  const [loaded, setLoaded] = useState(Boolean(cached))
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       try {
+        const meRes = await fetch('/api/me', { credentials: 'include' })
+        const me = await meRes.json()
+        const userId = me.status ? String(me.data?.user?.id || '') : ''
+        bindAccountSnapshots(userId || null)
+        if (!cancelled && userId) {
+          const cached = readSessionSnapshot<TicketRow[]>('bu_my_tickets')
+          if (cached?.length) {
+            setTickets(cached)
+            setLoaded(true)
+          }
+        }
         const res = await fetch('/api/tickets/mine', { credentials: 'include' })
         const json = await res.json()
         if (cancelled) return
         setLoaded(true)
         if (!json.status) {
-          setTickets((current) => {
-            if (!current.length) setMessage(json.message ?? 'Sign in to see tickets.')
-            return current
-          })
+          setTickets([])
+          setMessage(json.message ?? 'Sign in to see tickets.')
           return
         }
         const list = (json.data ?? []) as TicketRow[]

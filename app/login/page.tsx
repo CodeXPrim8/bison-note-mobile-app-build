@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { safeNextPath } from '@/lib/auth/paths'
 import { loadDraft, saveDraft } from '@/lib/forms/draft'
+import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 const LOGIN_DRAFT_KEY = 'bu-login-draft'
 
@@ -84,6 +85,7 @@ export default function LoginPage() {
       }
       setMessage(json.message || (res.ok ? 'Signed in' : 'Could not sign in'))
       if (json.status) {
+        clearAccountSnapshots()
         window.location.assign(nextPath)
       }
     } catch {

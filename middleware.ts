@@ -45,9 +45,10 @@ export async function middleware(request: NextRequest) {
     }
 
     const isRegister = pathname === '/api/v1/gateway/merchants/register'
-    if (request.method !== 'OPTIONS' && !isRegister && !request.headers.get('authorization')) {
+    const isCheckout = pathname.startsWith('/api/v1/gateway/checkout')
+    if (request.method !== 'OPTIONS' && !isRegister && !request.headers.get('authorization') && !request.headers.get('x-bu-key')) {
       return NextResponse.json(
-        { status: false, message: 'Missing Bearer secret_key', code: 'UNAUTHORIZED' },
+        { status: false, message: isCheckout ? 'Missing Bearer public_key' : 'Missing Bearer secret_key', code: 'UNAUTHORIZED' },
         { status: 401 },
       )
     }

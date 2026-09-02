@@ -27,6 +27,10 @@ export default function VendorPOS() {
     fetch('/api/events/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setEvents([])
+          return
+        }
         const list = (json.data ?? []) as Array<Record<string, unknown>>
         setEvents(
           list.map((event) => ({

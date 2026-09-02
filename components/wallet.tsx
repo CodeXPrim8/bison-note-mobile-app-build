@@ -35,7 +35,7 @@ interface WalletProps {
 }
 
 export default function Wallet({ onNavigate }: WalletProps = {}) {
-  const { buBalance, nairaBalance, applyWallet } = useAccount()
+  const { buBalance, nairaBalance, applyWallet, userId } = useAccount()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [email, setEmail] = useState('')
   const [showTopup, setShowTopup] = useState(false)
@@ -44,6 +44,11 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    if (!userId) {
+      setTransactions([])
+      setEmail('')
+      return
+    }
     fetch('/api/me', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -55,7 +60,10 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (!json.status) return
+        if (!json.status) {
+          setTransactions([])
+          return
+        }
         if (json.data?.wallet) applyWallet(json.data.wallet)
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransactions(
@@ -70,8 +78,8 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         )
       })
-      .catch(() => undefined)
-  }, [])
+      .catch(() => setTransactions([]))
+  }, [userId, applyWallet])
 
   async function handleTopup() {
     const bu = Number(topupBu)

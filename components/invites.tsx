@@ -5,33 +5,46 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { EventInvitation, EventRecord } from '@/lib/types/database'
 import { formatEventDate } from '@/lib/datetime'
-import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import { useAccount } from '@/components/account-store'
+import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface InviteRow extends EventInvitation {
   event: EventRecord | null
 }
 
 export default function Invites({ onNavigate }: { onNavigate?: (page: string, data?: unknown) => void }) {
-  const cached = readSessionSnapshot<InviteRow[]>('bu_invites')
-  const [invites, setInvites] = useState<InviteRow[]>(cached ?? [])
+  const { userId } = useAccount()
+  const [invites, setInvites] = useState<InviteRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
 
   function load() {
+    bindAccountSnapshots(userId || null)
+    if (!userId) {
+      setInvites([])
+      return
+    }
+    const cached = readSessionSnapshot<InviteRow[]>('bu_invites')
+    if (cached) setInvites(cached)
     fetch('/api/invites')
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {
+          setInvites([])
           setMessage(json.message ?? 'Sign in to see private invitations.')
           return
         }
         const next = (json.data ?? []) as InviteRow[]
         setInvites(next)
+        setMessage(null)
         writeSessionSnapshot('bu_invites', next)
       })
-      .catch(() => setMessage('Could not load invites'))
+      .catch(() => {
+        setInvites([])
+        setMessage('Could not load invites')
+      })
   }
 
-  useEffect(load, [])
+  useEffect(load, [userId])
 
   async function respond(id: string, status: 'accepted' | 'declined') {
     await fetch('/api/invites', {

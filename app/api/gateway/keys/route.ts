@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import { requireUser } from '@/lib/api/session'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { hashSecretKey } from '@/lib/api/gateway-auth'
 import { uniqueSecretKey } from '@/lib/tickets/ids'
+import { resolveLiveCelebrantId } from '@/lib/events/live'
+import { readBuSession } from '@/lib/auth/bu-session'
+import { gatewayTableError } from '@/lib/gateway/merchant'
+import { GATEWAY_SQL_HINT } from '@/lib/gateway/sql'
 
 const schema = z.object({
   merchant_id: z.string().uuid(),
@@ -12,14 +16,23 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
+    const session = await readBuSession()
+    const liveId =
+      (await resolveLiveCelebrantId({
+        id: user.id,
+        email: user.email,
+        phone: session?.phone_e164 || session?.phone || null,
+      })) ?? user.id
     const body = schema.parse(await request.json())
-    const admin = createAdminClient()
-    const { data: merchant } = await admin
+    const admin = tryCreateAdminClient()
+    if (!admin) throw new ApiError(503, 'GATEWAY_UNAVAILABLE', GATEWAY_SQL_HINT)
+    const { data: merchant, error } = await admin
       .from('gateway_merchants')
       .select('id, user_id')
       .eq('id', body.merchant_id)
       .maybeSingle()
-    if (!merchant || merchant.user_id !== user.id) {
+    gatewayTableError(error)
+    if (!merchant || (merchant.user_id !== liveId && merchant.user_id !== user.id)) {
       throw new ApiError(403, 'FORBIDDEN', 'Not your merchant account')
     }
     const live = process.env.NODE_ENV === 'production'

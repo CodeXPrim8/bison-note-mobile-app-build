@@ -8,7 +8,7 @@ import Events from '@/components/events'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
-import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface VendorStats {
   totalSales: number
@@ -34,26 +34,55 @@ type VendorCache = {
   sales: Sale[]
 }
 
+const emptyStats: VendorStats = {
+  totalSales: 0,
+  activeSessions: 0,
+  totalBUInventory: 0,
+  nairaAvailable: 0,
+  todayEarnings: 0,
+}
+
 export default function VendorDashboard() {
-  const { buBalance, nairaBalance } = useAccount()
-  const cached = readSessionSnapshot<VendorCache>(CACHE_KEY)
-  const [stats, setStats] = useState<VendorStats>(
-    cached?.stats ?? {
-      totalSales: 0,
-      activeSessions: 0,
-      totalBUInventory: 0,
-      nairaAvailable: 0,
-      todayEarnings: 0,
-    },
-  )
-  const [sales, setSales] = useState<Sale[]>(cached?.sales ?? [])
-  const [statsReady, setStatsReady] = useState(Boolean(cached))
+  const { buBalance, nairaBalance, userId } = useAccount()
+  const [stats, setStats] = useState<VendorStats>(emptyStats)
+  const [sales, setSales] = useState<Sale[]>([])
+  const [statsReady, setStatsReady] = useState(false)
   const [currentView, setCurrentView] = useState<'overview' | 'sales' | 'inventory' | 'events'>('overview')
 
   useEffect(() => {
+    bindAccountSnapshots(userId || null)
+    if (!userId) {
+      setStats(emptyStats)
+      setSales([])
+      setStatsReady(false)
+      return
+    }
+    const cached = readSessionSnapshot<VendorCache>(CACHE_KEY)
+    const cache: VendorCache = {
+      stats: cached?.stats ?? { ...emptyStats },
+      sales: cached?.sales ?? [],
+    }
+    if (cached) {
+      setStats(cache.stats)
+      setSales(cache.sales)
+      setStatsReady(true)
+    }
+    function persist(partial: Partial<VendorCache>) {
+      if (partial.stats !== undefined) cache.stats = partial.stats
+      if (partial.sales !== undefined) cache.sales = partial.sales
+      writeSessionSnapshot(CACHE_KEY, cache)
+    }
     fetch('/api/events/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setSales([])
+          const next = { ...cache.stats, totalSales: 0, todayEarnings: 0, activeSessions: 0 }
+          setStats(next)
+          persist({ stats: next, sales: [] })
+          setStatsReady(true)
+          return
+        }
         const list = (json.data ?? []) as Array<Record<string, unknown>>
         const received = list.reduce((sum, event) => sum + Number(event.spray_budget_bu ?? 0), 0)
         const nextSales = list.map((event) => ({
@@ -64,40 +93,36 @@ export default function VendorDashboard() {
           eventName: String(event.title ?? event.name ?? 'Event'),
           status: 'completed' as const,
         }))
-        setStats((prev) => {
-          const next = {
-            ...prev,
-            totalSales: received,
-            todayEarnings: received,
-            activeSessions: list.length,
-          }
-          writeSessionSnapshot(CACHE_KEY, { stats: next, sales: nextSales })
-          return next
-        })
+        const next = {
+          ...cache.stats,
+          totalSales: received,
+          todayEarnings: received,
+          activeSessions: list.length,
+        }
+        setStats(next)
         setSales(nextSales)
+        persist({ stats: next, sales: nextSales })
         setStatsReady(true)
       })
-      .catch(() => setStatsReady(true))
+      .catch(() => {
+        setSales([])
+        persist({ sales: [] })
+        setStatsReady(true)
+      })
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.data?.wallet) {
-          setStats((prev) => {
-            const next = {
-              ...prev,
-              totalBUInventory: Number(json.data.wallet.bu_balance ?? 0),
-              nairaAvailable: Number(json.data.wallet.naira_available ?? 0),
-            }
-            writeSessionSnapshot(CACHE_KEY, {
-              stats: next,
-              sales: readSessionSnapshot<VendorCache>(CACHE_KEY)?.sales ?? [],
-            })
-            return next
-          })
+        if (!json.status || !json.data?.wallet) return
+        const next = {
+          ...cache.stats,
+          totalBUInventory: Number(json.data.wallet.bu_balance ?? 0),
+          nairaAvailable: Number(json.data.wallet.naira_available ?? 0),
         }
+        setStats(next)
+        persist({ stats: next })
       })
       .catch(() => undefined)
-  }, [])
+  }, [userId])
 
   return (
     <div className="space-y-6 pb-24 pt-4">

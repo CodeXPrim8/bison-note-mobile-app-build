@@ -218,11 +218,13 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
       }
     }
 
-    void sendTicketEmail({
+    await sendTicketEmail({
       to: payment.buyer_email,
       buyerName: payment.buyer_name ?? 'Guest',
-      eventTitle: (event as EventRecord | null)?.title ?? 'BU Event',
+      eventTitle: (event as EventRecord | null)?.title ?? 'ɃU Event',
       tickets: paidTickets,
+      when: (event as EventRecord | null)?.start_time,
+      venue: (event as EventRecord | null)?.venue_name,
     }).catch((err) => console.error('ticket email failed', err))
   }
 

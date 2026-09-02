@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AffiliateCapture } from '@/components/web/affiliate-capture'
 import { AdSlot } from '@/components/web/ad-slot'
+import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 interface MeResponse {
   status: boolean
@@ -35,6 +36,7 @@ export function SiteHeader() {
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    clearAccountSnapshots()
     window.location.href = '/'
   }
 

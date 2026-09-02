@@ -6,7 +6,7 @@ import { rateLimit, clientIp } from '@/lib/api/rate-limit'
 import { lookupLiveUser } from '@/lib/events/live'
 
 const schema = z.object({
-  bu_id: z.string().min(7).max(32),
+  bu_id: z.string().min(7).max(40),
 })
 
 /** Exact ɃU ID lookup against the live users table. Never returns PIN data. */
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const buId = normalizePhone(body.bu_id)
     if (!buId) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID (phone number)')
 
-    const found = await lookupLiveUser(body.bu_id)
+    const found = await lookupLiveUser(body.bu_id.trim())
     if (!found) {
       return successResponse({ exists: false, bu_id: buId })
     }

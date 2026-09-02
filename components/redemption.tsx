@@ -26,7 +26,7 @@ interface WithdrawalRequest {
 type BankOption = { name: string; code: string }
 
 export default function Redemption() {
-  const { applySpendBu, refreshWallet, buBalance } = useAccount()
+  const { applySpendBu, refreshWallet, buBalance, userId } = useAccount()
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [banks, setBanks] = useState<BankOption[]>(NGN_BANKS.map((bank) => ({ name: bank.name, code: bank.code })))
   const [showForm, setShowForm] = useState(false)
@@ -41,9 +41,16 @@ export default function Redemption() {
   })
 
   async function loadHistory() {
+    if (!userId) {
+      setWithdrawals([])
+      return
+    }
     const res = await fetch('/api/wallet/withdraw', { credentials: 'include' })
     const json = await res.json()
-    if (!json.status) return
+    if (!json.status) {
+      setWithdrawals([])
+      return
+    }
     setWithdrawals((json.data?.withdrawals ?? []) as WithdrawalRequest[])
     if (Array.isArray(json.data?.banks) && json.data.banks.length) {
       const next = json.data.banks as BankOption[]
@@ -57,9 +64,9 @@ export default function Redemption() {
   }
 
   useEffect(() => {
-    loadHistory().catch(() => undefined)
+    loadHistory().catch(() => setWithdrawals([]))
     void refreshWallet()
-  }, [refreshWallet])
+  }, [refreshWallet, userId])
 
   async function handleWithdraw() {
     if (!form.buAmount || !form.accountNumber || !form.accountName) return

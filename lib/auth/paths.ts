@@ -8,6 +8,7 @@ export function isPublicPagePath(pathname: string): boolean {
   if (pathname.startsWith('/t/')) return true
   if (pathname === '/gateway') return true
   if (pathname === '/gateway/docs') return true
+  if (pathname.startsWith('/g/')) return true
   if (
     pathname === '/icon' ||
     pathname === '/apple-icon' ||
@@ -30,6 +31,7 @@ export function isPublicApiPath(pathname: string, method: string): boolean {
   if (pathname === '/api/events' && method === 'GET') return true
   if (pathname.startsWith('/api/events/slug/') && method === 'GET') return true
   if (pathname === '/api/tickets/quote' && method === 'POST') return true
+  if (pathname.startsWith('/api/tickets/verify/') && method === 'GET') return true
   return false
 }
 

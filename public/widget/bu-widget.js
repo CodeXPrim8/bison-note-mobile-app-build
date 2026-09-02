@@ -9,15 +9,18 @@
   var script = currentScript();
   if (!script) return;
 
-  var eventSlug = script.getAttribute('data-event-slug') || script.getAttribute('data-event-id') || '';
-  var label = script.getAttribute('data-button-text') || 'Buy Tickets with ɃU';
+  var publicKey = script.getAttribute('data-public-key') || '';
+  var eventId =
+    script.getAttribute('data-event-id') || script.getAttribute('data-event-slug') || '';
+  var ticketType = script.getAttribute('data-ticket-type') || '';
+  var label = script.getAttribute('data-button-text') || 'Pay with ɃU';
   var origin = script.src.replace(/\/widget\/bu-widget\.js.*$/, '');
 
   var button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
   button.style.cssText =
-    'background:#9b1c31;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:600 14px/1 system-ui;cursor:pointer';
+    'background:#C41E3A;color:#fff;border:0;border-radius:12px;padding:12px 18px;font:600 14px/1 system-ui;cursor:pointer';
 
   var overlay = document.createElement('div');
   overlay.style.cssText =
@@ -28,8 +31,19 @@
     '<iframe title="BU tickets" style="width:100%;height:100%;border:0" allow="payment *"></iframe></div>';
 
   button.addEventListener('click', function () {
+    if (!publicKey || !eventId) {
+      window.alert('ɃU widget needs data-public-key and data-event-id');
+      return;
+    }
     var frame = overlay.querySelector('iframe');
-    if (frame) frame.src = origin + '/checkout/' + encodeURIComponent(eventSlug);
+    var url =
+      origin +
+      '/g/' +
+      encodeURIComponent(eventId) +
+      '?pk=' +
+      encodeURIComponent(publicKey);
+    if (ticketType) url += '&type=' + encodeURIComponent(ticketType);
+    if (frame) frame.src = url;
     overlay.style.display = 'flex';
   });
   overlay.addEventListener('click', function (e) {

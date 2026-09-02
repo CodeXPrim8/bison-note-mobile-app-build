@@ -29,9 +29,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [ticketsLoaded, setTicketsLoaded] = useState(false)
   const [invitesLoaded, setInvitesLoaded] = useState(false)
   const [eventsLoaded, setEventsLoaded] = useState(false)
-  const { greetingName, buBalance, nairaBalance } = useAccount()
+  const { greetingName, buBalance, nairaBalance, userId } = useAccount()
 
   useEffect(() => {
+    if (!userId) {
+      setInvites([])
+      setMyTickets([])
+      setInvitesLoaded(false)
+      setTicketsLoaded(false)
+      return
+    }
     fetch('/api/events', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -48,21 +55,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     fetch('/api/invites', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.status) setInvites((json.data ?? []).slice(0, 2))
+        if (!json.status) {
+          setInvites([])
+          return
+        }
+        setInvites((json.data ?? []).slice(0, 2))
       })
-      .catch(() => undefined)
+      .catch(() => setInvites([]))
       .finally(() => setInvitesLoaded(true))
     fetch('/api/tickets/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.status) {
-          const list = (json.data ?? []) as OwnedTicket[]
-          setMyTickets(list.filter((ticket) => isEventUpcoming(ticket.event)).slice(0, 4))
+        if (!json.status) {
+          setMyTickets([])
+          return
         }
+        const list = (json.data ?? []) as OwnedTicket[]
+        setMyTickets(list.filter((ticket) => isEventUpcoming(ticket.event)).slice(0, 4))
       })
-      .catch(() => undefined)
+      .catch(() => setMyTickets([]))
       .finally(() => setTicketsLoaded(true))
-  }, [])
+  }, [userId])
 
   return (
     <div className="space-y-6 pb-24">

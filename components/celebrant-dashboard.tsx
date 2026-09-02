@@ -7,7 +7,7 @@ import { ArrowDown, Banknote, TrendingUp, Calendar } from 'lucide-react'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain, BU_MIN_WITHDRAW } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
-import { readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 
 interface Event {
   id: string
@@ -44,29 +44,65 @@ function mapEvents(list: Array<Record<string, unknown>>): Event[] {
 }
 
 export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
-  const { greetingName } = useAccount()
-  const cached = readSessionSnapshot<CelebrantCache>(CACHE_KEY)
-  const [events, setEvents] = useState<Event[]>(cached?.events ?? [])
-  const [recentTransfers, setRecentTransfers] = useState<BUTransfer[]>(cached?.recentTransfers ?? [])
-  const [eventsReady, setEventsReady] = useState(Boolean(cached))
-  const [transfersReady, setTransfersReady] = useState(Boolean(cached))
+  const { greetingName, userId } = useAccount()
+  const [events, setEvents] = useState<Event[]>([])
+  const [recentTransfers, setRecentTransfers] = useState<BUTransfer[]>([])
+  const [eventsReady, setEventsReady] = useState(false)
+  const [transfersReady, setTransfersReady] = useState(false)
 
   useEffect(() => {
+    bindAccountSnapshots(userId || null)
+    if (!userId) {
+      setEvents([])
+      setRecentTransfers([])
+      setEventsReady(false)
+      setTransfersReady(false)
+      return
+    }
+    const cached = readSessionSnapshot<CelebrantCache>(CACHE_KEY)
+    const cache: CelebrantCache = {
+      events: cached?.events ?? [],
+      recentTransfers: cached?.recentTransfers ?? [],
+    }
+    if (cached) {
+      setEvents(cache.events)
+      setRecentTransfers(cache.recentTransfers)
+      setEventsReady(true)
+      setTransfersReady(true)
+    }
+    function persist(partial: Partial<CelebrantCache>) {
+      if (partial.events !== undefined) cache.events = partial.events
+      if (partial.recentTransfers !== undefined) cache.recentTransfers = partial.recentTransfers
+      writeSessionSnapshot(CACHE_KEY, cache)
+    }
     fetch('/api/events/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setEvents([])
+          persist({ events: [] })
+          setEventsReady(true)
+          return
+        }
         const next = mapEvents((json.data ?? []) as Array<Record<string, unknown>>)
         setEvents(next)
+        persist({ events: next })
         setEventsReady(true)
-        writeSessionSnapshot(CACHE_KEY, {
-          events: next,
-          recentTransfers: readSessionSnapshot<CelebrantCache>(CACHE_KEY)?.recentTransfers ?? [],
-        })
       })
-      .catch(() => setEventsReady(true))
+      .catch(() => {
+        setEvents([])
+        persist({ events: [] })
+        setEventsReady(true)
+      })
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setRecentTransfers([])
+          persist({ recentTransfers: [] })
+          setTransfersReady(true)
+          return
+        }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         const next = txs.slice(0, 8).map((tx) => ({
           id: String(tx.id),
@@ -77,14 +113,15 @@ export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page:
           timestamp: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
         }))
         setRecentTransfers(next)
+        persist({ recentTransfers: next })
         setTransfersReady(true)
-        writeSessionSnapshot(CACHE_KEY, {
-          events: readSessionSnapshot<CelebrantCache>(CACHE_KEY)?.events ?? [],
-          recentTransfers: next,
-        })
       })
-      .catch(() => setTransfersReady(true))
-  }, [])
+      .catch(() => {
+        setRecentTransfers([])
+        persist({ recentTransfers: [] })
+        setTransfersReady(true)
+      })
+  }, [userId])
 
   const totalBUReceived = events.reduce((sum, event) => sum + event.totalBUReceived, 0)
 

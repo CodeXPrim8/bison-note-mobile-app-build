@@ -1,6 +1,8 @@
-import { createAdminClient } from '@/lib/supabase/admin'
 import { ApiError } from '@/lib/api/errors'
 import { buFromNaira, getBuNairaValue } from '@/lib/bu-rate'
+import { tryCreateAdminClient } from '@/lib/supabase/admin'
+import { createDataClient } from '@/lib/supabase/data'
+import { moveLiveWallet } from '@/lib/wallet/move'
 
 export async function transferBu(input: {
   fromUserId: string
@@ -9,30 +11,32 @@ export async function transferBu(input: {
   eventId?: string
   isTip?: boolean
 }) {
-  const admin = createAdminClient()
-  const type = 'spray'
-  const bu = buFromNaira(input.amount)
-  const { error } = await admin.rpc('debit_wallet', {
-    p_user_id: input.fromUserId,
-    p_amount: input.amount,
-    p_type: type,
-    p_description: input.isTip ? 'Tip' : 'BU transfer',
-    p_counterparty: input.toUserId,
-    p_event_id: input.eventId ?? null,
-    p_metadata: { kind: input.isTip ? 'tip' : 'transfer', bu, naira: input.amount, value_rate: getBuNairaValue() },
-  })
-  if (error) {
-    if (error.message?.includes('INSUFFICIENT_FUNDS')) {
-      throw new ApiError(400, 'INSUFFICIENT_FUNDS', 'Not enough ɃU')
-    }
-    throw new ApiError(500, 'TRANSFER_FAILED', error.message)
+  if (input.fromUserId === input.toUserId) {
+    throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
   }
-  await admin.rpc('credit_wallet', {
-    p_user_id: input.toUserId,
-    p_amount: input.amount,
-    p_type: type,
-    p_description: input.isTip ? 'Tip received' : 'BU received',
-    p_event_id: input.eventId ?? null,
-    p_metadata: { from: input.fromUserId, bu, naira: input.amount, value_rate: getBuNairaValue() },
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const bu = buFromNaira(input.amount)
+  const meta = {
+    kind: input.isTip ? 'tip' : 'transfer',
+    bu,
+    naira: input.amount,
+    value_rate: getBuNairaValue(),
+    event_id: input.eventId ?? null,
+  }
+  await moveLiveWallet(db, {
+    userId: input.fromUserId,
+    naira: input.amount,
+    direction: 'debit',
+    type: 'bu_transfer',
+    description: input.isTip ? 'Tip' : 'BU transfer',
+    metadata: { ...meta, to: input.toUserId },
+  })
+  await moveLiveWallet(db, {
+    userId: input.toUserId,
+    naira: input.amount,
+    direction: 'credit',
+    type: 'bu_transfer',
+    description: input.isTip ? 'Tip received' : 'BU received',
+    metadata: { ...meta, from: input.fromUserId },
   })
 }

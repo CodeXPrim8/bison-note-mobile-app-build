@@ -46,10 +46,12 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
           setError(null)
           return
         }
+        setEvent(null)
         setError(json.message ?? 'Event not found or it is private')
       })
       .catch(() => {
         setLoading(false)
+        setEvent(null)
         setError('Could not load event')
       })
   }, [eventId])

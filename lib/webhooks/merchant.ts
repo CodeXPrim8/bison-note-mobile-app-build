@@ -21,7 +21,7 @@ export async function enqueueMerchantWebhook(
 ) {
   if (!merchant.webhook_url) return
   const admin = createAdminClient()
-  await admin.from('webhook_deliveries').insert({
+  const { error } = await admin.from('webhook_deliveries').insert({
     merchant_id: merchant.id,
     event_type: eventType,
     payload: { event: eventType, data: payload },
@@ -29,6 +29,23 @@ export async function enqueueMerchantWebhook(
     last_status: 'pending',
     next_retry_at: new Date().toISOString(),
   })
+  if (error) {
+    console.error('enqueueMerchantWebhook', error.message)
+  }
+}
+
+/** Queue then try to deliver immediately (Paystack-style), cron retries the rest. */
+export async function notifyMerchant(
+  merchant: Pick<GatewayMerchant, 'id' | 'webhook_url'>,
+  eventType: MerchantWebhookEvent,
+  payload: Record<string, unknown>,
+) {
+  await enqueueMerchantWebhook(merchant, eventType, payload)
+  try {
+    await deliverPendingWebhooks(8)
+  } catch (error) {
+    console.error('notifyMerchant deliver', error)
+  }
 }
 
 function backoffMs(attempts: number): number {

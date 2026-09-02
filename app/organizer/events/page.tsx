@@ -19,9 +19,15 @@ export default function OrganizerEventsPage() {
       .then(async (res) => {
         const json = await res.json()
         if (json.status) setEvents(json.data)
-        else setError(json.message)
+        else {
+          setEvents([])
+          setError(json.message)
+        }
       })
-      .catch(() => setError('Could not load events'))
+      .catch(() => {
+        setEvents([])
+        setError('Could not load events')
+      })
   }, [])
 
   return (

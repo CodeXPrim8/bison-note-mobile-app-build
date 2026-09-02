@@ -33,6 +33,18 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
               ? `Payment confirmed. Your ticket${count === 1 ? '' : 's'} for ${title} ${count === 1 ? 'is' : 'are'} ready.`
               : 'Payment confirmed. Your tickets are ready.',
           )
+          const callback = String(json.data?.callback_url || json.data?.payment?.callback_url || '')
+          if (callback.startsWith('http://') || callback.startsWith('https://')) {
+            try {
+              const next = new URL(callback)
+              next.searchParams.set('reference', reference)
+              next.searchParams.set('trxref', reference)
+              window.location.assign(next.toString())
+              return
+            } catch {
+              /* stay on ɃU confirmation */
+            }
+          }
         } else if (json.code === 'PAYMENT_PENDING') {
           setMessage('Payment is still pending. Complete Paystack checkout, then return here.')
         } else {

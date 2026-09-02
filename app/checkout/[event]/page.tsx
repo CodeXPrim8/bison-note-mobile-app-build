@@ -190,7 +190,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
             <label className="text-sm font-semibold">Quantity</label>
             <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value) || 1)} />
             <Input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input placeholder="Email — we send the ticket here" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Input placeholder="Phone / ɃU ID" value={phone} onChange={(e) => setPhone(e.target.value)} />
             {quote && (
               <div className="space-y-1 border-t border-border pt-4 text-sm">

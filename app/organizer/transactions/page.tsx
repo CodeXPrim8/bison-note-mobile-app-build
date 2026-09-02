@@ -30,14 +30,19 @@ export default function TransactionsPage() {
               (a: Payment, b: Payment) => Date.parse(b.created_at || '') - Date.parse(a.created_at || ''),
             ),
           )
+        } else {
+          setPayments([])
+          setError(json.message)
         }
-        else setError(json.message)
       })
       .catch(() => setError('Could not load transactions'))
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (!json.status) return
+        if (!json.status) {
+          setCredits([])
+          return
+        }
         const txs = (json.data?.transactions ?? []) as WalletTx[]
         setCredits(
           txs

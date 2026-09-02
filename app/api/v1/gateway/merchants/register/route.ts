@@ -1,19 +1,37 @@
 import { randomBytes } from 'crypto'
 import { registerMerchantSchema } from '@/lib/schemas/merchant'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { getSessionUser } from '@/lib/api/session'
-import { handleRouteError, successResponse } from '@/lib/api/errors'
+import { tryCreateAdminClient } from '@/lib/supabase/admin'
+import { requireUser } from '@/lib/api/session'
+import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { hashSecretKey } from '@/lib/api/gateway-auth'
 import { encryptBankAccount } from '@/lib/crypto/bank'
 import { uniquePublicKey, uniqueSecretKey } from '@/lib/tickets/ids'
 import { isPaystackConfigured } from '@/lib/env'
 import { createSubaccount } from '@/lib/payments/paystack'
+import { resolveLiveCelebrantId } from '@/lib/events/live'
+import { readBuSession } from '@/lib/auth/bu-session'
+import { gatewayTableError } from '@/lib/gateway/merchant'
+import { GATEWAY_SQL_HINT } from '@/lib/gateway/sql'
 
 export async function POST(request: Request) {
   try {
     const json: unknown = await request.json()
     const body = registerMerchantSchema.parse(json)
-    const user = await getSessionUser()
+    const user = await requireUser()
+    const session = await readBuSession()
+    const liveUserId = await resolveLiveCelebrantId({
+      id: user.id,
+      email: user.email ?? body.email,
+      phone: session?.phone_e164 || session?.phone || ('phone' in user ? String(user.phone || '') : null),
+    })
+    if (!liveUserId) {
+      throw new ApiError(
+        403,
+        'NOT_LIVE_USER',
+        'Sign in with your ɃU ID (phone number) and PIN so these keys can sell your live events.',
+      )
+    }
+
     const live = process.env.NODE_ENV === 'production'
     const publicKey = uniquePublicKey(live)
     const secretKey = uniqueSecretKey(live)
@@ -35,11 +53,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const admin = createAdminClient()
+    const admin = tryCreateAdminClient()
+    if (!admin) {
+      throw new ApiError(503, 'GATEWAY_UNAVAILABLE', GATEWAY_SQL_HINT)
+    }
+
     const { data, error } = await admin
       .from('gateway_merchants')
       .insert({
-        user_id: user?.id ?? null,
+        user_id: liveUserId,
         business_name: body.business_name,
         email: body.email,
         public_key: publicKey,
@@ -62,7 +84,8 @@ export async function POST(request: Request) {
       .single()
 
     if (error || !data) {
-      throw error
+      gatewayTableError(error)
+      throw new ApiError(500, 'REGISTER_FAILED', error?.message ?? 'Could not create Gateway keys')
     }
 
     return successResponse(
@@ -71,7 +94,8 @@ export async function POST(request: Request) {
         public_key: publicKey,
         secret_key: secretKey,
         webhook_secret: webhookSecret,
-        note: 'Store the secret_key now. It will not be shown again.',
+        live_mode: live,
+        note: 'Store secret_key now. It is shown once. Put it on your server only — never in browser JavaScript.',
       },
       'Merchant registered',
       201,

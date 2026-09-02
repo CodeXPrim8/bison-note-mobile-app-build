@@ -44,6 +44,7 @@ export default function AffiliateDeskPage() {
       return
     }
     if (!json.status) {
+      setData(null)
       setError(json.message ?? 'Could not load affiliate desk')
       return
     }

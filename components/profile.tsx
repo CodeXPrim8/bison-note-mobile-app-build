@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { displayBuId } from '@/lib/phone'
 import ThemeSelector from '@/components/theme-selector'
 import { useAccount } from '@/components/account-store'
+import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 type MenuView = 'menu' | 'appearance' | 'settings' | 'pnd'
 
@@ -219,6 +220,7 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
                   return
                 }
                 await fetch('/api/auth/logout', { method: 'POST' })
+                clearAccountSnapshots()
                 window.location.href = '/login'
               }}
               className="w-full cursor-pointer rounded-xl border-2 border-primary py-3 font-bold text-primary transition hover:bg-primary/10"

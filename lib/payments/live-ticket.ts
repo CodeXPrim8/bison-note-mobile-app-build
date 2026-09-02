@@ -18,6 +18,8 @@ import {
 } from '@/lib/events/live'
 import { sendTicketEmail } from '@/lib/email/tickets'
 import { creditTicketSaleShares } from '@/lib/sales/credits'
+import { ensureGatewayGuestUser } from '@/lib/gateway/guest'
+import { findMerchantById, findMerchantsForOrganizer } from '@/lib/gateway/merchant'
 import {
   initializeTransaction,
   nairaToKobo,
@@ -27,7 +29,8 @@ import { createDataClient } from '@/lib/supabase/data'
 import { generateCheckinCode, generateReference } from '@/lib/tickets/ids'
 import { extractLivePayRef, parseTicketQr, ticketQrPayload } from '@/lib/tickets/qr-generator'
 import { isEventUpcoming } from '@/lib/events/sale'
-import type { CheckinResult, EventRecord, Payment, TicketRecord } from '@/lib/types/database'
+import { notifyMerchant } from '@/lib/webhooks/merchant'
+import type { CheckinResult, EventRecord, GatewayMerchant, Payment, TicketRecord } from '@/lib/types/database'
 
 interface LiveInitializeInput {
   email: string
@@ -41,6 +44,7 @@ interface LiveInitializeInput {
   user_id?: string | null
   custom?: Record<string, unknown>
   affiliate_code?: string | null
+  merchant?: GatewayMerchant | null
 }
 
 export const LIVE_TICKET_REF_PREFIX = 'BU_LIVE_'
@@ -105,12 +109,12 @@ function livePayment(reference: string, tickets: TicketRecord[], extra?: Partial
     reference,
     paystack_reference: reference,
     user_id: first?.buyer_user_id ?? null,
-    merchant_id: null,
+    merchant_id: extra?.merchant_id ?? null,
     event_id: first?.event_id ?? extra?.event_id ?? null,
     kind: 'ticket',
     amount: tickets.reduce((sum, ticket) => sum + Number(ticket.amount_paid), 0),
     currency: 'NGN',
-    status: 'success',
+    status: extra?.status ?? 'success',
     buyer_email: first?.buyer_email || extra?.buyer_email || '',
     buyer_name: first?.buyer_name ?? extra?.buyer_name ?? null,
     buyer_phone: first?.buyer_phone ?? extra?.buyer_phone ?? null,
@@ -120,10 +124,35 @@ function livePayment(reference: string, tickets: TicketRecord[], extra?: Partial
       kind: 'ticket',
       event_id: first?.event_id,
       quantity: tickets.length,
+      merchant_id: extra?.merchant_id ?? undefined,
     },
-    fulfilled_at: now,
+    fulfilled_at: extra?.status === 'pending' ? null : now,
     created_at: now,
     updated_at: now,
+  }
+}
+
+async function notifyLiveTicketMerchants(input: {
+  eventId: string
+  merchantId?: string | null
+  eventType: 'ticket.purchased' | 'ticket.checked_in' | 'event.sold_out' | 'payment.failed'
+  payload: Record<string, unknown>
+}) {
+  const merchants: GatewayMerchant[] = []
+  if (input.merchantId) {
+    const one = await findMerchantById(input.merchantId)
+    if (one) merchants.push(one)
+  }
+  if (!merchants.length) {
+    const row = await fetchEventRowBySlug(input.eventId)
+    const ownerId = row ? withLiveTiers(row).organizer_id : null
+    if (ownerId) merchants.push(...(await findMerchantsForOrganizer(ownerId)))
+  }
+  const seen = new Set<string>()
+  for (const merchant of merchants) {
+    if (seen.has(merchant.id) || !merchant.webhook_url) continue
+    seen.add(merchant.id)
+    await notifyMerchant(merchant, input.eventType, input.payload)
   }
 }
 
@@ -210,6 +239,8 @@ async function mintLiveTickets(input: {
   buyerName?: string | null
   ticketTierId?: string
   tierName?: string
+  when?: string | null
+  venue?: string | null
 }) {
   const existing = await fetchLiveTicketsByPayRef(input.reference)
   if (existing.length) return existing
@@ -240,11 +271,13 @@ async function mintLiveTickets(input: {
 
   const afterMint = async (minted: TicketRecord[]) => {
     await bumpLiveTicketTypeSold(input.eventId, tierId, input.quantity)
-    void sendTicketEmail({
+    await sendTicketEmail({
       to: input.email,
       buyerName: input.buyerName ?? 'Guest',
       eventTitle: input.eventTitle,
       tickets: minted,
+      when: input.when,
+      venue: input.venue,
     }).catch((err) => console.error('ticket email failed', err))
     return minted
   }
@@ -316,11 +349,17 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
     throw new ApiError(409, 'EVENT_ENDED', 'This event has ended')
   }
 
-  const buyerId = await resolveLiveCelebrantId({
-    id: input.user_id || '',
-    email: input.email,
-    phone: input.buyer_phone,
-  })
+  const buyerId = input.merchant
+    ? await ensureGatewayGuestUser({
+        email: input.email,
+        name: input.buyer_name,
+        phone: input.buyer_phone,
+      })
+    : await resolveLiveCelebrantId({
+        id: input.user_id || '',
+        email: input.email,
+        phone: input.buyer_phone,
+      })
   if (!buyerId) {
     throw new ApiError(
       403,
@@ -329,7 +368,9 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
     )
   }
 
-  await assertLiveInvite(packed, buyerId, input.buyer_phone)
+  if (!input.merchant) {
+    await assertLiveInvite(packed, buyerId, input.buyer_phone)
+  }
 
   const maxPer = tier.max_per_buyer ?? 6
   const owned = (await fetchMyLiveTickets(buyerId)).filter(
@@ -349,8 +390,8 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
 
   const reference = generateReference('BU_LIVE')
   const returnToApp = String(input.custom?.next ?? '') === '/app'
-  const callbackUrl =
-    input.callback_url ?? `${getAppUrl()}/pay/${reference}${returnToApp ? '?next=/app' : ''}`
+  const merchantCallback = input.callback_url?.trim() || ''
+  const callbackUrl = `${getAppUrl()}/pay/${reference}${returnToApp ? '?next=/app' : ''}`
 
   if (quote.total === 0) {
     const tickets = await mintLiveTickets({
@@ -364,11 +405,27 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
       buyerName: input.buyer_name,
       ticketTierId: tier.id,
       tierName: tier.name,
+      when: packed.start_time,
+      venue: packed.venue_name,
+    })
+    await notifyLiveTicketMerchants({
+      eventId: packed.id,
+      merchantId: input.merchant?.id,
+      eventType: 'ticket.purchased',
+      payload: {
+        reference,
+        event_id: packed.id,
+        event_title: packed.title,
+        email: input.email,
+        quantity: input.quantity,
+        tickets: tickets.map((ticket) => ({ id: ticket.id, event_id: ticket.event_id })),
+      },
     })
     return {
-      authorization_url: returnToApp
+      authorization_url: merchantCallback || (returnToApp
         ? `${getAppUrl()}/app?page=tickets`
-        : `${getAppUrl()}/tickets?ref=${reference}`,
+        : `${getAppUrl()}/tickets?ref=${reference}`),
+      access_code: reference,
       reference,
       payment_id: reference,
       quote,
@@ -386,33 +443,39 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
 
   try {
     const paystack = await initializeTransaction({
-      email: input.email,
-      amountKobo: nairaToKobo(quote.total),
-      reference,
-      callbackUrl,
-      metadata: {
-        kind: 'live_ticket',
-        event_id: packed.id,
-        ticket_tier_id: tier.id,
-        quantity: input.quantity,
-        buyer_id: buyerId,
         email: input.email,
-        name: input.buyer_name ?? '',
-        phone: input.buyer_phone ?? '',
-        unit_price: Number(tier.price),
-        event_title: packed.title,
-        affiliate_code: input.affiliate_code ?? '',
-        organiser_id: packed.organizer_id ?? '',
-        affiliate_enabled: packed.affiliate_enabled,
-        affiliate_commission_pct: packed.affiliate_commission_pct,
-      },
-    })
-    return {
-      authorization_url: paystack.authorization_url,
-      reference,
-      payment_id: reference,
-      quote,
-    }
+        amountKobo: nairaToKobo(quote.total),
+        reference,
+        callbackUrl,
+        metadata: {
+          kind: 'live_ticket',
+          event_id: packed.id,
+          ticket_tier_id: tier.id,
+          quantity: input.quantity,
+          buyer_id: buyerId,
+          email: input.email,
+          name: input.buyer_name ?? '',
+          phone: input.buyer_phone ?? '',
+          unit_price: Number(tier.price),
+          event_title: packed.title,
+          event_when: packed.start_time,
+          event_venue: packed.venue_name ?? '',
+          affiliate_code: input.affiliate_code ?? '',
+          organiser_id: packed.organizer_id ?? '',
+          affiliate_enabled: packed.affiliate_enabled,
+          affiliate_commission_pct: packed.affiliate_commission_pct,
+          merchant_id: input.merchant?.id ?? '',
+          callback_url: merchantCallback,
+          gateway: Boolean(input.merchant),
+        },
+      })
+      return {
+        authorization_url: paystack.authorization_url,
+        access_code: paystack.access_code,
+        reference,
+        payment_id: reference,
+        quote,
+      }
   } catch (error) {
     throw new ApiError(
       502,
@@ -437,6 +500,7 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
   payment: Payment
   tickets: TicketRecord[]
   event_title?: string
+  callback_url?: string | null
 }> {
   const existing = await loadLivePaymentByReference(reference)
   if (existing?.tickets.length) return existing
@@ -475,22 +539,26 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
     throw new ApiError(402, 'PAYMENT_FAILED', 'Payment amount does not cover this ticket quote')
   }
 
+  const eventRow = await fetchEventRowBySlug(eventId)
+  const packed = eventRow ? withLiveTiers(eventRow) : null
   const tickets = await mintLiveTickets({
     eventId,
     buyerId,
     quantity,
     unitPrice: Number.isFinite(unitPrice) ? unitPrice : Number(tier.price),
     reference,
-    eventTitle,
+    eventTitle: packed?.title || eventTitle,
     email,
     buyerName: name,
     ticketTierId: tier.id,
     tierName: tier.name,
+    when: packed?.start_time || String(meta.event_when || '') || null,
+    venue: packed?.venue_name || String(meta.event_venue || '') || null,
   })
 
-  const eventRow = await fetchEventRowBySlug(eventId)
-  const packed = eventRow ? withLiveTiers(eventRow) : null
   const organiserId = String(meta.organiser_id || packed?.organizer_id || '')
+  const merchantId = String(meta.merchant_id || '') || null
+  const merchantCallback = String(meta.callback_url || '') || null
   const ticketNaira = (Number.isFinite(unitPrice) ? unitPrice : Number(tier.price)) * quantity
   if (organiserId) {
     try {
@@ -508,15 +576,47 @@ export async function fulfillLiveTicketPayment(reference: string): Promise<{
     }
   }
 
+  await notifyLiveTicketMerchants({
+    eventId,
+    merchantId,
+    eventType: 'ticket.purchased',
+    payload: {
+      reference,
+      event_id: eventId,
+      event_title: packed?.title || eventTitle,
+      email,
+      quantity,
+      amount: quote.total,
+      tickets: tickets.map((ticket) => ({
+        id: ticket.id,
+        event_id: ticket.event_id,
+        checkin_code: ticket.checkin_code,
+      })),
+    },
+  })
+
+  const remaining = packed ? packed.ticket_tiers.reduce((sum, row) => sum + liveRemaining(row), 0) : 1
+  if (remaining <= 0) {
+    await notifyLiveTicketMerchants({
+      eventId,
+      merchantId,
+      eventType: 'event.sold_out',
+      payload: { event_id: eventId, reference },
+    })
+  }
+
   return {
     payment: livePayment(reference, tickets, {
       buyer_email: email,
       buyer_name: name || null,
       buyer_phone: phone || null,
       event_id: eventId,
+      merchant_id: merchantId,
+      callback_url: merchantCallback,
     }),
     tickets,
     event_title: eventTitle,
+    callback_url: merchantCallback,
   }
 }
 
@@ -629,6 +729,15 @@ export async function checkInLiveTicket(input: {
   }
 
   if (updated && (updated.status === 'checked_in' || updated.checked_in_at)) {
+    await notifyLiveTicketMerchants({
+      eventId: input.eventId,
+      eventType: 'ticket.checked_in',
+      payload: {
+        ticket_id: updated.id,
+        event_id: input.eventId,
+        checkin_code: updated.checkin_code,
+      },
+    })
     return {
       status: 'checked_in',
       ticket: updated,

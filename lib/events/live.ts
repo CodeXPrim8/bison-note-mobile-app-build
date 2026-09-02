@@ -1,8 +1,10 @@
 import type { EventRecord, EventStatus, EventVisibility, Payment, TicketRecord, TicketStatus, TicketTier } from '@/lib/types/database'
 import { createDataClient } from '@/lib/supabase/data'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
+import { contactEmail } from '@/lib/auth/pin'
 import { buFromNaira } from '@/lib/bu-rate'
 import { readBuSession } from '@/lib/auth/bu-session'
+import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   liveTierId,
@@ -479,8 +481,10 @@ export async function resolveLiveCelebrantId(input: {
   phone?: string | null
 }) {
   const db = createDataClient()
-  const byId = await db.from('users').select('id').eq('id', input.id).maybeSingle()
-  if (asString(byId.data?.id)) return asString(byId.data?.id)
+  if (input.id) {
+    const byId = await db.from('users').select('id').eq('id', input.id).maybeSingle()
+    if (asString(byId.data?.id)) return asString(byId.data?.id)
+  }
 
   const phone = input.phone?.trim()
   if (phone) {
@@ -488,10 +492,11 @@ export async function resolveLiveCelebrantId(input: {
     if (found?.id) return found.id
   }
 
-  const email = input.email?.trim()
+  const email = contactEmail(input.email)
   if (email) {
-    const byEmail = await db.from('users').select('id').eq('email', email).maybeSingle()
-    if (asString(byEmail.data?.id)) return asString(byEmail.data?.id)
+    const byEmail = await db.from('users').select('id').eq('email', email).limit(2)
+    const rows = (byEmail.data as Array<{ id?: string }> | null) ?? []
+    if (rows.length === 1 && asString(rows[0]?.id)) return asString(rows[0]?.id)
   }
 
   return null
@@ -956,7 +961,7 @@ export async function fetchMyLiveTickets(
     email: contact?.email,
     phone: contact?.phone,
   })
-  const ids = [...new Set([userId, resolved].filter((value): value is string => Boolean(value)))]
+  const ids = [...new Set([resolved || userId].filter((value): value is string => Boolean(value)))]
   const db = createDataClient()
   const live = await db.from('tickets').select('*').in('buyer_id', ids).order('created_at', { ascending: false })
   const source = !live.error && live.data
@@ -970,23 +975,60 @@ export async function fetchMyLiveTickets(
   return rows.map(mapLiveTicket)
 }
 
-export async function lookupLiveUser(phone: string) {
-  const db = createDataClient()
-  const { data, error } = await db.rpc('bu_login_row', { p_phone: phone })
-  if (error) return null
-  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
-  if (!row?.id) return null
+function last10Digits(phone: string): string {
+  const digits = phone.replace(/[^\d]/g, '')
+  return digits.length >= 10 ? digits.slice(-10) : digits
+}
+
+function mapLiveLookupUser(row: Record<string, unknown> | null | undefined) {
+  if (!row) return null
+  const id = asString(row.id)
+  if (!id) return null
   const display =
     [asString(row.first_name), asString(row.last_name)].filter(Boolean).join(' ').trim() ||
     asString(row.account_name) ||
     asString(row.email) ||
     'ɃU member'
   return {
-    id: asString(row.id),
+    id,
     display_name: display,
     phone: asString(row.phone_number) || null,
     email: asString(row.email) || null,
   }
+}
+
+export async function lookupLiveUser(phone: string) {
+  const needle = last10Digits(phone)
+  if (!needle) return null
+  const columns = 'id, email, phone_number, first_name, last_name, account_name, role'
+  const admin = tryCreateAdminClient()
+  const db = admin ?? createDataClient()
+
+  if (admin) {
+    for (const variant of phoneLookupVariants(phone)) {
+      const { data } = await admin.from('users').select(columns).eq('phone_number', variant).maybeSingle()
+      const mapped = mapLiveLookupUser(data as Record<string, unknown> | null)
+      if (mapped) return mapped
+    }
+    if (needle.length === 10) {
+      const { data } = await admin.from('users').select(columns).ilike('phone_number', `%${needle}%`).limit(8)
+      const match = ((data as Record<string, unknown>[] | null) ?? []).find(
+        (row) => last10Digits(asString(row.phone_number)) === needle,
+      )
+      const mapped = mapLiveLookupUser(match)
+      if (mapped) return mapped
+    }
+  }
+
+  const attempts = [...new Set([phone.trim(), normalizePhone(phone) ?? '', needle].filter(Boolean))]
+  for (const attempt of attempts) {
+    const { data, error } = await db.rpc('bu_login_row', { p_phone: attempt })
+    if (error) continue
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
+    const mapped = mapLiveLookupUser(row)
+    if (mapped) return mapped
+  }
+  return null
 }
 
 export async function submitLiveTicketFeedback(input: {

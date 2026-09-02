@@ -29,6 +29,7 @@ export interface InitializeTicketInput {
   affiliate_code?: string | null
   user_id?: string | null
   merchant?: GatewayMerchant | null
+  event_id?: string
 }
 
 export async function initializeTicketPurchase(input: InitializeTicketInput) {

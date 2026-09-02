@@ -39,6 +39,10 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
     fetch(path, { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setEvents([])
+          return
+        }
         const list = (json.data ?? []) as Array<Record<string, unknown>>
         setEvents(
           list.map((event) => ({
@@ -56,7 +60,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
           })),
         )
       })
-      .catch(() => undefined)
+      .catch(() => setEvents([]))
   }, [mode])
 
   const [createError, setCreateError] = useState<string | null>(null)

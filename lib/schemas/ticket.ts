@@ -10,22 +10,33 @@ export const ticketTierIdSchema = z
     'Invalid ticket type',
   )
 
-export const initializeTicketSchema = z.object({
-  email: z.string().email(),
-  amount: z.number().min(0).optional(),
-  ticket_tier_id: ticketTierIdSchema,
-  quantity: z.number().int().min(1).max(20).optional().default(1),
-  callback_url: z.string().url().optional(),
-  spray_bu_amount: z.number().min(0).optional().default(0),
-  metadata: z
-    .object({
-      buyer_name: z.string().max(160).optional(),
-      phone: z.string().max(32).optional(),
-      custom: z.record(z.unknown()).optional(),
-      affiliate_code: z.string().max(32).optional(),
-    })
-    .optional(),
-})
+export const initializeTicketSchema = z
+  .object({
+    email: z.string().email(),
+    amount: z.number().min(0).optional(),
+    ticket_tier_id: ticketTierIdSchema.optional(),
+    event_id: z.string().min(1).max(80).optional(),
+    ticket_type: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9_-]{1,40}$/)
+      .optional(),
+    quantity: z.number().int().min(1).max(20).optional().default(1),
+    callback_url: z.string().url().optional(),
+    spray_bu_amount: z.number().min(0).optional().default(0),
+    metadata: z
+      .object({
+        buyer_name: z.string().max(160).optional(),
+        phone: z.string().max(32).optional(),
+        custom: z.record(z.unknown()).optional(),
+        affiliate_code: z.string().max(32).optional(),
+      })
+      .optional(),
+  })
+  .refine((body) => Boolean(body.ticket_tier_id || body.event_id), {
+    message: 'Pass event_id or ticket_tier_id',
+  })
 
 export const initializeDepositSchema = z
   .object({

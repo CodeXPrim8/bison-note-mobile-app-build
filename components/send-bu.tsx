@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +29,7 @@ interface BUTransfer {
 }
 
 export default function SendBU() {
-  const { applySpendBu } = useAccount()
+  const { applySpendBu, userId } = useAccount()
   const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history'>('menu')
   const [transferType, setTransferType] = useState<'transfer' | 'tip'>('transfer')
   const [searchQuery, setSearchQuery] = useState('')
@@ -42,6 +42,9 @@ export default function SendBU() {
   const [busy, setBusy] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
   const [pastedQr, setPastedQr] = useState('')
+  const [lookingUp, setLookingUp] = useState(false)
+  const lookupSeq = useRef(0)
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [transferForm, setTransferForm] = useState({
     amount: '',
@@ -49,9 +52,17 @@ export default function SendBU() {
   })
 
   useEffect(() => {
+    if (!userId) {
+      setTransfers([])
+      return
+    }
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (!json.status) {
+          setTransfers([])
+          return
+        }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransfers(
           txs.map((tx) => ({
@@ -66,38 +77,65 @@ export default function SendBU() {
           })),
         )
       })
-      .catch(() => undefined)
+      .catch(() => setTransfers([]))
+  }, [userId])
+
+  useEffect(() => {
+    return () => {
+      if (lookupTimer.current) window.clearTimeout(lookupTimer.current)
+    }
   }, [])
 
-  async function handleSearch(query: string) {
+  function handleSearch(query: string) {
     setSearchQuery(query)
-    if (query.length < 7) {
+    const digits = query.replace(/[^\d]/g, '')
+    if (lookupTimer.current) window.clearTimeout(lookupTimer.current)
+    if (digits.length < 10) {
+      lookupSeq.current += 1
+      setLookingUp(false)
       setSearchResults([])
       return
     }
-    try {
-      const res = await fetch('/api/users/lookup', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bu_id: query }),
-      })
-      const json = await res.json()
-      if (json.status && json.data?.exists) {
-        setSearchResults([
-          {
-            id: String(json.data.id),
-            username: String(json.data.phone_hint ?? json.data.bu_id),
-            fullName: String(json.data.display_name ?? 'ɃU member'),
-            verified: true,
-          },
-        ])
-      } else {
-        setSearchResults([])
-      }
-    } catch {
-      setSearchResults([])
-    }
+    const seq = ++lookupSeq.current
+    setLookingUp(true)
+    lookupTimer.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch('/api/users/lookup', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bu_id: query.trim() }),
+          })
+          const json = await res.json()
+          if (seq !== lookupSeq.current) return
+          setLookingUp(false)
+          if (!json.status) {
+            setSearchResults([])
+            setMessage(json.message ?? 'Could not look up that ɃU ID')
+            return
+          }
+          setMessage(null)
+          if (json.data?.exists && json.data.id) {
+            setSearchResults([
+              {
+                id: String(json.data.id),
+                username: String(json.data.phone_hint ?? json.data.bu_id),
+                fullName: String(json.data.display_name ?? 'ɃU member'),
+                verified: true,
+              },
+            ])
+          } else {
+            setSearchResults([])
+          }
+        } catch {
+          if (seq !== lookupSeq.current) return
+          setLookingUp(false)
+          setSearchResults([])
+          setMessage('Could not look up that ɃU ID')
+        }
+      })()
+    }, 280)
   }
 
   const handleSelectUser = (user: UserProfile) => {
@@ -493,15 +531,22 @@ export default function SendBU() {
                 />
               </div>
             </Card>
+            {message && step === 'search' && (
+              <p className="mb-4 text-sm text-destructive">{message}</p>
+            )}
 
             {/* Search Results */}
-            {searchQuery.length >= 7 && (
+            {searchQuery.replace(/[^\d]/g, '').length >= 10 && (
               <div className="space-y-2">
-                {searchResults.length === 0 ? (
+                {lookingUp ? (
+                  <Card className="border-border/50 bg-card/50 p-8 text-center">
+                    <p className="text-muted-foreground">Looking up that ɃU ID…</p>
+                  </Card>
+                ) : searchResults.length === 0 ? (
                   <Card className="border-border/50 bg-card/50 p-8 text-center">
                     <p className="text-muted-foreground">No matching ɃU ID</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Enter the full phone number used as their ɃU ID
+                      Enter the full phone number used as their ɃU ID, like 08012345678
                     </p>
                   </Card>
                 ) : (
@@ -540,7 +585,7 @@ export default function SendBU() {
             )}
 
             {/* Recent Transfers */}
-            {searchQuery.length < 7 && transfers.length > 0 && (
+            {searchQuery.replace(/[^\d]/g, '').length < 10 && transfers.length > 0 && (
               <div className="mt-6">
                 <h3 className="mb-4 font-semibold">Recent Transfers</h3>
                 <div className="space-y-2">

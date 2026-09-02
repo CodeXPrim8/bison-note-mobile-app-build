@@ -2,10 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { buFromNaira, nairaFromBu, roundMoney } from '@/lib/bu-rate'
+import { bindAccountSnapshots, clearAccountSnapshots } from '@/lib/session-snapshot'
 
 const CACHE_KEY = 'bu_account_snapshot_v2'
 
 type AccountSnapshot = {
+  userId: string
   greetingName: string
   displayName: string
   buBalance: number | null
@@ -21,6 +23,7 @@ type AccountContextValue = AccountSnapshot & {
 }
 
 const emptySnapshot: AccountSnapshot = {
+  userId: '',
   greetingName: '',
   displayName: '',
   buBalance: null,
@@ -43,11 +46,12 @@ function readCache(): AccountSnapshot | null {
     const parsed = JSON.parse(raw) as Partial<AccountSnapshot>
     const greetingName = typeof parsed.greetingName === 'string' ? parsed.greetingName : ''
     const displayName = typeof parsed.displayName === 'string' ? parsed.displayName : greetingName
+    const userId = typeof parsed.userId === 'string' ? parsed.userId : ''
     const buBalance = typeof parsed.buBalance === 'number' && Number.isFinite(parsed.buBalance) ? parsed.buBalance : null
     const nairaBalance =
       typeof parsed.nairaBalance === 'number' && Number.isFinite(parsed.nairaBalance) ? parsed.nairaBalance : null
-    if (!greetingName && !displayName && buBalance == null && nairaBalance == null) return null
-    return { greetingName, displayName, buBalance, nairaBalance }
+    if (!userId) return null
+    return { userId, greetingName, displayName, buBalance, nairaBalance }
   } catch {
     return null
   }
@@ -91,15 +95,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch('/api/me', { credentials: 'include' })
       const json = await res.json()
+      const userId = json.status ? String(json.data?.user?.id || '') : ''
+      bindAccountSnapshots(userId || null)
       const display = (json.data?.profile?.display_name as string | undefined)?.trim()
-      if (!display) return
+      if (!userId) {
+        clearAccountSnapshots()
+        setSnapshot(emptySnapshot)
+        return
+      }
+      const cached = readCache()
       setSnapshot((prev) => {
-        const next = { ...prev, displayName: display, greetingName: firstName(display) }
+        const sameUser = prev.userId === userId
+        const keepWallet = sameUser || !prev.userId
+        const next = {
+          userId,
+          displayName: display || (sameUser ? prev.displayName : cached?.displayName) || '',
+          greetingName: firstName(display || (sameUser ? prev.displayName : cached?.displayName) || ''),
+          buBalance: keepWallet ? prev.buBalance : (cached?.userId === userId ? cached.buBalance : null),
+          nairaBalance: keepWallet ? prev.nairaBalance : (cached?.userId === userId ? cached.nairaBalance : null),
+        }
         writeCache(next)
         return next
       })
     } catch {
-      // Keep the last known name on screen.
+      // Wait for the next /api/me instead of showing another account.
     }
   }, [])
 
@@ -129,8 +148,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, [refreshWallet])
 
   useEffect(() => {
-    const cached = readCache()
-    if (cached) setSnapshot(cached)
     void refreshAccount()
     void refreshWallet()
 

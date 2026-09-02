@@ -156,15 +156,21 @@ export function mergeStoredTicketTypes(
 }
 
 export function storedTypesFromInput(
-  tiers: Array<{ name: string; price: number; quantity_total: number }>,
+  tiers: Array<{ name: string; price: number; quantity_total: number; key?: string }>,
 ): StoredTicketType[] {
   const used = new Set<string>()
   return tiers
     .map((tier) => {
       const name = tier.name.trim()
       if (!name) return null
+      const rawKey = String(tier.key ?? '')
+        .trim()
+        .toLowerCase()
+      const key =
+        /^[a-z0-9_-]{1,40}$/.test(rawKey) && !used.has(rawKey) ? rawKey : ticketTypeKey(name, used)
+      if (!used.has(key)) used.add(key)
       return {
-        key: ticketTypeKey(name, used),
+        key,
         name: name.slice(0, 80),
         price: Math.max(0, Number(tier.price) || 0),
         quantity_total: Math.max(0, Math.floor(Number(tier.quantity_total) || 0)),
