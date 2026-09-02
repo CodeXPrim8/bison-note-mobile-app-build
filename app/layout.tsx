@@ -2,19 +2,14 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BU_SITE_DESCRIPTION, BU_SITE_NAME, BU_SITE_TITLE } from '@/lib/brand'
+import { getAppUrl } from '@/lib/env'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 function siteUrl() {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL
-  if (explicit) return explicit
-  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (production) return `https://${production}`
-  const vercel = process.env.VERCEL_URL
-  if (vercel) return `https://${vercel}`
-  return 'https://buapp.vercel.app'
+  return getAppUrl()
 }
 
 export const metadata: Metadata = {

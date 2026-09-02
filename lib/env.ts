@@ -1,3 +1,5 @@
+import { BU_CANONICAL_ORIGIN, canonicalAppOrigin } from '@/lib/brand'
+
 export class MissingEnvError extends Error {
   constructor(message: string) {
     super(message)
@@ -19,7 +21,12 @@ function requiredPublic(name: string): string {
 }
 
 export function getAppUrl(): string {
-  return optional('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000'
+  const explicit = optional('NEXT_PUBLIC_APP_URL')
+  if (explicit) return canonicalAppOrigin(explicit) || explicit.replace(/\/$/, '')
+  if (process.env.VERCEL_ENV === 'production') return BU_CANONICAL_ORIGIN
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  if (production) return canonicalAppOrigin(`https://${production.replace(/^https?:\/\//, '')}`) || BU_CANONICAL_ORIGIN
+  return 'http://localhost:3000'
 }
 
 function isJwtSecret(value: string | undefined): boolean {

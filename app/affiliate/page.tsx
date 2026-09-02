@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { formatNaira } from '@/lib/money'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
 import { formatEventDay } from '@/lib/datetime'
+import { canonicalAppOrigin } from '@/lib/brand'
 
 interface Desk {
   roles: { is_affiliate: boolean; affiliate_code: string | null; is_organizer: boolean }
@@ -72,7 +73,8 @@ export default function AffiliateDeskPage() {
   }
 
   async function copy(path: string) {
-    const url = `${data?.origin ?? ''}${path}`
+    const origin = canonicalAppOrigin(data?.origin || window.location.origin) || window.location.origin
+    const url = `${origin}${path}`
     try {
       await navigator.clipboard.writeText(url)
       setCopied(url)
@@ -205,9 +207,13 @@ export default function AffiliateDeskPage() {
                     {copied?.endsWith(event.share_path) ? 'Copied' : 'Copy link'}
                   </Button>
                   <Button asChild variant="ghost">
-                    <Link href={event.share_path} target="_blank">
+                    <a
+                      href={`${canonicalAppOrigin(data?.origin || '') || ''}${event.share_path}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <Share2 className="h-4 w-4" />
-                    </Link>
+                    </a>
                   </Button>
                 </div>
               </div>
