@@ -49,6 +49,8 @@ function asSettings(rows: Array<{ key?: string; value?: unknown }> | null | unde
   }
   const rate = Number(map.get('bu_naira_value') ?? DEFAULT_SETTINGS.bu_naira_value)
   const mode = String(map.get('withdrawal_mode') ?? DEFAULT_SETTINGS.withdrawal_mode)
+    .replace(/^"+|"+$/g, '')
+    .toLowerCase()
   return {
     bu_naira_value: Number.isFinite(rate) && rate > 0 ? rate : 1,
     withdrawal_mode: mode === 'manual' ? 'manual' : 'automatic',

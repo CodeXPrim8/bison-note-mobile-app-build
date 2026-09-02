@@ -27,7 +27,12 @@ interface PaystackEnvelope<T> {
   data: T
 }
 
-async function paystackFetch<T>(path: string, init?: RequestInit): Promise<T> {
+type PaystackMeta = { page?: number; pageCount?: number; next?: string | null; total?: number }
+
+async function paystackRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<PaystackEnvelope<T> & { meta?: PaystackMeta }> {
   const response = await fetch(`${PAYSTACK_BASE}${path}`, {
     ...init,
     headers: {
@@ -36,10 +41,15 @@ async function paystackFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   })
-  const json = (await response.json()) as PaystackEnvelope<T>
+  const json = (await response.json()) as PaystackEnvelope<T> & { meta?: PaystackMeta }
   if (!response.ok || !json.status) {
     throw new Error(json.message || `Paystack request failed: ${path}`)
   }
+  return json
+}
+
+async function paystackFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const json = await paystackRequest<T>(path, init)
   return json.data
 }
 
@@ -122,6 +132,41 @@ export async function createTransferRecipient(input: {
       currency: 'NGN',
     }),
   })
+}
+
+export async function resolveNuban(accountNumber: string, bankCode: string): Promise<{ account_name: string; account_number: string }> {
+  const digits = accountNumber.replace(/\s+/g, '')
+  return paystackFetch<{ account_name: string; account_number: string }>(
+    `/bank/resolve?account_number=${encodeURIComponent(digits)}&bank_code=${encodeURIComponent(bankCode)}`,
+  )
+}
+
+export type PaystackBank = { name: string; code: string; slug?: string }
+
+let bankCache: { at: number; banks: PaystackBank[] } | null = null
+
+export async function listPaystackNgnBanks(): Promise<PaystackBank[]> {
+  if (bankCache && Date.now() - bankCache.at < 60 * 60 * 1000) return bankCache.banks
+  const banks: PaystackBank[] = []
+  const seen = new Set<string>()
+  for (let page = 1; page <= 15; page++) {
+    const json = await paystackRequest<
+      Array<{ name?: string; code?: string; slug?: string; active?: boolean; is_deleted?: boolean }>
+    >(`/bank?currency=NGN&country=nigeria&perPage=100&page=${page}`)
+    const chunk = (json.data ?? [])
+      .filter((row) => row.active !== false && !row.is_deleted && row.name && row.code)
+      .map((row) => ({ name: String(row.name), code: String(row.code), slug: row.slug }))
+    for (const bank of chunk) {
+      if (seen.has(bank.code)) continue
+      seen.add(bank.code)
+      banks.push(bank)
+    }
+    const pageCount = Number(json.meta?.pageCount || 0)
+    if (pageCount && page >= pageCount) break
+    if (!chunk.length || chunk.length < 50) break
+  }
+  bankCache = { at: Date.now(), banks }
+  return banks
 }
 
 export async function initiateTransfer(input: {

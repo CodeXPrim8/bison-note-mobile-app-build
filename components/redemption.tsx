@@ -46,7 +46,13 @@ export default function Redemption() {
     if (!json.status) return
     setWithdrawals((json.data?.withdrawals ?? []) as WithdrawalRequest[])
     if (Array.isArray(json.data?.banks) && json.data.banks.length) {
-      setBanks(json.data.banks as BankOption[])
+      const next = json.data.banks as BankOption[]
+      setBanks(next)
+      setForm((current) =>
+        next.some((bank) => bank.code === current.bankCode)
+          ? current
+          : { ...current, bankCode: next.find((bank) => bank.code === '999992')?.code ?? next[0]?.code ?? '058' },
+      )
     }
   }
 
@@ -141,7 +147,8 @@ export default function Redemption() {
           <div>
             <h3 className="font-semibold">Withdraw ɃU to Bank</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Withdraw your ɃU directly to your Nigerian bank account. Physical Bison Notes are ceremonial tokens and cannot be redeemed.
+              Withdraw ɃU to a Nigerian bank or wallet. When Super Admin sets payouts to Automatic, naira is sent
+              through Paystack as soon as you confirm. OPay, Kuda, PalmPay, and Moniepoint are listed.
             </p>
           </div>
           <Banknote className="h-6 w-6 text-primary" />

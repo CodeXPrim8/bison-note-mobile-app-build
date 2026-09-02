@@ -8,7 +8,7 @@ import { markWithdrawalFailed, paystackPayoutMessage, publicWithdrawalLabel, sen
 
 const actionSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(['approve', 'reject', 'retry']),
+  action: z.enum(['approve', 'reject', 'retry', 'reverse']),
   note: z.string().max(300).optional(),
 })
 
@@ -23,10 +23,8 @@ function canPayout(status: string, row: Record<string, unknown>) {
   return false
 }
 
-function canReject(status: string, row: Record<string, unknown>) {
-  if (status === 'pending' || status === 'payout_failed') return true
-  if (status === 'approved' && !row.paid_at && !row.paystack_reference) return true
-  return false
+function canReverse(status: string) {
+  return status === 'pending' || status === 'payout_failed' || status === 'approved' || status === 'paid'
 }
 
 export async function GET() {
@@ -34,7 +32,8 @@ export async function GET() {
     const { db } = await requireAdmin()
     const settings = await getPlatformSettings(db)
     const { data, error } = await db.from('bu_withdrawals').select('*').order('created_at', { ascending: false }).limit(200)
-    const rows = error ? [] : ((data ?? []) as Array<Record<string, unknown>>)
+    if (error) throw new ApiError(500, 'WITHDRAWALS_LOAD_FAILED', error.message)
+    const rows = (data ?? []) as Array<Record<string, unknown>>
     const ids = [...new Set(rows.map((row) => String(row.user_id ?? '')).filter(Boolean))]
     const users =
       ids.length > 0
@@ -72,26 +71,26 @@ export async function PATCH(request: Request) {
     if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Withdrawal not found')
     const row = existing.data as Record<string, unknown>
     const status = String(row.status)
-    if (status === 'paid') throw new ApiError(400, 'ALREADY_PAID', 'This withdrawal is already paid')
-    if (status === 'rejected' || status === 'failed') {
+    if (status === 'rejected' || status === 'failed' || status === 'reversed') {
       throw new ApiError(400, 'ALREADY_HANDLED', 'This withdrawal is already closed')
     }
 
-    if (body.action === 'reject') {
-      if (!canReject(status, row)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal cannot be refunded')
+    if (body.action === 'reject' || body.action === 'reverse') {
+      if (!canReverse(status)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal cannot be reversed to the wallet')
       await moveLiveWallet(db, {
         userId: String(row.user_id),
         naira: Number(row.naira),
         direction: 'credit',
         type: 'refund',
-        description: 'Withdrawal rejected',
-        metadata: { withdrawal_id: body.id, admin: liveId, note: body.note ?? null },
+        description: status === 'paid' ? 'Withdrawal reversed to wallet' : 'Withdrawal returned to wallet',
+        metadata: { withdrawal_id: body.id, admin: liveId, note: body.note ?? null, previous_status: status },
       })
+      const nextStatus = 'reversed'
       const { error } = await db
         .from('bu_withdrawals')
         .update({
-          status: 'rejected',
-          note: body.note ?? null,
+          status: nextStatus,
+          note: body.note ?? (status === 'paid' ? 'Super Admin reversed ɃU to the wallet' : 'Super Admin returned ɃU to the wallet'),
           transfer_error: null,
           reviewed_at: new Date().toISOString(),
         })
@@ -100,13 +99,14 @@ export async function PATCH(request: Request) {
       if (error) {
         await db
           .from('bu_withdrawals')
-          .update({ status: 'rejected', note: body.note ?? null, reviewed_at: new Date().toISOString() })
+          .update({ status: nextStatus, note: body.note ?? null, reviewed_at: new Date().toISOString() })
           .eq('id', body.id)
       }
-      await writeAdminAudit(liveId, 'withdrawals.reject', body.id, body)
-      return successResponse({ ok: true }, 'Withdrawal rejected and refunded')
+      await writeAdminAudit(liveId, 'withdrawals.reverse', body.id, body)
+      return successResponse({ ok: true }, 'ɃU returned to the user wallet')
     }
 
+    if (status === 'paid') throw new ApiError(400, 'ALREADY_PAID', 'This withdrawal is already paid')
     if (!canPayout(status, row)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal is already handled')
     if (!isPaystackConfigured()) {
       throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Add the live Paystack secret and enable Transfers, then retry.')

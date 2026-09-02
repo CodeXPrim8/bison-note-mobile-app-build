@@ -58,7 +58,7 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
-  async function act(id: string, action: 'approve' | 'reject' | 'retry') {
+  async function act(id: string, action: 'approve' | 'retry' | 'reverse') {
     try {
       setError(null)
       setBusyId(id)
@@ -79,7 +79,8 @@ export default function AdminWithdrawalsPage() {
         <h1 className="mt-1 text-3xl font-bold">Withdrawals</h1>
         <p className="text-sm text-muted-foreground">
           Automatic sends naira to the guest bank through Paystack Transfers as soon as they request it. Manual holds
-          the request until you Approve. Enable Transfers on the live Paystack account and keep that balance funded.
+          the request until you Approve. Reverse returns the ɃU to the user wallet. Enable Transfers on the live
+          Paystack account and keep that balance funded.
         </p>
       </div>
       {!paystackReady && (
@@ -87,7 +88,14 @@ export default function AdminWithdrawalsPage() {
           Paystack is not configured. Add the live secret key on Vercel, enable Transfers, then redeploy.
         </p>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button size="sm" variant="ghost" onClick={() => setError(null)}>
+            Close
+          </Button>
+        </div>
+      )}
       <div className="flex gap-2">
         <Button variant={mode === 'automatic' ? 'default' : 'outline'} onClick={() => void setWithdrawalMode('automatic')}>
           Automatic
@@ -117,8 +125,8 @@ export default function AdminWithdrawalsPage() {
                   <Button size="sm" disabled={busyId === row.id} onClick={() => void act(row.id, 'approve')}>
                     {busyId === row.id ? 'Paying…' : 'Approve / pay'}
                   </Button>
-                  <Button size="sm" variant="outline" disabled={busyId === row.id} onClick={() => void act(row.id, 'reject')}>
-                    Reject / refund
+                  <Button size="sm" variant="outline" disabled={busyId === row.id} onClick={() => void act(row.id, 'reverse')}>
+                    Reverse to wallet
                   </Button>
                 </div>
               )}
@@ -127,10 +135,15 @@ export default function AdminWithdrawalsPage() {
                   <Button size="sm" disabled={busyId === row.id} onClick={() => void act(row.id, 'retry')}>
                     {busyId === row.id ? 'Retrying…' : row.status === 'approved' ? 'Send payout' : 'Retry payout'}
                   </Button>
-                  <Button size="sm" variant="outline" disabled={busyId === row.id} onClick={() => void act(row.id, 'reject')}>
-                    Refund
+                  <Button size="sm" variant="outline" disabled={busyId === row.id} onClick={() => void act(row.id, 'reverse')}>
+                    Reverse to wallet
                   </Button>
                 </div>
+              )}
+              {row.status === 'paid' && (
+                <Button size="sm" variant="outline" disabled={busyId === row.id} onClick={() => void act(row.id, 'reverse')}>
+                  Reverse to wallet
+                </Button>
               )}
             </div>
           </Card>

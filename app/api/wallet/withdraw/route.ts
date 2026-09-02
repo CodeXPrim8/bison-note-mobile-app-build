@@ -9,9 +9,11 @@ import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { isPaystackConfigured } from '@/lib/env'
-import { NGN_BANKS, bankCodeFromName } from '@/lib/payments/ngn-banks'
+import { NGN_BANKS, bankCodeFromName, displayBankName } from '@/lib/payments/ngn-banks'
 import { moveLiveWallet } from '@/lib/wallet/move'
 import {
+  createPayoutRecipient,
+  guestBanks,
   insertWithdrawalRow,
   markWithdrawalFailed,
   paystackPayoutMessage,
@@ -73,7 +75,7 @@ export async function GET() {
     const rows = result.error ? [] : ((result.data ?? []) as Array<Record<string, unknown>>)
     return successResponse({
       withdrawals: rows.map(guestRow),
-      banks: NGN_BANKS.map((bank) => ({ name: bank.name, code: bank.code })),
+      banks: await guestBanks(),
       min_withdraw_bu: BU_MIN_WITHDRAW,
     })
   } catch (error) {
@@ -96,7 +98,10 @@ export async function POST(request: Request) {
     if (!bankCode) {
       throw new ApiError(400, 'UNKNOWN_BANK', 'Choose a listed Nigerian bank.')
     }
-    const bankName = NGN_BANKS.find((bank) => bank.code === bankCode)?.name ?? body.bank_name
+    const bankName = displayBankName(
+      NGN_BANKS.find((bank) => bank.code === bankCode)?.name ?? body.bank_name,
+      bankCode,
+    )
     let quote
     try {
       quote = quoteWithdrawBu(body.bu ?? body.amount ?? 0)
@@ -114,6 +119,20 @@ export async function POST(request: Request) {
         'PAYSTACK_REQUIRED',
         'Bank payouts are not configured yet. Super Admin must add the live Paystack secret and enable Transfers.',
       )
+    }
+
+    let recipientReady: Awaited<ReturnType<typeof createPayoutRecipient>> | null = null
+    if (isPaystackConfigured()) {
+      try {
+        recipientReady = await createPayoutRecipient({
+          bank_code: bankCode,
+          bank_name: bankName,
+          account_number: body.account_number,
+          account_name: body.account_name.trim(),
+        })
+      } catch (error) {
+        throw new ApiError(400, 'BANK_INVALID', paystackPayoutMessage(error))
+      }
     }
 
     const meta = {
@@ -148,9 +167,10 @@ export async function POST(request: Request) {
         bu: quote.bu,
         naira: quote.naira,
         bank_name: bankName,
-        bank_code: bankCode,
+        bank_code: recipientReady?.bankCode ?? bankCode,
         account_number: body.account_number,
-        account_name: body.account_name.trim(),
+        account_name: recipientReady?.accountName || body.account_name.trim(),
+        paystack_recipient: recipientReady?.recipient.recipient_code ?? null,
         status: queuedStatus,
         mode: settings.withdrawal_mode,
         reviewed_at: automatic ? new Date().toISOString() : null,
