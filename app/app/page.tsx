@@ -201,7 +201,7 @@ function MobileAppShell() {
           ) : mode === 'celebrant' ? (
             <>
               <div hidden={currentPage !== 'dashboard'}>
-                <CelebrantDashboard />
+                <CelebrantDashboard onNavigate={handleNavigate} />
               </div>
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
               {currentPage === 'redemption' && <Redemption />}

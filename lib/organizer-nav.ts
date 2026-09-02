@@ -7,6 +7,7 @@ export const ORGANIZER_NAV = [
   { label: 'Guests', href: '/organizer/guests' },
   { label: 'Access', href: '/organizer/checkin' },
   { label: 'Transactions', href: '/organizer/transactions' },
+  { label: 'Withdraw', href: '/app?page=redemption' },
   { label: 'Gateway', href: '/gateway/dashboard' },
   { label: 'API Keys', href: '/organizer/api-keys' },
   { label: 'Settings', href: '/organizer/settings' },

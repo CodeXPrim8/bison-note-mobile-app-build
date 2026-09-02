@@ -43,7 +43,7 @@ function mapEvents(list: Array<Record<string, unknown>>): Event[] {
   }))
 }
 
-export default function CelebrantDashboard() {
+export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
   const { greetingName } = useAccount()
   const cached = readSessionSnapshot<CelebrantCache>(CACHE_KEY)
   const [events, setEvents] = useState<Event[]>(cached?.events ?? [])
@@ -114,11 +114,14 @@ export default function CelebrantDashboard() {
 
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
-          <Button className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button
+            className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={() => onNavigate?.('redemption')}
+          >
             <Banknote className="h-5 w-5" />
             <span>Withdraw ɃU</span>
           </Button>
-          <Button variant="outline" className="h-20 flex-col gap-2">
+          <Button variant="outline" className="h-20 flex-col gap-2" onClick={() => onNavigate?.('events')}>
             <Calendar className="h-5 w-5" />
             <span>My Events</span>
           </Button>

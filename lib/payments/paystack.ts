@@ -107,6 +107,41 @@ export function nairaToKobo(naira: number): number {
   return Math.round(naira * 100)
 }
 
+export async function createTransferRecipient(input: {
+  name: string
+  accountNumber: string
+  bankCode: string
+}): Promise<{ recipient_code: string }> {
+  return paystackFetch<{ recipient_code: string }>('/transferrecipient', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'nuban',
+      name: input.name,
+      account_number: input.accountNumber.replace(/\s+/g, ''),
+      bank_code: input.bankCode,
+      currency: 'NGN',
+    }),
+  })
+}
+
+export async function initiateTransfer(input: {
+  amountKobo: number
+  recipient: string
+  reference: string
+  reason: string
+}): Promise<{ transfer_code: string; reference: string; status: string }> {
+  return paystackFetch<{ transfer_code: string; reference: string; status: string }>('/transfer', {
+    method: 'POST',
+    body: JSON.stringify({
+      source: 'balance',
+      amount: input.amountKobo,
+      recipient: input.recipient,
+      reference: input.reference,
+      reason: input.reason,
+    }),
+  })
+}
+
 export function commissionKobo(amountNaira: number, rate: number): number {
   return Math.round(amountNaira * rate * 100)
 }

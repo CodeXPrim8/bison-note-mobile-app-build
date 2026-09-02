@@ -98,6 +98,9 @@ export default function OrganizerHome() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
+            <Link href="/app?page=redemption">Withdraw</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/affiliate">Affiliate</Link>
           </Button>
           <Button asChild>

@@ -133,20 +133,28 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
 
       <AdSlot slot="app_wallet" />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Button
           onClick={() => setShowTopup(true)}
           className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-5 w-5" />
-          <span>Fund Wallet</span>
+          <span>Fund</span>
+        </Button>
+        <Button
+          onClick={() => onNavigate?.('redemption')}
+          className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          <ArrowUp className="h-5 w-5" />
+          <span>Withdraw</span>
         </Button>
         <Button
           onClick={() => onNavigate?.('receive-bu')}
-          className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          variant="outline"
+          className="h-20 flex-col gap-2"
         >
           <ArrowDown className="h-5 w-5" />
-          <span>Receive ɃU</span>
+          <span>Receive</span>
         </Button>
       </div>
 

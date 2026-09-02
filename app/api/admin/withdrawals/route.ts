@@ -2,16 +2,32 @@ import { z } from 'zod'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireAdmin } from '@/lib/admin/session'
 import { displayNameFromUser, getPlatformSettings, savePlatformSettings, writeAdminAudit } from '@/lib/admin/platform'
+import { isPaystackConfigured } from '@/lib/env'
+import { moveLiveWallet } from '@/lib/wallet/move'
+import { markWithdrawalFailed, paystackPayoutMessage, publicWithdrawalLabel, sendWithdrawalPayout } from '@/lib/wallet/payout'
 
 const actionSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(['approve', 'reject']),
+  action: z.enum(['approve', 'reject', 'retry']),
   note: z.string().max(300).optional(),
 })
 
 const modeSchema = z.object({
   withdrawal_mode: z.enum(['automatic', 'manual']),
 })
+
+function canPayout(status: string, row: Record<string, unknown>) {
+  if (status === 'payout_failed') return true
+  if (status === 'pending') return true
+  if (status === 'approved' && !row.paid_at && !row.paystack_reference) return true
+  return false
+}
+
+function canReject(status: string, row: Record<string, unknown>) {
+  if (status === 'pending' || status === 'payout_failed') return true
+  if (status === 'approved' && !row.paid_at && !row.paystack_reference) return true
+  return false
+}
 
 export async function GET() {
   try {
@@ -28,8 +44,10 @@ export async function GET() {
     for (const row of (users.data ?? []) as Array<Record<string, unknown>>) userMap.set(String(row.id), row)
     return successResponse({
       settings,
+      paystack_ready: isPaystackConfigured(),
       withdrawals: rows.map((row) => ({
         ...row,
+        label: publicWithdrawalLabel(String(row.status ?? '')),
         user_name: userMap.get(String(row.user_id)) ? displayNameFromUser(userMap.get(String(row.user_id))!) : 'User',
         user_phone: userMap.get(String(row.user_id))?.phone_number ?? null,
       })),
@@ -53,28 +71,58 @@ export async function PATCH(request: Request) {
     const existing = await db.from('bu_withdrawals').select('*').eq('id', body.id).maybeSingle()
     if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Withdrawal not found')
     const row = existing.data as Record<string, unknown>
-    if (String(row.status) !== 'pending') throw new ApiError(400, 'NOT_PENDING', 'This withdrawal is already handled')
-    if (body.action === 'reject') {
-      const { error } = await db.rpc('credit_wallet', {
-        p_user_id: row.user_id,
-        p_amount: Number(row.naira),
-        p_type: 'refund',
-        p_description: 'Withdrawal rejected',
-        p_metadata: { withdrawal_id: body.id, admin: liveId },
-      })
-      if (error) throw new ApiError(500, 'REFUND_FAILED', error.message)
+    const status = String(row.status)
+    if (status === 'paid') throw new ApiError(400, 'ALREADY_PAID', 'This withdrawal is already paid')
+    if (status === 'rejected' || status === 'failed') {
+      throw new ApiError(400, 'ALREADY_HANDLED', 'This withdrawal is already closed')
     }
-    const { error } = await db
-      .from('bu_withdrawals')
-      .update({
-        status: body.action === 'approve' ? 'approved' : 'rejected',
-        note: body.note ?? null,
-        reviewed_at: new Date().toISOString(),
+
+    if (body.action === 'reject') {
+      if (!canReject(status, row)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal cannot be refunded')
+      await moveLiveWallet(db, {
+        userId: String(row.user_id),
+        naira: Number(row.naira),
+        direction: 'credit',
+        type: 'refund',
+        description: 'Withdrawal rejected',
+        metadata: { withdrawal_id: body.id, admin: liveId, note: body.note ?? null },
       })
-      .eq('id', body.id)
-    if (error) throw new ApiError(500, 'UPDATE_FAILED', error.message)
-    await writeAdminAudit(liveId, `withdrawals.${body.action}`, body.id, body)
-    return successResponse({ ok: true }, body.action === 'approve' ? 'Withdrawal approved' : 'Withdrawal rejected and refunded')
+      const { error } = await db
+        .from('bu_withdrawals')
+        .update({
+          status: 'rejected',
+          note: body.note ?? null,
+          transfer_error: null,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', body.id)
+      if (error && !/column|schema cache/i.test(error.message)) throw new ApiError(500, 'UPDATE_FAILED', error.message)
+      if (error) {
+        await db
+          .from('bu_withdrawals')
+          .update({ status: 'rejected', note: body.note ?? null, reviewed_at: new Date().toISOString() })
+          .eq('id', body.id)
+      }
+      await writeAdminAudit(liveId, 'withdrawals.reject', body.id, body)
+      return successResponse({ ok: true }, 'Withdrawal rejected and refunded')
+    }
+
+    if (!canPayout(status, row)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal is already handled')
+    if (!isPaystackConfigured()) {
+      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Add the live Paystack secret and enable Transfers, then retry.')
+    }
+    try {
+      const payout = await sendWithdrawalPayout(row, db)
+      await writeAdminAudit(liveId, `withdrawals.${body.action}`, body.id, { ...body, reference: payout.reference })
+      return successResponse(
+        { ok: true, status: payout.status, reference: payout.reference },
+        payout.status === 'paid' ? 'Naira sent to the guest bank' : 'Paystack transfer started',
+      )
+    } catch (error) {
+      const message = paystackPayoutMessage(error)
+      await markWithdrawalFailed(body.id, message, db)
+      throw new ApiError(502, 'PAYOUT_FAILED', message)
+    }
   } catch (error) {
     return handleRouteError(error)
   }

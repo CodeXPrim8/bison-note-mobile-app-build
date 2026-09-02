@@ -53,7 +53,10 @@ export async function GET() {
     const circulation = wallets.reduce((sum, row) => sum + walletNaira(row), 0)
     const deposits = txs.filter((row) => String(row.type) === 'deposit')
     const withdrawTx = txs.filter((row) => String(row.type) === 'withdrawal')
-    const pendingWithdrawals = withdrawals.filter((row) => String(row.status) === 'pending')
+    const pendingWithdrawals = withdrawals.filter((row) => {
+      const status = String(row.status)
+      return status === 'pending' || status === 'payout_failed' || status === 'approved'
+    })
     const days = lastDays(14)
     const byDay = (kind: string) =>
       days.map((day) =>
