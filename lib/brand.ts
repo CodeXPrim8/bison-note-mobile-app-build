@@ -11,6 +11,11 @@ export const BU_CANONICAL_ORIGIN = 'https://buapp.vercel.app'
 
 export function canonicalAppOrigin(origin?: string | null) {
   const raw = (origin ?? '').trim().replace(/\/$/, '')
-  if (/^https?:\/\/bu-app\.vercel\.app$/i.test(raw)) return BU_CANONICAL_ORIGIN
+  if (/bu-app\.vercel\.app/i.test(raw)) return BU_CANONICAL_ORIGIN
   return raw
+}
+
+/** Guest-facing links always go to the live ɃU site, never a paused Vercel alias. */
+export function publicShareOrigin() {
+  return BU_CANONICAL_ORIGIN
 }

@@ -1,3 +1,4 @@
+import { BU_CANONICAL_ORIGIN } from '@/lib/brand'
 import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 import { rateLimit } from '@/lib/api/rate-limit'
@@ -18,6 +19,15 @@ function loginRedirect(request: NextRequest, sessionResponse: NextResponse) {
 }
 
 export async function middleware(request: NextRequest) {
+  const host = request.headers.get('host')?.split(':')[0] ?? ''
+  if (/bu-app\.vercel\.app$/i.test(host)) {
+    const url = new URL(request.url)
+    url.protocol = 'https:'
+    url.host = new URL(BU_CANONICAL_ORIGIN).host
+    url.port = ''
+    return NextResponse.redirect(url, 308)
+  }
+
   const { pathname } = request.nextUrl
   const { response, user } = await updateSession(request)
 

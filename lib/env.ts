@@ -22,10 +22,10 @@ function requiredPublic(name: string): string {
 
 export function getAppUrl(): string {
   const explicit = optional('NEXT_PUBLIC_APP_URL')
+  if (process.env.VERCEL && (!explicit || /localhost|127\.0\.0\.1|bu-app\.vercel\.app/i.test(explicit))) {
+    return BU_CANONICAL_ORIGIN
+  }
   if (explicit) return canonicalAppOrigin(explicit) || explicit.replace(/\/$/, '')
-  if (process.env.VERCEL_ENV === 'production') return BU_CANONICAL_ORIGIN
-  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (production) return canonicalAppOrigin(`https://${production.replace(/^https?:\/\//, '')}`) || BU_CANONICAL_ORIGIN
   return 'http://localhost:3000'
 }
 

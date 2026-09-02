@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card'
 import { formatNaira } from '@/lib/money'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
 import { formatEventDay } from '@/lib/datetime'
-import { canonicalAppOrigin } from '@/lib/brand'
+import { publicShareOrigin } from '@/lib/brand'
 
 interface Desk {
   roles: { is_affiliate: boolean; affiliate_code: string | null; is_organizer: boolean }
@@ -73,8 +73,7 @@ export default function AffiliateDeskPage() {
   }
 
   async function copy(path: string) {
-    const origin = canonicalAppOrigin(data?.origin || window.location.origin) || window.location.origin
-    const url = `${origin}${path}`
+    const url = `${publicShareOrigin()}${path}`
     try {
       await navigator.clipboard.writeText(url)
       setCopied(url)
@@ -201,17 +200,17 @@ export default function AffiliateDeskPage() {
                   </p>
                 </div>
                 <p className="text-sm font-medium text-emerald-300">{event.commission_pct}% commission</p>
+                <p className="break-all font-mono text-[11px] text-muted-foreground">
+                  {publicShareOrigin()}
+                  {event.share_path}
+                </p>
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" className="flex-1" onClick={() => void copy(event.share_path)}>
                     <Copy className="h-4 w-4" />
                     {copied?.endsWith(event.share_path) ? 'Copied' : 'Copy link'}
                   </Button>
                   <Button asChild variant="ghost">
-                    <a
-                      href={`${canonicalAppOrigin(data?.origin || '') || ''}${event.share_path}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a href={`${publicShareOrigin()}${event.share_path}`} target="_blank" rel="noreferrer">
                       <Share2 className="h-4 w-4" />
                     </a>
                   </Button>

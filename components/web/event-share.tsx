@@ -1,12 +1,12 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { canonicalAppOrigin } from '@/lib/brand'
+import { publicShareOrigin } from '@/lib/brand'
 
 export function EventShare({ title, slug }: { title: string; slug: string }) {
   async function share() {
-    const origin = canonicalAppOrigin(window.location.origin) || window.location.origin
-    const url = `${origin}/events/${slug}`
+    const search = typeof window !== 'undefined' ? window.location.search : ''
+    const url = `${publicShareOrigin()}/events/${slug}${search}`
     if (navigator.share) {
       await navigator.share({ title, url, text: `Join me at ${title} on ɃU` })
       return
