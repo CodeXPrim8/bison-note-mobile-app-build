@@ -8,6 +8,12 @@ import { adminFetch } from '@/components/admin/api'
 
 type Overview = {
   rate: number
+  paystack?: {
+    ready: boolean
+    naira: number | null
+    currency: string
+    error: string | null
+  }
   totals: {
     circulation: number
     circulation_bu: number
@@ -41,8 +47,9 @@ export default function AdminMoneyPage() {
         <h1 className="mt-1 text-3xl font-bold">Money</h1>
         <p className="text-sm text-muted-foreground">Every naira sitting in ɃU wallets, plus ticket and payout flow. Rate 1 ɃU = ₦{data.rate}.</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
+          ['Paystack balance', data.paystack?.naira == null ? '—' : formatNaira(data.paystack.naira)],
           ['In circulation', formatNaira(data.totals.circulation)],
           ['Deposits', formatNaira(data.totals.deposits)],
           ['Withdrawals', formatNaira(data.totals.withdrawals)],
@@ -51,6 +58,12 @@ export default function AdminMoneyPage() {
           <Card key={label} className="p-5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
             <p className="mt-2 text-2xl font-bold">{value}</p>
+            {label === 'Paystack balance' && data.paystack?.error && (
+              <p className="mt-1 text-xs text-destructive">{data.paystack.error}</p>
+            )}
+            {label === 'Paystack balance' && !data.paystack?.error && (
+              <p className="mt-1 text-xs text-muted-foreground">Live Transfers wallet</p>
+            )}
           </Card>
         ))}
       </div>

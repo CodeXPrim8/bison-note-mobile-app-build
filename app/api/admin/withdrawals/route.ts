@@ -3,6 +3,7 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireAdmin } from '@/lib/admin/session'
 import { displayNameFromUser, getPlatformSettings, savePlatformSettings, writeAdminAudit } from '@/lib/admin/platform'
 import { isPaystackConfigured } from '@/lib/env'
+import { adminPaystackSnapshot } from '@/lib/payments/paystack'
 import { moveLiveWallet } from '@/lib/wallet/move'
 import { markWithdrawalFailed, paystackPayoutMessage, publicWithdrawalLabel, sendWithdrawalPayout } from '@/lib/wallet/payout'
 
@@ -30,10 +31,13 @@ function canReverse(status: string) {
 export async function GET() {
   try {
     const { db } = await requireAdmin()
-    const settings = await getPlatformSettings(db)
-    const { data, error } = await db.from('bu_withdrawals').select('*').order('created_at', { ascending: false }).limit(200)
-    if (error) throw new ApiError(500, 'WITHDRAWALS_LOAD_FAILED', error.message)
-    const rows = (data ?? []) as Array<Record<string, unknown>>
+    const [settings, listed, paystack] = await Promise.all([
+      getPlatformSettings(db),
+      db.from('bu_withdrawals').select('*').order('created_at', { ascending: false }).limit(200),
+      adminPaystackSnapshot(),
+    ])
+    if (listed.error) throw new ApiError(500, 'WITHDRAWALS_LOAD_FAILED', listed.error.message)
+    const rows = (listed.data ?? []) as Array<Record<string, unknown>>
     const ids = [...new Set(rows.map((row) => String(row.user_id ?? '')).filter(Boolean))]
     const users =
       ids.length > 0
@@ -44,6 +48,7 @@ export async function GET() {
     return successResponse({
       settings,
       paystack_ready: isPaystackConfigured(),
+      paystack,
       withdrawals: rows.map((row) => ({
         ...row,
         label: publicWithdrawalLabel(String(row.status ?? '')),

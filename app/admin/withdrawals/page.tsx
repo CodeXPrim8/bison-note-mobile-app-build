@@ -26,10 +26,18 @@ type Row = {
   user_phone: string | null
 }
 
+type PaystackSnapshot = {
+  ready: boolean
+  naira: number | null
+  currency: string
+  error: string | null
+}
+
 export default function AdminWithdrawalsPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [mode, setMode] = useState<'automatic' | 'manual'>('automatic')
   const [paystackReady, setPaystackReady] = useState(true)
+  const [paystack, setPaystack] = useState<PaystackSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -38,10 +46,12 @@ export default function AdminWithdrawalsPage() {
       withdrawals: Row[]
       settings: { withdrawal_mode: 'automatic' | 'manual' }
       paystack_ready: boolean
+      paystack: PaystackSnapshot
     }>('/api/admin/withdrawals')
     setRows(data.withdrawals)
     setMode(data.settings.withdrawal_mode)
     setPaystackReady(data.paystack_ready)
+    setPaystack(data.paystack)
   }
 
   useEffect(() => {
@@ -88,6 +98,24 @@ export default function AdminWithdrawalsPage() {
           Paystack is not configured. Add the live secret key on Vercel, enable Transfers, then redeploy.
         </p>
       )}
+      <Card className="p-5">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Paystack balance</p>
+        <p className="mt-2 text-3xl font-bold">
+          {paystack?.naira == null ? '—' : formatNaira(paystack.naira)}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Live Transfers wallet. Automatic withdrawals pay from this.
+        </p>
+        {paystack?.error && <p className="mt-2 text-xs text-destructive">{paystack.error}</p>}
+        {paystack?.naira != null &&
+          rows
+            .filter((row) => row.status === 'pending' || row.status === 'payout_failed' || row.status === 'approved')
+            .reduce((sum, row) => sum + Number(row.naira || 0), 0) > paystack.naira && (
+            <p className="mt-2 text-xs text-destructive">
+              Pending payouts exceed this balance. Fund Paystack before paying.
+            </p>
+          )}
+      </Card>
       {error && (
         <div className="flex items-start justify-between gap-3">
           <p className="text-sm text-destructive">{error}</p>

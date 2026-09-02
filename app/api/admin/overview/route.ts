@@ -9,6 +9,7 @@ import {
   walletNaira,
 } from '@/lib/admin/platform'
 import { getBuNairaValue } from '@/lib/bu-rate'
+import { adminPaystackSnapshot } from '@/lib/payments/paystack'
 
 function dayKey(iso: string) {
   return iso.slice(0, 10)
@@ -33,13 +34,14 @@ export async function GET() {
     const organiser = credits.filter((row) => row.kind === 'organiser_sale')
     const affiliate = credits.filter((row) => row.kind === 'affiliate_commission')
 
-    const [usersRes, walletsRes, txRes, eventsRes, withdrawalsRes, adsRes] = await Promise.all([
+    const [usersRes, walletsRes, txRes, eventsRes, withdrawalsRes, adsRes, paystack] = await Promise.all([
       db.from('users').select('id, email, phone_number, first_name, last_name, account_name, role').limit(4000),
       db.from('wallets').select('*').limit(8000),
       db.from('bu_transactions').select('id, user_id, type, amount, status, created_at').order('created_at', { ascending: false }).limit(2000),
       db.from('events').select('id, name, is_public, celebrant_id, date, created_at').limit(2000),
       db.from('bu_withdrawals').select('*').order('created_at', { ascending: false }).limit(200),
       db.from('bu_ads').select('id, slot, active').limit(200),
+      adminPaystackSnapshot(),
     ])
 
     const users = (usersRes.error ? [] : (usersRes.data ?? [])) as Array<Record<string, unknown>>
@@ -73,6 +75,7 @@ export async function GET() {
       viewer: displayNameFromUser(viewer ?? { account_name: 'Super Admin' }),
       settings,
       rate: getBuNairaValue(),
+      paystack,
       totals: {
         users: users.length,
         wallets: wallets.length,

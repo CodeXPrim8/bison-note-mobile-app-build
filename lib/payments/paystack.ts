@@ -190,3 +190,61 @@ export async function initiateTransfer(input: {
 export function commissionKobo(amountNaira: number, rate: number): number {
   return Math.round(amountNaira * rate * 100)
 }
+
+export type PaystackBalanceRow = {
+  currency: string
+  kobo: number
+  naira: number
+}
+
+export type AdminPaystackSnapshot = {
+  ready: boolean
+  naira: number | null
+  currency: string
+  error: string | null
+}
+
+let balanceCache: { at: number; value: AdminPaystackSnapshot } | null = null
+
+export async function getPaystackBalances(): Promise<PaystackBalanceRow[]> {
+  const data = await paystackFetch<
+    | Array<{ currency?: string; balance?: number; available_balance?: number }>
+    | { currency?: string; balance?: number; available_balance?: number }
+  >('/balance')
+  const rows = Array.isArray(data) ? data : data ? [data] : []
+  return rows.map((row) => {
+    const kobo = Math.round(Number(row.balance ?? row.available_balance ?? 0))
+    return {
+      currency: String(row.currency || 'NGN').toUpperCase(),
+      kobo,
+      naira: kobo / 100,
+    }
+  })
+}
+
+export async function adminPaystackSnapshot(): Promise<AdminPaystackSnapshot> {
+  if (balanceCache && Date.now() - balanceCache.at < 20_000) return balanceCache.value
+  if (!isPaystackConfigured()) {
+    const empty = { ready: false, naira: null, currency: 'NGN', error: 'Paystack is not configured' }
+    balanceCache = { at: Date.now(), value: empty }
+    return empty
+  }
+  try {
+    const rows = await getPaystackBalances()
+    const ngn = rows.find((row) => row.currency === 'NGN') ?? rows[0] ?? null
+    const value: AdminPaystackSnapshot = ngn
+      ? { ready: true, naira: ngn.naira, currency: ngn.currency, error: null }
+      : { ready: true, naira: null, currency: 'NGN', error: 'Paystack did not return an NGN balance' }
+    balanceCache = { at: Date.now(), value }
+    return value
+  } catch (error) {
+    const value: AdminPaystackSnapshot = {
+      ready: true,
+      naira: null,
+      currency: 'NGN',
+      error: error instanceof Error ? error.message : 'Could not load Paystack balance',
+    }
+    balanceCache = { at: Date.now(), value }
+    return value
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Users, Wallet, Ticket, Landmark, TrendingUp } from 'lucide-react'
+import { Users, Wallet, Ticket, Landmark, TrendingUp, Banknote } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
@@ -13,6 +13,12 @@ type Overview = {
   viewer: string
   rate: number
   settings: { bu_naira_value: number; withdrawal_mode: string }
+  paystack?: {
+    ready: boolean
+    naira: number | null
+    currency: string
+    error: string | null
+  }
   totals: {
     users: number
     circulation: number
@@ -71,6 +77,12 @@ export default function SuperAdminPage() {
 
   const kpis = [
     { label: 'Money in circulation', value: formatNaira(data.totals.circulation), hint: `${Math.round(data.totals.circulation_bu).toLocaleString()} ɃU`, icon: Wallet },
+    {
+      label: 'Paystack balance',
+      value: data.paystack?.naira == null ? '—' : formatNaira(data.paystack.naira),
+      hint: data.paystack?.error ?? 'Live Transfers wallet',
+      icon: Banknote,
+    },
     { label: 'Users', value: data.totals.users.toLocaleString(), hint: `${data.totals.suspended} suspended`, icon: Users },
     { label: 'Ticket volume', value: formatNaira(data.totals.ticket_naira), hint: 'Organiser + affiliate credits', icon: Ticket },
     { label: 'Pending payouts', value: String(data.totals.pending_withdrawals), hint: formatNaira(data.totals.pending_naira), icon: Landmark },
@@ -94,7 +106,7 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {kpis.map((item) => (
           <Card key={item.label} className="border-white/10 bg-card/60 p-5">
             <div className="flex items-center gap-2 text-amber-300">
