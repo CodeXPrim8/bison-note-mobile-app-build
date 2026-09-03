@@ -21,9 +21,17 @@ const CREDIT_TYPES = new Set([
   'spray_credit',
   'organiser_sale',
   'affiliate_commission',
+  'wallet_credit',
 ])
 
-const DEBIT_TYPES = new Set(['withdrawal', 'purchase', 'ticket_purchase', 'spray', 'bu_transfer'])
+const DEBIT_TYPES = new Set([
+  'withdrawal',
+  'purchase',
+  'ticket_purchase',
+  'spray',
+  'bu_transfer',
+  'wallet_debit',
+])
 
 /** Incoming ɃU is a credit. Leaving ɃU is a debit. Amounts in the ledger are unsigned. */
 export function walletDirection(input: {
@@ -63,6 +71,8 @@ export function historyBucket(input: { type?: string | null; description?: strin
     type === 'spray' ||
     type === 'spray_credit' ||
     type === 'bu_transfer' ||
+    type === 'wallet_debit' ||
+    type === 'wallet_credit' ||
     /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|tip/.test(desc)
   ) {
     return 'bu_transfer'
@@ -79,9 +89,17 @@ export function historyLabel(input: {
   const desc = String(input.description ?? '').trim()
   const lower = desc.toLowerCase()
   const credit = input.direction === 'credit'
-  if (/^bu transfer$/i.test(desc) || /^sent Ƀu$|^sent bu$/i.test(desc)) return credit ? 'Received ɃU' : 'Sent ɃU'
-  if (/^bu received$|^received Ƀu$|^received bu$/i.test(desc)) return 'Received ɃU'
-  if (/^tip$/i.test(desc)) return credit ? 'Tip received' : 'Tip sent'
+  if (/^bu transfer/i.test(desc) || /^sent Ƀu|^sent bu/i.test(desc)) {
+    const who = desc.replace(/^bu transfer(?: to)?\s*/i, '').replace(/^sent Ƀu(?: to)?\s*/i, '').replace(/^sent bu(?: to)?\s*/i, '').trim()
+    if (credit) return who ? `Received ɃU from ${who}` : 'Received ɃU'
+    return who && !/^bu transfer$/i.test(who) ? `Sent ɃU to ${who}` : 'Sent ɃU'
+  }
+  if (/^bu received|^received Ƀu|^received bu/i.test(desc)) {
+    const who = desc.replace(/^bu received(?: from)?\s*/i, '').replace(/^received Ƀu(?: from)?\s*/i, '').replace(/^received bu(?: from)?\s*/i, '').trim()
+    return who ? `Received ɃU from ${who}` : 'Received ɃU'
+  }
+  if (/^tip received/i.test(desc)) return desc.replace(/^tip received/i, 'Tip received')
+  if (/^tip to /i.test(desc) || /^tip$/i.test(desc)) return credit ? 'Tip received' : desc.replace(/^tip to /i, 'Tip sent to ') || 'Tip sent'
   if (!desc) {
     const type = String(input.type ?? '').toLowerCase()
     if (type === 'deposit') return 'Wallet top-up'

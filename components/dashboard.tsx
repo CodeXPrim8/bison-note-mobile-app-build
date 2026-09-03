@@ -9,6 +9,7 @@ import { EventStatusBadge } from '@/components/event-status-badge'
 import { TicketPass } from '@/components/ticket-pass'
 import { useAccount } from '@/components/account-store'
 import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 
 interface OwnedTicket extends TicketRecord {
@@ -29,7 +30,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [ticketsLoaded, setTicketsLoaded] = useState(false)
   const [invitesLoaded, setInvitesLoaded] = useState(false)
   const [eventsLoaded, setEventsLoaded] = useState(false)
-  const { greetingName, buBalance, nairaBalance, userId } = useAccount()
+  const [unreadAlerts, setUnreadAlerts] = useState(0)
+  const { greetingName, buBalance, nairaBalance, userId, refreshWallet } = useAccount()
 
   useEffect(() => {
     if (!userId) {
@@ -37,6 +39,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       setMyTickets([])
       setInvitesLoaded(false)
       setTicketsLoaded(false)
+      setUnreadAlerts(0)
       return
     }
     fetch('/api/events', { credentials: 'include' })
@@ -63,6 +66,17 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       })
       .catch(() => setInvites([]))
       .finally(() => setInvitesLoaded(true))
+    fetch('/api/wallet', { credentials: 'include' })
+      .then(async (res) => {
+        const json = await res.json()
+        if (!json.status) {
+          setUnreadAlerts(0)
+          return
+        }
+        setUnreadAlerts(countUnseenAlerts((json.data?.transactions ?? []) as Array<Record<string, unknown>>))
+        void refreshWallet()
+      })
+      .catch(() => setUnreadAlerts(0))
     fetch('/api/tickets/mine', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -75,7 +89,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       })
       .catch(() => setMyTickets([]))
       .finally(() => setTicketsLoaded(true))
-  }, [userId])
+  }, [userId, refreshWallet])
 
   return (
     <div className="space-y-6 pb-24">
@@ -89,9 +103,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="flex gap-2">
             <button 
               onClick={() => onNavigate('notifications')}
-              className="rounded-full bg-primary-foreground/20 p-2 backdrop-blur hover:bg-primary-foreground/30 transition"
+              className="relative rounded-full bg-primary-foreground/20 p-2 backdrop-blur hover:bg-primary-foreground/30 transition"
             >
               <Bell size={20} />
+              {unreadAlerts > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-green-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                  {unreadAlerts > 9 ? '9+' : unreadAlerts}
+                </span>
+              ) : null}
             </button>
             <button 
               onClick={() => onNavigate('profile', { view: 'settings' })}

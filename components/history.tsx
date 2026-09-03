@@ -143,8 +143,13 @@ export default function History() {
       }
     }
     void load()
+    function onVisible() {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [userId])
 
