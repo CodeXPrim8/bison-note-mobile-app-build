@@ -9,6 +9,7 @@ import { displayBuId } from '@/lib/phone'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
+import { historyBucket, walletDirection } from '@/lib/wallet/direction'
 
 interface ReceivedTransfer {
   id: string
@@ -71,14 +72,24 @@ export default function ReceiveBU() {
         }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setReceivedTransfers(
-          txs.map((tx) => ({
-            id: String(tx.id),
-            senderUsername: String(tx.counterparty ?? ''),
-            senderName: String(tx.description ?? 'ɃU received'),
-            amount: buFromNaira(Number(tx.amount ?? 0)),
-            type: String(tx.metadata ?? '').includes('tip') ? 'tip' : 'transfer',
-            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-          })),
+          txs
+            .filter((tx) => {
+              const type = String(tx.type ?? '')
+              const description = String(tx.description ?? '')
+              const direction =
+                tx.direction === 'credit' || tx.direction === 'debit'
+                  ? tx.direction
+                  : walletDirection({ type, description, metadata: tx.metadata })
+              return direction === 'credit' && historyBucket({ type, description }) === 'bu_transfer'
+            })
+            .map((tx) => ({
+              id: String(tx.id),
+              senderUsername: String(tx.counterparty ?? ''),
+              senderName: String(tx.description ?? 'ɃU received'),
+              amount: buFromNaira(Math.abs(Number(tx.amount ?? 0))),
+              type: String(tx.metadata ?? '').includes('tip') || /tip/i.test(String(tx.description ?? '')) ? 'tip' : 'transfer',
+              date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+            })),
         )
       })
       .catch(() => setReceivedTransfers([]))
@@ -151,7 +162,7 @@ export default function ReceiveBU() {
                           <p className="text-xs text-muted-foreground">{transfer.senderUsername}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-primary">+Ƀ {formatBu(transfer.amount)}</p>
+                          <p className="font-bold text-green-500">+Ƀ {formatBu(transfer.amount)}</p>
                           <p className="text-xs text-muted-foreground">{transfer.date}</p>
                         </div>
                       </div>
@@ -247,7 +258,7 @@ export default function ReceiveBU() {
                         <p className="text-sm text-muted-foreground mt-1">{transfer.senderUsername}</p>
                         <p className="text-xs text-muted-foreground mt-2">{transfer.date}</p>
                       </div>
-                      <p className="font-bold text-primary">+Ƀ {formatBu(transfer.amount)}</p>
+                      <p className="font-bold text-green-500">+Ƀ {formatBu(transfer.amount)}</p>
                     </div>
                   </Card>
                 ))

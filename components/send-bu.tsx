@@ -9,6 +9,7 @@ import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
 import { formatEventDateTime } from '@/lib/datetime'
 import { BU_MIN_SPRAY, BU_MIN_TRANSFER, BU_SPRAY_NOTES, buFromNaira, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
+import { historyBucket, walletDirection } from '@/lib/wallet/direction'
 
 interface UserProfile {
   id: string
@@ -65,16 +66,26 @@ export default function SendBU() {
         }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransfers(
-          txs.map((tx) => ({
-            id: String(tx.id),
-            recipientUsername: String(tx.counterparty ?? ''),
-            recipientName: String(tx.description ?? 'ɃU transfer'),
-            amount: buFromNaira(Number(tx.amount ?? 0)),
-            message: '',
-            date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-            status: 'completed',
-            type: String(tx.metadata ?? '').includes('tip') ? 'tip' : 'transfer',
-          })),
+          txs
+            .filter((tx) => {
+              const type = String(tx.type ?? '')
+              const description = String(tx.description ?? '')
+              const direction =
+                tx.direction === 'credit' || tx.direction === 'debit'
+                  ? tx.direction
+                  : walletDirection({ type, description, metadata: tx.metadata })
+              return direction === 'debit' && historyBucket({ type, description }) === 'bu_transfer'
+            })
+            .map((tx) => ({
+              id: String(tx.id),
+              recipientUsername: String(tx.counterparty ?? ''),
+              recipientName: String(tx.description ?? 'ɃU transfer'),
+              amount: buFromNaira(Math.abs(Number(tx.amount ?? 0))),
+              message: '',
+              date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+              status: 'completed' as const,
+              type: String(tx.metadata ?? '').includes('tip') || /tip/i.test(String(tx.description ?? '')) ? 'tip' : 'transfer',
+            })),
         )
       })
       .catch(() => setTransfers([]))
@@ -340,7 +351,7 @@ export default function SendBU() {
                           </div>
                           <p className="text-xs text-muted-foreground">{transfer.recipientUsername}</p>
                         </div>
-                        <p className="font-bold text-primary">Ƀ {formatBu(transfer.amount)}</p>
+                        <p className="font-bold text-red-500">-Ƀ {formatBu(transfer.amount)}</p>
                       </div>
                     </Card>
                   ))}
@@ -599,7 +610,7 @@ export default function SendBU() {
                           <p className="font-medium">{transfer.recipientName}</p>
                           <p className="text-xs text-muted-foreground">{transfer.recipientUsername}</p>
                         </div>
-                        <p className="font-bold text-primary">Ƀ {formatBu(transfer.amount)}</p>
+                        <p className="font-bold text-red-500">-Ƀ {formatBu(transfer.amount)}</p>
                       </div>
                     </Card>
                   ))}
@@ -773,7 +784,7 @@ export default function SendBU() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount:</span>
-                  <span className="font-bold text-primary">Ƀ {formatBu(transfers[0].amount)}</span>
+                  <span className="font-bold text-red-500">-Ƀ {formatBu(transfers[0].amount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status:</span>
@@ -875,8 +886,8 @@ export default function SendBU() {
                         <p className="text-xs text-muted-foreground mt-2">{transfer.date}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-primary">
-                          Ƀ {formatBu(transfer.amount)}
+                        <p className="font-bold text-red-500">
+                          -Ƀ {formatBu(transfer.amount)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           ₦{formatNairaPlain(nairaFromBu(transfer.amount))}

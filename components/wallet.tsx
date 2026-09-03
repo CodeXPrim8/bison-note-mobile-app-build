@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
 import { formatEventDateTime } from '@/lib/datetime'
 import { useAccount } from '@/components/account-store'
 import { AdSlot } from '@/components/web/ad-slot'
+import { amountIconTone, amountTone, historyLabel, walletDirection, type WalletDirection } from '@/lib/wallet/direction'
 import {
   BU_BUY_PRESETS,
   BU_MIN_PURCHASE,
@@ -28,6 +29,7 @@ interface Transaction {
   amount: number
   date: string
   description: string
+  direction: WalletDirection
 }
 
 interface WalletProps {
@@ -68,13 +70,22 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
         setTransactions(
           txs
-            .map((tx) => ({
-              id: String(tx.id),
-              type: String(tx.type ?? tx.kind ?? 'transfer'),
-              amount: Number(tx.amount ?? 0),
-              date: String(tx.created_at ?? tx.date ?? ''),
-              description: String(tx.description ?? tx.type ?? 'ɃU movement'),
-            }))
+            .map((tx) => {
+              const type = String(tx.type ?? tx.kind ?? 'transfer')
+              const rawDescription = String(tx.description ?? tx.type ?? 'ɃU movement')
+              const direction =
+                tx.direction === 'credit' || tx.direction === 'debit'
+                  ? tx.direction
+                  : walletDirection({ type, description: rawDescription, metadata: tx.metadata, amount: Number(tx.amount ?? 0) })
+              return {
+                id: String(tx.id),
+                type,
+                amount: Math.abs(Number(tx.amount ?? 0)),
+                date: String(tx.created_at ?? tx.date ?? ''),
+                description: historyLabel({ type, description: rawDescription, direction }),
+                direction,
+              }
+            })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         )
       })
@@ -226,14 +237,16 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
           {transactions.length === 0 && (
             <p className="text-sm text-muted-foreground">No wallet movements yet.</p>
           )}
-          {transactions.map((tx) => (
+          {transactions.map((tx) => {
+            const credit = tx.direction === 'credit'
+            return (
             <Card key={tx.id} className="border-border/50 flex items-center justify-between bg-card/50 p-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-full bg-primary/20 p-2">
-                  {tx.type === 'withdrawal' ? (
-                    <ArrowUp className="h-4 w-4 text-destructive" />
+                <div className={`rounded-full p-2 ${amountIconTone(tx.direction)}`}>
+                  {credit ? (
+                    <ArrowDown className="h-4 w-4 text-green-500" />
                   ) : (
-                    <ArrowDown className="h-4 w-4 text-primary" />
+                    <ArrowUp className="h-4 w-4 text-red-500" />
                   )}
                 </div>
                 <div>
@@ -241,12 +254,15 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                   <p className="text-xs text-muted-foreground">{tx.date ? formatEventDateTime(tx.date) : ''}</p>
                 </div>
               </div>
-              <span className="font-semibold text-primary">
-                Ƀ {formatBu(buFromNaira(tx.amount))}
-                <span className="block text-xs font-normal text-muted-foreground">₦{formatNairaPlain(tx.amount)}</span>
+              <span className={`font-semibold ${amountTone(tx.direction)}`}>
+                {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(tx.amount))}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {credit ? '+' : '-'}₦{formatNairaPlain(tx.amount)}
+                </span>
               </span>
             </Card>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

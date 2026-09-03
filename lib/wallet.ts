@@ -23,11 +23,13 @@ export async function transferBu(input: {
     value_rate: getBuNairaValue(),
     event_id: input.eventId ?? null,
   }
+  const debitType = 'spray'
+  const creditType = 'spray_credit'
   await moveLiveWallet(db, {
     userId: input.fromUserId,
     naira: input.amount,
     direction: 'debit',
-    type: 'bu_transfer',
+    type: debitType,
     description: input.isTip ? 'Tip' : 'BU transfer',
     metadata: { ...meta, to: input.toUserId },
   })
@@ -35,7 +37,7 @@ export async function transferBu(input: {
     userId: input.toUserId,
     naira: input.amount,
     direction: 'credit',
-    type: 'bu_transfer',
+    type: creditType,
     description: input.isTip ? 'Tip received' : 'BU received',
     metadata: { ...meta, from: input.fromUserId },
   })

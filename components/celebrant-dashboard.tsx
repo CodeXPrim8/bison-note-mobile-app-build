@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowDown, Banknote, TrendingUp, Calendar } from 'lucide-react'
+import { ArrowDown, ArrowUp, Banknote, TrendingUp, Calendar } from 'lucide-react'
+import { amountIconTone, amountTone, historyLabel, walletDirection } from '@/lib/wallet/direction'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain, BU_MIN_WITHDRAW } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
@@ -24,6 +25,7 @@ interface BUTransfer {
   amount: number
   fromGuest: string
   timestamp: string
+  direction: 'credit' | 'debit'
 }
 
 const CACHE_KEY = 'bu_celebrant_dashboard'
@@ -66,7 +68,12 @@ export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page:
     }
     if (cached) {
       setEvents(cache.events)
-      setRecentTransfers(cache.recentTransfers)
+      setRecentTransfers(
+        cache.recentTransfers.map((row) => ({
+          ...row,
+          direction: row.direction === 'debit' ? 'debit' : 'credit',
+        })),
+      )
       setEventsReady(true)
       setTransfersReady(true)
     }
@@ -104,14 +111,25 @@ export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page:
           return
         }
         const txs = (json.data?.transactions ?? []) as Array<Record<string, unknown>>
-        const next = txs.slice(0, 8).map((tx) => ({
-          id: String(tx.id),
-          eventId: String(tx.event_id ?? ''),
-          eventName: String(tx.description ?? 'ɃU received'),
-          amount: Number(tx.amount ?? 0),
-          fromGuest: 'Guest',
-          timestamp: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-        }))
+        const next = txs
+          .map((tx) => {
+            const type = String(tx.type ?? '')
+            const description = String(tx.description ?? 'ɃU received')
+            const direction =
+              tx.direction === 'credit' || tx.direction === 'debit'
+                ? tx.direction
+                : walletDirection({ type, description, metadata: tx.metadata, amount: Number(tx.amount ?? 0) })
+            return {
+              id: String(tx.id),
+              eventId: String(tx.event_id ?? ''),
+              eventName: historyLabel({ type, description, direction }),
+              amount: Math.abs(Number(tx.amount ?? 0)),
+              fromGuest: direction === 'credit' ? 'Incoming' : 'Outgoing',
+              timestamp: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+              direction,
+            }
+          })
+          .slice(0, 8)
         setRecentTransfers(next)
         persist({ recentTransfers: next })
         setTransfersReady(true)
@@ -195,27 +213,36 @@ export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page:
         <h3 className="mb-4 text-lg font-bold">Recent ɃU Transfers</h3>
         <div className="space-y-3">
           {transfersReady && recentTransfers.length === 0 && (
-            <p className="text-sm text-muted-foreground">No ɃU received yet.</p>
+            <p className="text-sm text-muted-foreground">No ɃU movements yet.</p>
           )}
-          {recentTransfers.map((transfer) => (
+          {recentTransfers.map((transfer) => {
+            const credit = transfer.direction !== 'debit'
+            return (
             <Card key={transfer.id} className="border-border/50 bg-card/50 p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-primary/20 p-2">
-                    <ArrowDown className="h-4 w-4 text-primary" />
+                  <div className={`rounded-full p-2 ${amountIconTone(credit ? 'credit' : 'debit')}`}>
+                    {credit ? (
+                      <ArrowDown className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <ArrowUp className="h-4 w-4 text-red-500" />
+                    )}
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold">{transfer.eventName}</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">From: {transfer.fromGuest}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{transfer.fromGuest}</p>
                     <p className="text-xs text-muted-foreground">{transfer.timestamp}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-primary">+Ƀ {formatBu(buFromNaira(transfer.amount))}</p>
+                  <p className={`font-bold ${amountTone(credit ? 'credit' : 'debit')}`}>
+                    {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(transfer.amount))}
+                  </p>
                 </div>
               </div>
             </Card>
-          ))}
+            )
+          })}
         </div>
       </div>
 

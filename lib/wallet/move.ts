@@ -22,6 +22,46 @@ function throwMoveError(message: string): never {
   throw new ApiError(500, 'WALLET_MOVE_FAILED', message || 'Could not update wallet')
 }
 
+const LEDGER_TYPES = new Set([
+  'deposit',
+  'spray',
+  'purchase',
+  'ticket_purchase',
+  'withdrawal',
+  'spray_credit',
+  'refund',
+])
+
+function ledgerType(type: string, direction: 'debit' | 'credit') {
+  if (LEDGER_TYPES.has(type)) return type
+  return direction === 'debit' ? 'withdrawal' : 'refund'
+}
+
+async function recordLedger(
+  db: SupabaseClient,
+  input: {
+    userId: string
+    naira: number
+    direction: 'debit' | 'credit'
+    type: string
+    description: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const row = {
+    user_id: input.userId,
+    type: ledgerType(input.type, input.direction),
+    amount: input.naira,
+    description: input.description,
+    metadata: { ...(input.metadata ?? {}), direction: input.direction, requested_type: input.type },
+  }
+  const first = await db.from('bu_transactions').insert(row)
+  if (!first.error) return
+  const fallbackType = input.direction === 'debit' ? 'withdrawal' : 'refund'
+  if (row.type === fallbackType) return
+  await db.from('bu_transactions').insert({ ...row, type: fallbackType })
+}
+
 async function applyDirect(
   db: SupabaseClient,
   userId: string,
@@ -71,14 +111,17 @@ export async function moveLiveWallet(
     p_direction: input.direction,
     p_type: input.type,
     p_description: input.description,
-    p_metadata: input.metadata ?? {},
+    p_metadata: { ...(input.metadata ?? {}), direction: input.direction },
   })
   if (!rpc.error) {
     const payload = asRecord(rpc.data)
     if (payload?.ok === false) {
       throwMoveError(String(payload.reason ?? 'WALLET_MOVE_FAILED'))
     }
-    if (payload?.ok === true) return
+    if (payload?.ok === true) {
+      if (!payload.tx_id) await recordLedger(db, input)
+      return
+    }
   } else if (!/could not find|schema cache|does not exist/i.test(rpc.error.message)) {
     throwMoveError(rpc.error.message)
   }
@@ -89,7 +132,7 @@ export async function moveLiveWallet(
     p_amount: input.naira,
     p_type: input.type,
     p_description: input.description,
-    p_metadata: input.metadata ?? {},
+    p_metadata: { ...(input.metadata ?? {}), direction: input.direction },
   })
   if (!fallback.error) return
   if (/INSUFFICIENT_FUNDS/i.test(fallback.error.message)) {
@@ -100,4 +143,5 @@ export async function moveLiveWallet(
   }
 
   await applyDirect(db, input.userId, input.naira, input.direction)
+  await recordLedger(db, input)
 }
