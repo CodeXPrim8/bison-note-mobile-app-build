@@ -118,3 +118,4 @@ export async function recordWalletLedger(db: SupabaseClient, input: WalletLedger
       console.error('bu_sale_credits ledger', retry.error.message)
     }
   }
+}
