@@ -1,5 +1,5 @@
 ﻿-- Paste this whole file into the live Supabase SQL editor and run once.
--- Fixes role NOT NULL, registers Daniella (07026056067) for Send ɃU.
+-- Registers Daniella (07026056067) for Send ɃU.
 
 create or replace function public.bu_ensure_live_user(
   p_id uuid,
@@ -15,213 +15,101 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_variable
 declare
-  digits text := regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g');
-  phone text;
-  existing_id uuid;
-  new_id uuid;
-  first_name text := nullif(trim(coalesce(p_first_name, '')), '');
-  last_name text := nullif(trim(coalesce(p_last_name, '')), '');
-  account_name text;
-  role_text text := lower(coalesce(nullif(trim(p_role), ''), 'guest'));
-  email_val text := nullif(lower(trim(coalesce(p_email, ''))), '');
-  pin_val text := nullif(trim(coalesce(p_pin_hash, '')), '');
-  role_sample text;
+  v_digits text := regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g');
+  v_phone text;
+  v_existing uuid;
+  v_new uuid;
+  v_first text := nullif(trim(coalesce(p_first_name, '')), '');
+  v_last text := nullif(trim(coalesce(p_last_name, '')), '');
+  v_account text;
+  v_role text := lower(coalesce(nullif(trim(p_role), ''), 'guest'));
+  v_email text := nullif(lower(trim(coalesce(p_email, ''))), '');
+  v_pin text := nullif(trim(coalesce(p_pin_hash, '')), '');
 begin
   if p_id is null then
     raise exception 'p_id required';
   end if;
 
-  if digits like '00%' then
-    digits := substr(digits, 3);
+  if v_digits like '00%' then
+    v_digits := substr(v_digits, 3);
   end if;
-  if digits like '0%' and length(digits) = 11 then
-    digits := '234' || substr(digits, 2);
+  if v_digits like '0%' and length(v_digits) = 11 then
+    v_digits := '234' || substr(v_digits, 2);
   end if;
-  if length(digits) = 10 and substr(digits, 1, 1) in ('7', '8', '9') then
-    digits := '234' || digits;
+  if length(v_digits) = 10 and substr(v_digits, 1, 1) in ('7', '8', '9') then
+    v_digits := '234' || v_digits;
   end if;
-  phone := digits;
-  if phone is null or length(phone) < 10 then
+  v_phone := v_digits;
+  if v_phone is null or length(v_phone) < 10 then
     raise exception 'invalid phone';
   end if;
 
-  if first_name is null then
-    first_name := 'Bucks';
+  if v_first is null then
+    v_first := 'Bucks';
   end if;
-  if last_name is null then
-    last_name := 'Member';
+  if v_last is null then
+    v_last := 'Member';
   end if;
-  account_name := trim(first_name || ' ' || last_name);
+  v_account := trim(v_first || ' ' || v_last);
 
-  if pin_val is null then
-    pin_val := encode(sha256((p_id::text || phone)::bytea), 'hex');
-  end if;
-
-  select u.id into existing_id from public.users u where u.id = p_id limit 1;
-  if existing_id is not null then
-    return existing_id;
+  select u.id into v_existing from public.users u where u.id = p_id limit 1;
+  if v_existing is not null then
+    return v_existing;
   end if;
 
-  select u.id into existing_id
+  select u.id into v_existing
   from public.users u
-  where right(regexp_replace(coalesce(u.phone_number, ''), '[^0-9]', '', 'g'), 10) = right(phone, 10)
+  where right(regexp_replace(coalesce(u.phone_number, ''), '[^0-9]', '', 'g'), 10) = right(v_phone, 10)
   order by u.created_at desc
   limit 1;
-  if existing_id is not null then
-    return existing_id;
+  if v_existing is not null then
+    return v_existing;
   end if;
 
-  select u.role::text into role_sample
-  from public.users u
-  where u.role is not null
-    and lower(u.role::text) = role_text
-  limit 1;
-  if role_sample is null then
-    select u.role::text into role_sample
-    from public.users u
-    where u.role is not null
-      and lower(u.role::text) in ('guest', 'user', 'celebrant', 'member')
-    order by case lower(u.role::text)
-      when 'guest' then 0
-      when 'user' then 1
-      when 'celebrant' then 2
-      else 3
-    end
-    limit 1;
+  insert into public.users (id, phone_number, first_name, last_name, role)
+  select p_id, v_phone, v_first, v_last, src.role
+  from public.users src
+  where src.role is not null
+    and lower(src.role::text) = v_role
+  limit 1
+  returning id into v_new;
+
+  if v_new is null then
+    insert into public.users (id, phone_number, first_name, last_name, role)
+    select p_id, v_phone, v_first, v_last, src.role
+    from public.users src
+    where src.role is not null
+    limit 1
+    returning id into v_new;
   end if;
-  if role_sample is null then
-    select u.role::text into role_sample
-    from public.users u
-    where u.role is not null
-    limit 1;
-  end if;
-  if role_sample is null then
-    role_sample := role_text;
+
+  if v_new is null then
+    raise exception 'could not insert live user for % (no existing role to copy)', v_phone;
   end if;
 
   begin
-    insert into public.users (
-      id,
-      phone_number,
-      first_name,
-      last_name,
-      account_name,
-      email,
-      role,
-      pin_hash
-    )
-    select
-      p_id,
-      phone,
-      first_name,
-      last_name,
-      account_name,
-      email_val,
-      u.role,
-      pin_val
-    from public.users u
-    where u.role is not null
-      and u.role::text = role_sample
-    limit 1
-    returning id into new_id;
-
-    if new_id is null then
-      insert into public.users (
-        id,
-        phone_number,
-        first_name,
-        last_name,
-        account_name,
-        email,
-        role,
-        pin_hash
-      )
-      select
-        p_id,
-        phone,
-        first_name,
-        last_name,
-        account_name,
-        email_val,
-        u.role,
-        pin_val
-      from public.users u
-      where u.role is not null
-      limit 1
-      returning id into new_id;
-    end if;
+    update public.users u
+    set
+      email = coalesce(v_email, u.email),
+      account_name = coalesce(v_account, u.account_name),
+      pin_hash = coalesce(v_pin, u.pin_hash)
+    where u.id = v_new;
   exception
-    when undefined_column then
-      insert into public.users (id, phone_number, first_name, last_name, email, role)
-      select p_id, phone, first_name, last_name, email_val, u.role
-      from public.users u
-      where u.role is not null
-        and u.role::text = role_sample
-      limit 1
-      returning id into new_id;
-      if new_id is null then
-        insert into public.users (id, phone_number, first_name, last_name, email, role)
-        select p_id, phone, first_name, last_name, email_val, u.role
-        from public.users u
-        where u.role is not null
-        limit 1
-        returning id into new_id;
-      end if;
     when others then
-      begin
-        insert into public.users (
-          id,
-          phone_number,
-          first_name,
-          last_name,
-          email,
-          role,
-          pin_hash
-        )
-        select
-          p_id,
-          phone,
-          first_name,
-          last_name,
-          email_val,
-          u.role,
-          pin_val
-        from public.users u
-        where u.role is not null
-        limit 1
-        returning id into new_id;
-      exception
-        when unique_violation then
-          select u.id into new_id
-          from public.users u
-          where u.id = p_id
-             or right(regexp_replace(coalesce(u.phone_number, ''), '[^0-9]', '', 'g'), 10) = right(phone, 10)
-          order by case when u.id = p_id then 0 else 1 end, u.created_at desc
-          limit 1;
-        when others then
-          insert into public.users (id, phone_number, first_name, last_name, role)
-          select p_id, phone, first_name, last_name, u.role
-          from public.users u
-          where u.role is not null
-          limit 1
-          returning id into new_id;
-      end;
+      null;
   end;
-
-  if new_id is null then
-    raise exception 'could not insert live user for %', phone;
-  end if;
 
   begin
     insert into public.wallets (user_id, bu_balance, naira_available)
-    values (new_id, 0, 0)
+    values (v_new, 0, 0)
     on conflict (user_id) do nothing;
   exception
     when others then
       begin
         insert into public.wallets (user_id, balance)
-        values (new_id, 0)
+        values (v_new, 0)
         on conflict (user_id) do nothing;
       exception
         when others then
@@ -229,7 +117,7 @@ begin
       end;
   end;
 
-  return new_id;
+  return v_new;
 end;
 $$;
 
@@ -242,31 +130,32 @@ language plpgsql
 security definer
 set search_path = public, auth
 as $$
+#variable_conflict use_variable
 declare
-  digits text := regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g');
-  last10 text;
-  auth_id uuid;
-  meta jsonb;
-  email text;
-  name text;
-  ensured uuid;
+  v_digits text := regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g');
+  v_last10 text;
+  v_auth_id uuid;
+  v_meta jsonb;
+  v_email text;
+  v_name text;
+  v_ensured uuid;
 begin
-  if length(digits) >= 10 then
-    last10 := right(digits, 10);
+  if length(v_digits) >= 10 then
+    v_last10 := right(v_digits, 10);
   else
-    last10 := digits;
+    v_last10 := v_digits;
   end if;
-  if last10 is null or last10 = '' then
+  if v_last10 is null or v_last10 = '' then
     return;
   end if;
 
   select u.id
-  into auth_id
+  into v_auth_id
   from public.users u
-  where right(regexp_replace(coalesce(u.phone_number, ''), '[^0-9]', '', 'g'), 10) = last10
+  where right(regexp_replace(coalesce(u.phone_number, ''), '[^0-9]', '', 'g'), 10) = v_last10
   limit 1;
-  if auth_id is not null then
-    user_id := auth_id;
+  if v_auth_id is not null then
+    user_id := v_auth_id;
     phone_number := p_phone;
     display_name := null;
     created := false;
@@ -275,32 +164,32 @@ begin
   end if;
 
   select au.id, au.email, au.raw_user_meta_data
-  into auth_id, email, meta
+  into v_auth_id, v_email, v_meta
   from auth.users au
-  where right(regexp_replace(coalesce(au.raw_user_meta_data->>'phone_e164', au.raw_user_meta_data->>'phone', ''), '[^0-9]', '', 'g'), 10) = last10
-     or right(regexp_replace(coalesce(au.email, ''), '[^0-9]', '', 'g'), 10) = last10
-     or au.email ilike '%' || last10 || '%'
+  where right(regexp_replace(coalesce(au.raw_user_meta_data->>'phone_e164', au.raw_user_meta_data->>'phone', ''), '[^0-9]', '', 'g'), 10) = v_last10
+     or right(regexp_replace(coalesce(au.email, ''), '[^0-9]', '', 'g'), 10) = v_last10
+     or au.email ilike '%' || v_last10 || '%'
   order by au.created_at desc
   limit 1;
 
-  if auth_id is null then
+  if v_auth_id is null then
     return;
   end if;
 
-  name := coalesce(nullif(trim(meta->>'display_name'), ''), 'Bucks Member');
-  ensured := public.bu_ensure_live_user(
-    auth_id,
-    coalesce(nullif(meta->>'phone_e164', ''), nullif(meta->>'phone', ''), digits),
-    split_part(name, ' ', 1),
-    nullif(trim(substr(name, length(split_part(name, ' ', 1)) + 1)), ''),
-    email,
+  v_name := coalesce(nullif(trim(v_meta->>'display_name'), ''), 'Bucks Member');
+  v_ensured := public.bu_ensure_live_user(
+    v_auth_id,
+    coalesce(nullif(v_meta->>'phone_e164', ''), nullif(v_meta->>'phone', ''), v_digits),
+    split_part(v_name, ' ', 1),
+    nullif(trim(substr(v_name, length(split_part(v_name, ' ', 1)) + 1)), ''),
+    v_email,
     null,
-    coalesce(nullif(meta->>'role', ''), 'guest')
+    coalesce(nullif(v_meta->>'role', ''), 'guest')
   );
 
-  user_id := ensured;
-  phone_number := coalesce(nullif(meta->>'phone_e164', ''), nullif(meta->>'phone', ''), digits);
-  display_name := name;
+  user_id := v_ensured;
+  phone_number := coalesce(nullif(v_meta->>'phone_e164', ''), nullif(v_meta->>'phone', ''), v_digits);
+  display_name := v_name;
   created := true;
   return next;
 end;
