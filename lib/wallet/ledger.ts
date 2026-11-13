@@ -39,7 +39,7 @@ export type WalletLedgerInput = {
 /** Persist a wallet movement even when bu_transactions cannot accept live users.id. */
 export async function recordWalletLedger(db: SupabaseClient, input: WalletLedgerInput) {
   const reference = input.reference || crypto.randomUUID()
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
     direction: input.direction,
     requested_type: input.type,
