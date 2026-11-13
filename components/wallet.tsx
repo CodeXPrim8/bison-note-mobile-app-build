@@ -216,6 +216,13 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                 min {BU_MIN_PURCHASE.toLocaleString('en-NG')} ɃU (₦{formatNairaPlain(minPurchaseChargeNaira())})
               </p>
             )}
+            <Input
+              type="email"
+              placeholder="Email for the Paystack receipt"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="bg-secondary text-foreground placeholder:text-muted-foreground"
+            />
             {message && <p className="text-sm text-destructive">{message}</p>}
             <div className="flex gap-2">
               <Button

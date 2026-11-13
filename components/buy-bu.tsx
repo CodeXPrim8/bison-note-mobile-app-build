@@ -231,6 +231,13 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
             </div>
           </div>
         </Card>
+        <Input
+          type="email"
+          placeholder="Email for the Paystack receipt"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="mb-3 bg-secondary text-foreground placeholder:text-muted-foreground"
+        />
         {message && <p className="text-sm text-destructive mb-3">{message}</p>}
         <Button
           onClick={() => void handleCheckout()}
