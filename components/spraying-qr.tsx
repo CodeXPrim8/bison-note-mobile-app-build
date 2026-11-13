@@ -60,6 +60,7 @@ export default function SprayingQR() {
     amount: '',
     message: '',
   })
+  const [txPin, setTxPin] = useState('')
 
   async function loadEvent(raw: string) {
     const trimmed = raw.trim()
@@ -99,6 +100,10 @@ export default function SprayingQR() {
       setMessage('This event has no celebrant wallet to receive ɃU.')
       return
     }
+    if (!/^\d{4,6}$/.test(txPin)) {
+      setMessage('Enter your transaction PIN. You created it when you registered.')
+      return
+    }
     setBusy(true)
     setMessage(null)
     applySpendBu(Number(sprayForm.amount), { refresh: false })
@@ -111,6 +116,7 @@ export default function SprayingQR() {
           to_user_id: eventDetails.celebrantWalletId,
           amount: Number(sprayForm.amount),
           event_id: eventDetails.eventId,
+          pin: txPin,
         }),
       })
       const json = await res.json()
@@ -135,6 +141,7 @@ export default function SprayingQR() {
         ...transfers,
       ])
       setSprayForm({ amount: '', message: '' })
+      setTxPin('')
       setMode('confirmation')
     } catch {
       setBusy(false)
@@ -303,6 +310,18 @@ export default function SprayingQR() {
                     className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
+                <div>
+                  <label className="text-sm font-semibold">Transaction PIN</label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="PIN you created at signup"
+                    value={txPin}
+                    onChange={(e) => setTxPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
                 {message && <p className="text-sm text-destructive">{message}</p>}
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
                   <div className="flex items-start gap-2">
@@ -318,7 +337,8 @@ export default function SprayingQR() {
                     busy ||
                     !sprayForm.amount ||
                     Number.isNaN(Number(sprayForm.amount)) ||
-                    Number(sprayForm.amount) + 1e-9 < BU_MIN_SPRAY
+                    Number(sprayForm.amount) + 1e-9 < BU_MIN_SPRAY ||
+                    !/^\d{4,6}$/.test(txPin)
                   }
                   className="w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90"
                 >

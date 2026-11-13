@@ -6,12 +6,15 @@ import { BU_MIN_SPRAY, BU_MIN_TRANSFER, nairaFromBu } from '@/lib/bu-rate'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { transferBu } from '@/lib/wallet'
 import { getPlatformSettings } from '@/lib/admin/platform'
+import { pinSchema } from '@/lib/auth/pin'
+import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
 
 const schema = z.object({
   to_user_id: z.string().uuid(),
   amount: z.number().positive(),
   event_id: z.string().uuid().optional(),
   is_tip: z.boolean().optional(),
+  pin: pinSchema,
 })
 
 export async function POST(request: Request) {
@@ -30,6 +33,17 @@ export async function POST(request: Request) {
       })) || user.id
     if (fromUserId === body.to_user_id) {
       throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
+    }
+    const phone = session?.phone_e164 || session?.phone
+    if (!phone) {
+      throw new ApiError(400, 'PIN_REQUIRED', 'Enter the transaction PIN you created for this account.')
+    }
+    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
+    if ('wrongPin' in pinCheck) {
+      throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
+    }
+    if (!('session' in pinCheck)) {
+      throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before sending ɃU.')
     }
     const sprayLike = Boolean(body.event_id || body.is_tip)
     const minBu = sprayLike ? BU_MIN_SPRAY : BU_MIN_TRANSFER

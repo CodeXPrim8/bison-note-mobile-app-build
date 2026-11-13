@@ -154,9 +154,9 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium">PIN *</p>
+              <p className="text-sm font-medium">{mode === 'signup' ? 'Transaction PIN *' : 'PIN *'}</p>
               <Input
-                placeholder="Enter your PIN"
+                placeholder={mode === 'signup' ? 'Create a 4–6 digit transaction PIN' : 'Enter your PIN'}
                 type="password"
                 inputMode="numeric"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -164,12 +164,17 @@ export default function LoginPage() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               />
+              {mode === 'signup' && (
+                <p className="text-xs text-muted-foreground">
+                  This PIN signs you in and must be entered every time you send ɃU.
+                </p>
+              )}
             </div>
             {mode === 'signup' && (
               <div className="space-y-1">
-                <p className="text-sm font-medium">Confirm PIN *</p>
+                <p className="text-sm font-medium">Confirm transaction PIN *</p>
                 <Input
-                  placeholder="Confirm PIN"
+                  placeholder="Confirm transaction PIN"
                   type="password"
                   inputMode="numeric"
                   maxLength={6}

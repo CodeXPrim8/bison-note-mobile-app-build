@@ -51,6 +51,7 @@ export default function SendBU() {
     amount: '',
     message: '',
   })
+  const [txPin, setTxPin] = useState('')
 
   useEffect(() => {
     if (!userId) {
@@ -156,7 +157,7 @@ export default function SendBU() {
     setSearchResults([])
   }
 
-  async function sendToUser(user: UserProfile, amount: number, isTip: boolean, note: string) {
+  async function sendToUser(user: UserProfile, amount: number, isTip: boolean, note: string, pin: string) {
     if (!user.id) {
       setMessage('This recipient has no live ɃU account id.')
       return false
@@ -170,6 +171,10 @@ export default function SendBU() {
       )
       return false
     }
+    if (!/^\d{4,6}$/.test(pin)) {
+      setMessage('Enter your transaction PIN. You created it when you registered.')
+      return false
+    }
     setBusy(true)
     setMessage(null)
     applySpendBu(amount, { refresh: false })
@@ -178,7 +183,7 @@ export default function SendBU() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_user_id: user.id, amount, is_tip: isTip }),
+        body: JSON.stringify({ to_user_id: user.id, amount, is_tip: isTip, pin }),
       })
       const json = await res.json()
       setBusy(false)
@@ -217,9 +222,10 @@ export default function SendBU() {
       !isNaN(Number(transferForm.amount)) &&
       Number(transferForm.amount) > 0
     ) {
-      const ok = await sendToUser(selectedUser, Number(transferForm.amount), transferType === 'tip', transferForm.message)
+      const ok = await sendToUser(selectedUser, Number(transferForm.amount), transferType === 'tip', transferForm.message, txPin)
       if (ok) {
         setTransferForm({ amount: '', message: '' })
+        setTxPin('')
         setStep('success')
       }
     }
@@ -261,8 +267,10 @@ export default function SendBU() {
         Number(tipAmount),
         true,
         'Tip',
+        txPin,
       )
       if (ok) {
+        setTxPin('')
         setTipAmount('')
         setScannedQRData(null)
         setStep('success')
@@ -493,6 +501,19 @@ export default function SendBU() {
                 )}
               </div>
 
+              <div>
+                <label className="text-sm font-semibold">Transaction PIN</label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="PIN you created at signup"
+                  value={txPin}
+                  onChange={(e) => setTxPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+
               <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -505,7 +526,7 @@ export default function SendBU() {
               {message && <p className="text-sm text-destructive">{message}</p>}
               <Button
                 onClick={() => void handleTipSend()}
-                disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) + 1e-9 < BU_MIN_SPRAY}
+                disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) + 1e-9 < BU_MIN_SPRAY || !/^\d{4,6}$/.test(txPin)}
                 className="w-full bg-yellow-400 py-3 text-yellow-900 hover:bg-yellow-400/90"
               >
                 {busy ? 'Sending…' : 'Give Tip'}
@@ -721,6 +742,20 @@ export default function SendBU() {
                   />
                 </div>
 
+                <div>
+                  <label className="text-sm font-semibold">Transaction PIN</label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="PIN you created at signup"
+                    value={txPin}
+                    onChange={(e) => setTxPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">This is the PIN you created when you registered. It approves the send.</p>
+                </div>
+
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
@@ -737,7 +772,8 @@ export default function SendBU() {
                     busy ||
                     !transferForm.amount ||
                     Number.isNaN(Number(transferForm.amount)) ||
-                    Number(transferForm.amount) + 1e-9 < BU_MIN_TRANSFER
+                    Number(transferForm.amount) + 1e-9 < BU_MIN_TRANSFER ||
+                    !/^\d{4,6}$/.test(txPin)
                   }
                   className="w-full bg-primary py-3 text-primary-foreground hover:bg-primary/90"
                 >
