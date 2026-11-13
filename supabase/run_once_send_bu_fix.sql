@@ -1,5 +1,5 @@
-﻿-- Register website signups into live public.users so Send ɃU lookup can find them.
--- Works without the Next.js service_role key (security definer).
+﻿-- Paste this whole file into the live Supabase SQL editor and run once.
+-- Fixes role NOT NULL, registers Daniella (07026056067) for Send ɃU.
 
 create or replace function public.bu_ensure_live_user(
   p_id uuid,
@@ -23,7 +23,10 @@ declare
   first_name text := nullif(trim(coalesce(p_first_name, '')), '');
   last_name text := nullif(trim(coalesce(p_last_name, '')), '');
   account_name text;
-  role_text text := coalesce(nullif(trim(p_role), ''), 'guest');
+  role_text text := lower(coalesce(nullif(trim(p_role), ''), 'guest'));
+  email_val text := nullif(lower(trim(coalesce(p_email, ''))), '');
+  pin_val text := nullif(trim(coalesce(p_pin_hash, '')), '');
+  role_sample text;
 begin
   if p_id is null then
     raise exception 'p_id required';
@@ -51,6 +54,10 @@ begin
   end if;
   account_name := trim(first_name || ' ' || last_name);
 
+  if pin_val is null then
+    pin_val := encode(sha256((p_id::text || phone)::bytea), 'hex');
+  end if;
+
   select u.id into existing_id from public.users u where u.id = p_id limit 1;
   if existing_id is not null then
     return existing_id;
@@ -65,6 +72,34 @@ begin
     return existing_id;
   end if;
 
+  select u.role::text into role_sample
+  from public.users u
+  where u.role is not null
+    and lower(u.role::text) = role_text
+  limit 1;
+  if role_sample is null then
+    select u.role::text into role_sample
+    from public.users u
+    where u.role is not null
+      and lower(u.role::text) in ('guest', 'user', 'celebrant', 'member')
+    order by case lower(u.role::text)
+      when 'guest' then 0
+      when 'user' then 1
+      when 'celebrant' then 2
+      else 3
+    end
+    limit 1;
+  end if;
+  if role_sample is null then
+    select u.role::text into role_sample
+    from public.users u
+    where u.role is not null
+    limit 1;
+  end if;
+  if role_sample is null then
+    role_sample := role_text;
+  end if;
+
   begin
     insert into public.users (
       id,
@@ -75,28 +110,64 @@ begin
       email,
       role,
       pin_hash
-    ) values (
+    )
+    select
       p_id,
       phone,
       first_name,
       last_name,
       account_name,
-      nullif(lower(trim(coalesce(p_email, ''))), ''),
-      role_text::text,
-      coalesce(p_pin_hash, encode(sha256((p_id::text || phone)::bytea), 'hex'))
-    )
+      email_val,
+      u.role,
+      pin_val
+    from public.users u
+    where u.role is not null
+      and u.role::text = role_sample
+    limit 1
     returning id into new_id;
-  exception
-    when undefined_column then
-      insert into public.users (id, phone_number, first_name, last_name, email)
-      values (
+
+    if new_id is null then
+      insert into public.users (
+        id,
+        phone_number,
+        first_name,
+        last_name,
+        account_name,
+        email,
+        role,
+        pin_hash
+      )
+      select
         p_id,
         phone,
         first_name,
         last_name,
-        nullif(lower(trim(coalesce(p_email, ''))), '')
-      )
+        account_name,
+        email_val,
+        u.role,
+        pin_val
+      from public.users u
+      where u.role is not null
+      limit 1
       returning id into new_id;
+    end if;
+  exception
+    when undefined_column then
+      insert into public.users (id, phone_number, first_name, last_name, email, role)
+      select p_id, phone, first_name, last_name, email_val, u.role
+      from public.users u
+      where u.role is not null
+        and u.role::text = role_sample
+      limit 1
+      returning id into new_id;
+      if new_id is null then
+        insert into public.users (id, phone_number, first_name, last_name, email, role)
+        select p_id, phone, first_name, last_name, email_val, u.role
+        from public.users u
+        where u.role is not null
+        limit 1
+        returning id into new_id;
+      end if;
     when others then
       begin
         insert into public.users (
@@ -104,18 +175,21 @@ begin
           phone_number,
           first_name,
           last_name,
-          account_name,
           email,
+          role,
           pin_hash
-        ) values (
+        )
+        select
           p_id,
           phone,
           first_name,
           last_name,
-          account_name,
-          nullif(lower(trim(coalesce(p_email, ''))), ''),
-          coalesce(p_pin_hash, encode(sha256((p_id::text || phone)::bytea), 'hex'))
-        )
+          email_val,
+          u.role,
+          pin_val
+        from public.users u
+        where u.role is not null
+        limit 1
         returning id into new_id;
       exception
         when unique_violation then
@@ -126,11 +200,18 @@ begin
           order by case when u.id = p_id then 0 else 1 end, u.created_at desc
           limit 1;
         when others then
-          insert into public.users (id, phone_number, first_name, last_name)
-          values (p_id, phone, first_name, last_name)
+          insert into public.users (id, phone_number, first_name, last_name, role)
+          select p_id, phone, first_name, last_name, u.role
+          from public.users u
+          where u.role is not null
+          limit 1
           returning id into new_id;
       end;
   end;
+
+  if new_id is null then
+    raise exception 'could not insert live user for %', phone;
+  end if;
 
   begin
     insert into public.wallets (user_id, bu_balance, naira_available)
@@ -155,7 +236,6 @@ $$;
 revoke all on function public.bu_ensure_live_user(uuid, text, text, text, text, text, text) from public;
 grant execute on function public.bu_ensure_live_user(uuid, text, text, text, text, text, text) to anon, authenticated, service_role;
 
--- One-shot backfill for a website auth account that is missing from live users.
 create or replace function public.bu_backfill_live_user_by_phone(p_phone text)
 returns table (user_id uuid, phone_number text, display_name text, created boolean)
 language plpgsql
@@ -170,7 +250,6 @@ declare
   email text;
   name text;
   ensured uuid;
-  already boolean := false;
 begin
   if length(digits) >= 10 then
     last10 := right(digits, 10);
@@ -230,6 +309,8 @@ $$;
 revoke all on function public.bu_backfill_live_user_by_phone(text) from public;
 grant execute on function public.bu_backfill_live_user_by_phone(text) to anon, authenticated, service_role;
 
-
+-- Register Daniella Ezeako (07026056067) now.
 select * from public.bu_backfill_live_user_by_phone('07026056067');
-select id, phone_number, first_name, last_name, email from public.users where right(regexp_replace(coalesce(phone_number,''),'[^0-9]','','g'),10)='7026056067';
+select id, phone_number, first_name, last_name, role, email
+from public.users
+where right(regexp_replace(coalesce(phone_number, ''), '[^0-9]', '', 'g'), 10) = '7026056067';
