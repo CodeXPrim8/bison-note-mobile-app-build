@@ -1,6 +1,7 @@
 import { verifyPaystackSignature, isPaystackConfigured } from '@/lib/payments/paystack'
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
+import { fulfillDepositReference } from '@/lib/payments/verify'
 import { isServiceRoleConfigured } from '@/lib/env'
 import { errorResponse, successResponse } from '@/lib/api/errors'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
@@ -34,6 +35,19 @@ export async function POST(request: Request) {
   }
 
   if (event.event === 'charge.success') {
+    if (reference.startsWith('DEPOSIT_')) {
+      if (isServiceRoleConfigured()) {
+        try {
+          const result = await fulfillSuccessfulPayment(reference)
+          return successResponse({ reference, tickets: result.tickets.length }, 'Fulfilled')
+        } catch {
+          await fulfillDepositReference(reference)
+          return successResponse({ reference, tickets: 0 }, 'Fulfilled')
+        }
+      }
+      await fulfillDepositReference(reference)
+      return successResponse({ reference, tickets: 0 }, 'Fulfilled')
+    }
     const result =
       isLiveTicketReference(reference) || !isServiceRoleConfigured()
         ? await fulfillLiveTicketPayment(reference)

@@ -1,4 +1,5 @@
 import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin'
+import { createDataClient } from '@/lib/supabase/data'
 import { ApiError } from '@/lib/api/errors'
 import { getAppUrl, isPaystackConfigured, isServiceRoleConfigured } from '@/lib/env'
 import { BuyQuoteError, quoteBuyBu, quoteBuyFromChargeNaira } from '@/lib/bu-rate'
@@ -335,9 +336,7 @@ export async function initializeDeposit(input: {
   }
 
   const admin = tryCreateAdminClient()
-  if (!admin) {
-    throw new ApiError(503, 'CHECKOUT_UNAVAILABLE', 'Could not start Paystack checkout.')
-  }
+  const db = admin ?? createDataClient()
   const reference = generateReference('DEPOSIT')
   const checkoutUrl = input.callback_url ?? `${getAppUrl()}/pay/${reference}`
   const depositMeta = {
@@ -350,14 +349,21 @@ export async function initializeDeposit(input: {
     value_rate: quote.valueRate,
   }
 
-  const paymentRow = await insertDepositPayment(admin, {
-    reference,
-    userId: input.user_id,
-    email: input.email,
-    amount: quote.chargeNaira,
-    callbackUrl: checkoutUrl,
-    metadata: depositMeta,
-  })
+  let paymentId: string | null = null
+  try {
+    const paymentRow = await insertDepositPayment(db, {
+      reference,
+      userId: input.user_id,
+      email: input.email,
+      amount: quote.chargeNaira,
+      callbackUrl: checkoutUrl,
+      metadata: depositMeta,
+    })
+    paymentId = (paymentRow as Payment).id
+  } catch (error) {
+    if (admin) throw error
+    console.error('deposit row skipped without service role', error)
+  }
 
   if (isPaystackConfigured()) {
     const paystack = await initializeTransaction({
@@ -365,12 +371,11 @@ export async function initializeDeposit(input: {
       amountKobo: nairaToKobo(quote.chargeNaira),
       reference,
       callbackUrl: checkoutUrl,
-      metadata: { ...depositMeta, payment_id: (paymentRow as Payment).id },
+      metadata: { ...depositMeta, payment_id: paymentId },
     })
-    await admin
-      .from('payments')
-      .update({ authorization_url: paystack.authorization_url })
-      .eq('id', (paymentRow as Payment).id)
+    if (paymentId) {
+      await db.from('payments').update({ authorization_url: paystack.authorization_url }).eq('id', paymentId)
+    }
     return { authorization_url: paystack.authorization_url, reference, quote }
   }
 
