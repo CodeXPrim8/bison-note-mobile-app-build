@@ -7,6 +7,8 @@ import { sendTicketEmail } from '@/lib/email/tickets'
 import { normalizePhone } from '@/lib/phone'
 import { parseEventFormDetails } from '@/lib/events/event-details'
 import { creditTicketSaleShares } from '@/lib/sales/credits'
+import { createDataClient } from '@/lib/supabase/data'
+import { moveLiveWallet } from '@/lib/wallet/move'
 import type { EventRecord, GatewayMerchant, Payment, TicketRecord, TicketTier } from '@/lib/types/database'
 
 async function uniqueCheckinCode(admin: ReturnType<typeof createAdminClient>): Promise<string> {
@@ -58,8 +60,10 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
   const meta = payment.metadata ?? {}
   const sprayBu = Number(meta.spray_bu_amount ?? 0)
 
-  if (payment.kind === 'deposit') {
-    if (payment.user_id) {
+  const depositUserId =
+    payment.user_id || (typeof meta.user_id === 'string' ? meta.user_id : null)
+  if (payment.kind === 'deposit' || meta.kind === 'deposit') {
+    if (depositUserId) {
       const creditedBu = Number(meta.bu ?? 0)
       const creditNaira = Number(meta.credit_naira ?? 0)
       const amountToCredit =
@@ -68,8 +72,8 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
           : Number.isFinite(creditedBu) && creditedBu > 0
             ? nairaFromBu(creditedBu)
             : payment.amount
-      await admin.rpc('credit_wallet', {
-        p_user_id: payment.user_id,
+      const credited = await admin.rpc('credit_wallet', {
+        p_user_id: depositUserId,
         p_amount: amountToCredit,
         p_type: 'deposit',
         p_description: 'Wallet top-up',
@@ -77,6 +81,16 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
         p_reference: reference,
         p_metadata: meta,
       })
+      if (credited.error) {
+        await moveLiveWallet(createDataClient(), {
+          userId: depositUserId,
+          naira: amountToCredit,
+          direction: 'credit',
+          type: 'deposit',
+          description: 'Wallet top-up',
+          metadata: { ...meta, payment_id: payment.id, reference },
+        })
+      }
     }
     const { data: updated } = await admin
       .from('payments')

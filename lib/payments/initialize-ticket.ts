@@ -279,6 +279,44 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
   )
 }
 
+async function insertDepositPayment(
+  admin: NonNullable<ReturnType<typeof tryCreateAdminClient>>,
+  input: {
+    reference: string
+    userId: string
+    email: string
+    amount: number
+    callbackUrl: string
+    metadata: Record<string, unknown>
+  },
+) {
+  const base = {
+    reference: input.reference,
+    amount: input.amount,
+    status: 'pending' as const,
+    buyer_email: input.email,
+    callback_url: input.callbackUrl,
+    metadata: input.metadata,
+  }
+  const attempts: Record<string, unknown>[] = [
+    { ...base, user_id: input.userId, kind: 'deposit' },
+    { ...base, user_id: null, kind: 'deposit' },
+    { ...base, kind: 'deposit' },
+    base,
+  ]
+  let lastError = 'Could not create deposit'
+  for (const payload of attempts) {
+    const inserted = await admin.from('payments').insert(payload).select('*').maybeSingle()
+    if (!inserted.error && inserted.data) return inserted.data
+    lastError = inserted.error?.message || lastError
+    if (inserted.error && /kind|payment_kind|invalid input value/i.test(inserted.error.message)) continue
+    if (inserted.error && /user_id|foreign key|profiles/i.test(inserted.error.message)) continue
+    if (inserted.error && /column|schema cache|does not exist/i.test(inserted.error.message)) continue
+  }
+  console.error('insertDepositPayment', lastError)
+  throw new ApiError(500, 'PAYMENT_CREATE_FAILED', `Could not create deposit. ${lastError}`)
+}
+
 export async function initializeDeposit(input: {
   email: string
   bu?: number
@@ -312,24 +350,14 @@ export async function initializeDeposit(input: {
     value_rate: quote.valueRate,
   }
 
-  const { data: paymentRow, error } = await admin
-    .from('payments')
-    .insert({
-      reference,
-      user_id: input.user_id,
-      kind: 'deposit',
-      amount: quote.chargeNaira,
-      status: 'pending',
-      buyer_email: input.email,
-      callback_url: checkoutUrl,
-      metadata: depositMeta,
-    })
-    .select('*')
-    .single()
-
-  if (error || !paymentRow) {
-    throw new ApiError(500, 'PAYMENT_CREATE_FAILED', 'Could not create deposit')
-  }
+  const paymentRow = await insertDepositPayment(admin, {
+    reference,
+    userId: input.user_id,
+    email: input.email,
+    amount: quote.chargeNaira,
+    callbackUrl: checkoutUrl,
+    metadata: depositMeta,
+  })
 
   if (isPaystackConfigured()) {
     const paystack = await initializeTransaction({
