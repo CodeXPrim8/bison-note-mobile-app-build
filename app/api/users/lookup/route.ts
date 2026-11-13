@@ -3,13 +3,13 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
 import { maskPhone, normalizePhone } from '@/lib/phone'
 import { rateLimit, clientIp } from '@/lib/api/rate-limit'
-import { lookupLiveUser } from '@/lib/events/live'
+import { resolveSendBuRecipient } from '@/lib/auth/live-user'
 
 const schema = z.object({
   bu_id: z.string().min(7).max(40),
 })
 
-/** Exact ɃU ID lookup against the live users table. Never returns PIN data. */
+/** Exact ɃU ID lookup. Syncs website profiles into live users when needed. Never returns PIN data. */
 export async function POST(request: Request) {
   try {
     const limit = rateLimit(`lookup:${clientIp(request)}`, 30, 60_000)
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const buId = normalizePhone(body.bu_id)
     if (!buId) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID (phone number)')
 
-    const found = await lookupLiveUser(body.bu_id.trim())
+    const found = await resolveSendBuRecipient(body.bu_id.trim())
     if (!found) {
       return successResponse({ exists: false, bu_id: buId })
     }

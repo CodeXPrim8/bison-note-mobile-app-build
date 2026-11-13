@@ -162,6 +162,13 @@ export async function POST(request: Request) {
       })
       if (!live.ok) {
         console.error('signup live user sync failed', live.reason)
+        if (admin) {
+          throw new ApiError(
+            503,
+            'LIVE_USER_SYNC_FAILED',
+            'Account was created in auth but could not be registered for Send ɃU. Try signing in once, then ask the sender to look you up again.',
+          )
+        }
       }
 
       const session = {
@@ -239,6 +246,13 @@ export async function POST(request: Request) {
       })
       if (!live.ok) {
         console.error('signup live user sync failed', live.reason)
+        if (admin) {
+          throw new ApiError(
+            503,
+            'LIVE_USER_SYNC_FAILED',
+            'Account was created in auth but could not be registered for Send ɃU. Try signing in once, then ask the sender to look you up again.',
+          )
+        }
       }
 
       const session = {
