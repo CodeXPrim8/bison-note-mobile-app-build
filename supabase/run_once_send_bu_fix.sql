@@ -68,8 +68,12 @@ begin
     return v_existing;
   end if;
 
-  insert into public.users (id, phone_number, first_name, last_name, role)
-  select p_id, v_phone, v_first, v_last, src.role
+  if v_pin is null then
+    v_pin := encode(sha256((p_id::text || v_phone)::bytea), 'hex');
+  end if;
+
+  insert into public.users (id, phone_number, first_name, last_name, role, pin_hash)
+  select p_id, v_phone, v_first, v_last, src.role, v_pin
   from public.users src
   where src.role is not null
     and lower(src.role::text) = v_role
@@ -77,8 +81,8 @@ begin
   returning id into v_new;
 
   if v_new is null then
-    insert into public.users (id, phone_number, first_name, last_name, role)
-    select p_id, v_phone, v_first, v_last, src.role
+    insert into public.users (id, phone_number, first_name, last_name, role, pin_hash)
+    select p_id, v_phone, v_first, v_last, src.role, v_pin
     from public.users src
     where src.role is not null
     limit 1

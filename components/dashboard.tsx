@@ -7,7 +7,7 @@ import { isEventUpcoming, isUpcomingListingEvent, listingRemaining } from '@/lib
 import { formatEventDate } from '@/lib/datetime'
 import { EventStatusBadge } from '@/components/event-status-badge'
 import { TicketPass } from '@/components/ticket-pass'
-import { useAccount } from '@/components/account-store'
+import { useAccount, useWalletPulse } from '@/components/account-store'
 import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
@@ -32,6 +32,18 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [eventsLoaded, setEventsLoaded] = useState(false)
   const [unreadAlerts, setUnreadAlerts] = useState(0)
   const { greetingName, buBalance, nairaBalance, userId, refreshWallet } = useAccount()
+
+  useWalletPulse(() => {
+    if (!userId) return
+    fetch('/api/wallet', { credentials: 'include', cache: 'no-store' })
+      .then(async (res) => {
+        const json = await res.json()
+        if (!json.status) return
+        setUnreadAlerts(countUnseenAlerts((json.data?.transactions ?? []) as Array<Record<string, unknown>>))
+        void refreshWallet()
+      })
+      .catch(() => undefined)
+  })
 
   useEffect(() => {
     if (!userId) {

@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Bell } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
-import { useAccount } from '@/components/account-store'
+import { useAccount, useWalletPulse } from '@/components/account-store'
 import {
   amountIconTone,
   amountTone,
@@ -48,6 +48,8 @@ export default function Notifications() {
   const { userId, refreshWallet } = useAccount()
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [ready, setReady] = useState(false)
+  const [pulse, setPulse] = useState(0)
+  useWalletPulse(() => setPulse((value) => value + 1))
 
   useEffect(() => {
     let cancelled = false
@@ -80,7 +82,7 @@ export default function Notifications() {
     return () => {
       cancelled = true
     }
-  }, [userId, refreshWallet])
+  }, [userId, refreshWallet, pulse])
 
   return (
     <div className="space-y-6 pb-24 pt-4">

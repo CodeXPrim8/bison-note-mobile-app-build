@@ -30,7 +30,7 @@ interface BUTransfer {
 }
 
 export default function SendBU() {
-  const { applySpendBu, userId } = useAccount()
+  const { applySpendBu, refreshWallet, userId } = useAccount()
   const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history'>('menu')
   const [transferType, setTransferType] = useState<'transfer' | 'tip'>('transfer')
   const [searchQuery, setSearchQuery] = useState('')
@@ -172,6 +172,7 @@ export default function SendBU() {
     }
     setBusy(true)
     setMessage(null)
+    applySpendBu(amount, { refresh: false })
     try {
       const res = await fetch('/api/wallet/transfer', {
         method: 'POST',
@@ -182,10 +183,11 @@ export default function SendBU() {
       const json = await res.json()
       setBusy(false)
       if (!json.status) {
+        void refreshWallet()
         setMessage(json.message ?? 'Transfer failed.')
         return false
       }
-      applySpendBu(amount)
+      void refreshWallet()
       setTransfers([
         {
           id: String(Date.now()),
@@ -202,6 +204,7 @@ export default function SendBU() {
       return true
     } catch {
       setBusy(false)
+      void refreshWallet()
       setMessage('Could not reach ɃU.')
       return false
     }

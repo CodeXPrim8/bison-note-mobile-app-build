@@ -7,7 +7,7 @@ import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
-import { useAccount } from '@/components/account-store'
+import { useAccount, useWalletPulse } from '@/components/account-store'
 import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 import {
   amountIconTone,
@@ -151,6 +151,10 @@ export default function History() {
       setRefreshing(false)
     }
   }, [userId, refreshWallet])
+
+  useWalletPulse(() => {
+    void load({ silent: true })
+  })
 
   useEffect(() => {
     void load()

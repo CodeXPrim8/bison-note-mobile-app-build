@@ -8,7 +8,7 @@ import QRCode from 'qrcode'
 import { displayBuId } from '@/lib/phone'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu } from '@/lib/bu-rate'
-import { useAccount } from '@/components/account-store'
+import { useAccount, useWalletPulse } from '@/components/account-store'
 import { historyBucket, walletDirection } from '@/lib/wallet/direction'
 
 interface ReceivedTransfer {
@@ -23,6 +23,8 @@ interface ReceivedTransfer {
 
 export default function ReceiveBU() {
   const { displayName: accountName, userId } = useAccount()
+  const [pulse, setPulse] = useState(0)
+  useWalletPulse(() => setPulse((value) => value + 1))
   const [mode, setMode] = useState<'menu' | 'qr' | 'history'>('menu')
   const [qrValue, setQrValue] = useState('')
   const [qrImage, setQrImage] = useState('')
@@ -93,7 +95,7 @@ export default function ReceiveBU() {
         )
       })
       .catch(() => setReceivedTransfers([]))
-  }, [userId, accountName])
+  }, [userId, accountName, pulse])
 
   const handleCopyQR = () => {
     if (qrValue) void navigator.clipboard.writeText(qrValue)

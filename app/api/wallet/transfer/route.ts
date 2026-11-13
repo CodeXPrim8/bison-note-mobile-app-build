@@ -17,9 +17,11 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
-    await getPlatformSettings()
-    const body = schema.parse(await request.json())
-    const session = await readBuSession()
+    const [body, session] = await Promise.all([
+      request.json().then((json) => schema.parse(json)),
+      readBuSession(),
+      getPlatformSettings(),
+    ])
     const fromUserId =
       (await resolveLiveCelebrantId({
         id: user.id,

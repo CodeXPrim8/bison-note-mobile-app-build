@@ -1,10 +1,12 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { buFromNaira, nairaFromBu, roundMoney } from '@/lib/bu-rate'
 import { bindAccountSnapshots, clearAccountSnapshots } from '@/lib/session-snapshot'
 
 const CACHE_KEY = 'bu_account_snapshot_v2'
+export const WALLET_PULSE_EVENT = 'bu-wallet-changed'
+const PULSE_MS = 700
 
 type AccountSnapshot = {
   userId: string
@@ -15,7 +17,7 @@ type AccountSnapshot = {
 }
 
 type AccountContextValue = AccountSnapshot & {
-  applySpendBu: (bu: number) => void
+  applySpendBu: (bu: number, options?: { refresh?: boolean }) => void
   applyCreditNaira: (naira: number) => void
   applyWallet: (wallet: { bu_balance?: unknown; naira_available?: unknown }) => void
   refreshWallet: () => Promise<void>
@@ -80,7 +82,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const spendHoldUntil = useRef(0)
+
   const refreshWallet = useCallback(async () => {
+    spendHoldUntil.current = 0
     try {
       const res = await fetch('/api/wallet', { credentials: 'include' })
       const json = await res.json()
@@ -122,7 +127,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const applySpendBu = useCallback((bu: number) => {
+  const applySpendBu = useCallback((bu: number, options?: { refresh?: boolean }) => {
     if (!Number.isFinite(bu) || bu <= 0) return
     const debit = nairaFromBu(bu)
     setSnapshot((prev) => {
@@ -132,6 +137,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       writeCache(next)
       return next
     })
+    if (options?.refresh === false) {
+      spendHoldUntil.current = Date.now() + 8000
+      return
+    }
     void refreshWallet()
   }, [refreshWallet])
 
@@ -147,6 +156,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     void refreshWallet()
   }, [refreshWallet])
 
+  const nairaRef = useRef<number | null>(null)
+  useEffect(() => {
+    nairaRef.current = snapshot.nairaBalance
+  }, [snapshot.nairaBalance])
+
   useEffect(() => {
     void refreshAccount()
     void refreshWallet()
@@ -157,6 +171,55 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [refreshAccount, refreshWallet])
+
+  useEffect(() => {
+    if (!snapshot.userId) return
+    let stopped = false
+    let busy = false
+
+    async function tick() {
+      if (stopped || busy || document.visibilityState !== 'visible') return
+      busy = true
+      try {
+        const res = await fetch('/api/wallet/pulse', { credentials: 'include', cache: 'no-store' })
+        const json = await res.json()
+        const wallet = json.status ? json.data?.wallet : null
+        if (!wallet) return
+        const nextNaira = Number(wallet.naira_available)
+        const prevNaira = nairaRef.current
+        if (
+          Date.now() < spendHoldUntil.current &&
+          prevNaira != null &&
+          Number.isFinite(nextNaira) &&
+          nextNaira > prevNaira + 0.01
+        ) {
+          return
+        }
+        if (Date.now() < spendHoldUntil.current && prevNaira != null && Number.isFinite(nextNaira) && nextNaira <= prevNaira + 0.01) {
+          spendHoldUntil.current = 0
+        }
+        ingestWallet(wallet)
+        if (
+          prevNaira != null &&
+          Number.isFinite(nextNaira) &&
+          Math.abs(nextNaira - prevNaira) >= 0.01
+        ) {
+          window.dispatchEvent(new Event(WALLET_PULSE_EVENT))
+          window.setTimeout(() => window.dispatchEvent(new Event(WALLET_PULSE_EVENT)), 450)
+        }
+      } catch {
+        // The next tick retries.
+      } finally {
+        busy = false
+      }
+    }
+
+    const timer = window.setInterval(() => void tick(), PULSE_MS)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [snapshot.userId, ingestWallet])
 
   const value = useMemo<AccountContextValue>(
     () => ({
@@ -179,4 +242,17 @@ export function useAccount() {
     throw new Error('useAccount must be used inside AccountProvider')
   }
   return value
+}
+
+/** Run when the signed-in balance changes without a manual refresh. */
+export function useWalletPulse(onChange: () => void) {
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  useEffect(() => {
+    function run() {
+      onChangeRef.current()
+    }
+    window.addEventListener(WALLET_PULSE_EVENT, run)
+    return () => window.removeEventListener(WALLET_PULSE_EVENT, run)
+  }, [])
 }

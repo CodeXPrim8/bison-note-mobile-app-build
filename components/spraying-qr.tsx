@@ -48,7 +48,7 @@ function eventFromPayload(data: Record<string, unknown>): EventDetails | null {
 }
 
 export default function SprayingQR() {
-  const { applySpendBu } = useAccount()
+  const { applySpendBu, refreshWallet } = useAccount()
   const [mode, setMode] = useState<'scan' | 'details' | 'send-bu' | 'confirmation'>('scan')
   const [eventDetails, setEventDetails] = useState<EventDetails | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -101,6 +101,7 @@ export default function SprayingQR() {
     }
     setBusy(true)
     setMessage(null)
+    applySpendBu(Number(sprayForm.amount), { refresh: false })
     try {
       const res = await fetch('/api/wallet/transfer', {
         method: 'POST',
@@ -115,10 +116,11 @@ export default function SprayingQR() {
       const json = await res.json()
       setBusy(false)
       if (!json.status) {
+        void refreshWallet()
         setMessage(json.message ?? 'Transfer failed.')
         return
       }
-      applySpendBu(Number(sprayForm.amount))
+      void refreshWallet()
       setTransfers([
         {
           id: eventDetails.eventId,
@@ -136,6 +138,7 @@ export default function SprayingQR() {
       setMode('confirmation')
     } catch {
       setBusy(false)
+      void refreshWallet()
       setMessage('Could not reach ɃU.')
     }
   }

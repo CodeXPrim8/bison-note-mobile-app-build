@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
 import { formatEventDateTime } from '@/lib/datetime'
-import { useAccount } from '@/components/account-store'
+import { useAccount, useWalletPulse } from '@/components/account-store'
 import { AdSlot } from '@/components/web/ad-slot'
 import { amountIconTone, amountTone, historyLabel, walletDirection, type WalletDirection } from '@/lib/wallet/direction'
 import {
@@ -38,6 +38,8 @@ interface WalletProps {
 
 export default function Wallet({ onNavigate }: WalletProps = {}) {
   const { buBalance, nairaBalance, applyWallet, userId } = useAccount()
+  const [pulse, setPulse] = useState(0)
+  useWalletPulse(() => setPulse((value) => value + 1))
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [email, setEmail] = useState('')
   const [showTopup, setShowTopup] = useState(false)
@@ -90,7 +92,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
         )
       })
       .catch(() => setTransactions([]))
-  }, [userId, applyWallet])
+  }, [userId, applyWallet, pulse])
 
   async function handleTopup() {
     const bu = Number(topupBu)
