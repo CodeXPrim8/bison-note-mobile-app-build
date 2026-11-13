@@ -1,9 +1,10 @@
-import { handleRouteError, successResponse } from '@/lib/api/errors'
+import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { getProfile, requireUser } from '@/lib/api/session'
 import { initializeDepositSchema } from '@/lib/schemas/ticket'
 import { initializeDeposit } from '@/lib/payments/initialize-ticket'
 import { fetchLiveWallet, resolveLiveCelebrantId } from '@/lib/events/live'
 import { publicBuRates } from '@/lib/bu-rate'
+import { contactEmail } from '@/lib/auth/pin'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { listWalletHistory } from '@/lib/wallet/history'
@@ -45,8 +46,16 @@ export async function POST(request: Request) {
         email: user.email,
         phone: session?.phone_e164 || session?.phone || profile?.phone_e164 || profile?.phone || null,
       })) || user.id
+    const savedEmail = contactEmail(profile?.email) || contactEmail(session?.email) || contactEmail(user.email)
+    if (!savedEmail) {
+      throw new ApiError(
+        400,
+        'EMAIL_REQUIRED',
+        'This account has no email yet. Add your own email in Settings. New accounts set it when they register.',
+      )
+    }
     const result = await initializeDeposit({
-      email: body.email.trim().toLowerCase(),
+      email: savedEmail,
       bu: body.bu,
       amount: body.amount,
       user_id: liveId,

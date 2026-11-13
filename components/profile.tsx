@@ -267,11 +267,11 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
                 type="email"
                 value={emailDraft}
                 onChange={(e) => setEmailDraft(e.target.value)}
-                placeholder="Add an email for receipts and Paystack"
+                placeholder="Your email for Paystack and receipts"
                 className="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Used for ticket receipts and Fund Wallet. Sign-in stays your ɃU ID and PIN.
+                One email per account. Paystack, receipts, and every email step use this address. Sign-in stays your phone and PIN.
               </p>
             </div>
             {settingsMessage && (

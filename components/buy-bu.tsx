@@ -65,7 +65,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   async function handleCheckout() {
     if (!readyQuote) return
     if (!email) {
-      setMessage('Add an email on your account to fund this wallet.')
+      setMessage('This account has no email yet. Add your own email in Settings. It is the address Paystack uses.')
       return
     }
     setBusy(true)
@@ -231,13 +231,9 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
             </div>
           </div>
         </Card>
-        <Input
-          type="email"
-          placeholder="Email for the Paystack receipt"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mb-3 bg-secondary text-foreground placeholder:text-muted-foreground"
-        />
+        <p className="mb-3 text-sm text-muted-foreground">
+          {email ? `Paystack receipt: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
+        </p>
         {message && <p className="text-sm text-destructive mb-3">{message}</p>}
         <Button
           onClick={() => void handleCheckout()}

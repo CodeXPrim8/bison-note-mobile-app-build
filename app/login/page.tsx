@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [message, setMessage] = useState<string | null>(null)
   const [nextPath, setNextPath] = useState('/app')
@@ -25,21 +26,26 @@ export default function LoginPage() {
   useEffect(() => {
     const next = safeNextPath(new URLSearchParams(window.location.search).get('next'))
     setNextPath(next)
-    const draft = loadDraft<{ phone?: string; name?: string }>(LOGIN_DRAFT_KEY)
+    const draft = loadDraft<{ phone?: string; name?: string; email?: string }>(LOGIN_DRAFT_KEY)
     if (draft?.phone) setPhone(draft.phone)
     if (draft?.name) setName(draft.name)
+    if (draft?.email) setEmail(draft.email)
     setDraftReady(true)
   }, [])
 
   useEffect(() => {
     if (!draftReady) return
-    saveDraft(LOGIN_DRAFT_KEY, { phone, name })
-  }, [draftReady, phone, name, mode])
+    saveDraft(LOGIN_DRAFT_KEY, { phone, name, email })
+  }, [draftReady, phone, name, email, mode])
 
   async function submit() {
     if (mode === 'signup') {
       if (!name.trim()) {
         setMessage('Enter your name.')
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setMessage('Enter your email. It is used for Paystack and receipts, and it cannot be shared with another account.')
         return
       }
       if (!phone.trim()) {
@@ -73,11 +79,15 @@ export default function LoginPage() {
         body: JSON.stringify(
           mode === 'login'
             ? { pin, phone }
-            : { display_name: name, phone, pin, role: 'guest' },
+            : { display_name: name, phone, pin, email: email.trim(), role: 'guest' },
         ),
       })
       const json = (await res.json()) as { status: boolean; message: string; code?: string }
       setBusy(false)
+      if (json.code === 'EMAIL_TAKEN') {
+        setMessage('This email is already on another account. Use your own email.')
+        return
+      }
       if (json.code === 'BU_ID_TAKEN' || /already registered/i.test(json.message || '')) {
         setMode('login')
         setMessage('This ɃU ID is already registered. Log in with your PIN.')
@@ -110,12 +120,27 @@ export default function LoginPage() {
             <p className="text-center text-sm text-muted-foreground">
               {mode === 'login'
                 ? 'Use the phone number and PIN from the account you already created. You do not register again.'
-                : 'Create one ɃU account. If this phone is already registered, you will be asked to log in instead.'}
+                : 'Create one account with your own email. That email is used for Paystack and receipts. Sign-in stays your phone and PIN.'}
             </p>
             {mode === 'signup' && (
               <div className="space-y-1">
                 <p className="text-sm font-medium">Full name *</p>
                 <Input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+            )}
+            {mode === 'signup' && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Email *</p>
+                <Input
+                  type="email"
+                  placeholder="you@email.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  One email per account. This is the address Paystack and receipts will use.
+                </p>
               </div>
             )}
             <div className="space-y-1">

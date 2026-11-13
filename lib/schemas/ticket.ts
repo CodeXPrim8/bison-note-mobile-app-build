@@ -40,7 +40,7 @@ export const initializeTicketSchema = z
 
 export const initializeDepositSchema = z
   .object({
-    email: z.string().email(),
+    email: z.string().email().optional(),
     bu: z.number().positive().optional(),
     amount: z.number().positive().optional(),
     callback_url: z.string().url().optional(),

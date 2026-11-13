@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
-import { authEmailsFromBuId, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { authEmailsFromBuId, contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { createDataClient } from '@/lib/supabase/data'
 import { isSupabaseConfigured } from '@/lib/env'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
 import { liveAccountExistsForPhone } from '@/lib/auth/legacy-login'
@@ -14,7 +15,7 @@ const schema = z.object({
   display_name: z.string().min(2).max(80),
   phone: z.string().min(7).max(32),
   pin: pinSchema,
-  email: z.preprocess((value) => (value === '' || value === undefined ? undefined : value), z.string().email().optional()),
+  email: z.string().email(),
   role: z.enum(['guest', 'celebrant', 'vendor', 'merchant', 'organizer']).optional(),
 })
 
@@ -64,7 +65,10 @@ export async function POST(request: Request) {
       throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid phone number as your ɃU ID')
     }
 
-    const ticketEmail = body.email?.trim().toLowerCase() ?? null
+    const ticketEmail = contactEmail(body.email)
+    if (!ticketEmail) {
+      throw new ApiError(400, 'INVALID_EMAIL', 'Enter the real email you will use for Paystack and receipts.')
+    }
     const pinHash = await bcrypt.hash(body.pin, 10)
     const password = supabasePinPassword(body.pin)
     const metadata = {
@@ -88,13 +92,12 @@ export async function POST(request: Request) {
           throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
         }
       }
-      if (ticketEmail) {
-        const byEmail = await admin.from('profiles').select('id').eq('email', ticketEmail).maybeSingle()
-        const byLiveEmail = await admin.from('users').select('id').eq('email', ticketEmail).maybeSingle()
-        if (byEmail.data || byLiveEmail.data) {
-          throw new ApiError(409, 'BU_ID_TAKEN', 'This ɃU ID is already registered. Log in with your PIN.')
-        }
-      }
+    }
+    const db = admin ?? createDataClient()
+    const byEmail = await db.from('profiles').select('id').eq('email', ticketEmail).limit(1)
+    const byLiveEmail = await db.from('users').select('id').eq('email', ticketEmail).limit(1)
+    if ((byEmail.data && byEmail.data.length > 0) || (byLiveEmail.data && byLiveEmail.data.length > 0)) {
+      throw new ApiError(409, 'EMAIL_TAKEN', 'This email is already on another account. Each person needs their own email.')
     }
 
     const supabase = await createClient()
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
         .update({
           phone: body.phone,
           phone_e164: phoneE164,
-          email: ticketEmail ?? usedEmail,
+          email: ticketEmail,
           pin_hash: pinHash,
           display_name: body.display_name,
           ...(body.role === 'organizer' ? { role: 'organizer' } : {}),
@@ -155,7 +158,7 @@ export async function POST(request: Request) {
         id: createdUser.id,
         displayName: body.display_name,
         phone: phoneE164,
-        email: ticketEmail ?? usedEmail,
+        email: ticketEmail,
         pin: body.pin,
         pinHash,
         role: body.role === 'organizer' ? 'organizer' : 'guest',
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
 
       const session = {
         id: live.ok ? live.userId : createdUser.id,
-        email: ticketEmail ?? usedEmail,
+        email: ticketEmail,
         display_name: body.display_name,
         phone: body.phone,
         phone_e164: phoneE164,
@@ -230,7 +233,7 @@ export async function POST(request: Request) {
         .update({
           phone: body.phone,
           phone_e164: phoneE164,
-          email: ticketEmail ?? usedEmail,
+          email: ticketEmail,
           display_name: body.display_name,
         })
         .eq('id', createdUser.id)
@@ -239,7 +242,7 @@ export async function POST(request: Request) {
         id: createdUser.id,
         displayName: body.display_name,
         phone: phoneE164,
-        email: ticketEmail ?? usedEmail,
+        email: ticketEmail,
         pin: body.pin,
         pinHash,
         role: 'guest',
@@ -257,7 +260,7 @@ export async function POST(request: Request) {
 
       const session = {
         id: live.ok ? live.userId : createdUser.id,
-        email: ticketEmail ?? usedEmail,
+        email: ticketEmail,
         display_name: body.display_name,
         phone: body.phone,
         phone_e164: phoneE164,

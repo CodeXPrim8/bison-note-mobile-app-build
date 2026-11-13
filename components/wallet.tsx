@@ -104,7 +104,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       return
     }
     if (!email) {
-      setMessage('Add an email on your account to fund this wallet.')
+      setMessage('This account has no email yet. Add your own email in Settings. It is the address Paystack uses.')
       return
     }
     setBusy(true)
@@ -216,13 +216,9 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                 min {BU_MIN_PURCHASE.toLocaleString('en-NG')} ɃU (₦{formatNairaPlain(minPurchaseChargeNaira())})
               </p>
             )}
-            <Input
-              type="email"
-              placeholder="Email for the Paystack receipt"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="bg-secondary text-foreground placeholder:text-muted-foreground"
-            />
+            <p className="text-xs text-muted-foreground">
+              {email ? `Paystack receipt: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
+            </p>
             {message && <p className="text-sm text-destructive">{message}</p>}
             <div className="flex gap-2">
               <Button
