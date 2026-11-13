@@ -139,8 +139,10 @@ function MobileAppShell() {
               ? 'Buy ɃU'
               : currentPage === 'send-bu'
                 ? 'Send ɃU'
-                : currentPage === 'receive-bu'
-                  ? 'Receive ɃU'
+              : currentPage === 'receive-bu'
+                ? 'Receive ɃU'
+                : currentPage === 'history'
+                  ? 'History'
                   : currentPage
 
   return (
@@ -156,7 +158,7 @@ function MobileAppShell() {
             </button>
           ) : (
             <a href="/" className="text-xs font-semibold text-primary">
-              ɃU
+              Bucks
             </a>
           )}
           <h1 className="text-lg font-bold capitalize text-primary">{title}</h1>

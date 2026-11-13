@@ -8,6 +8,7 @@ import { authEmailsFromBuId, pinSchema, supabasePinPassword } from '@/lib/auth/p
 import { isSupabaseConfigured } from '@/lib/env'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
 import { liveAccountExistsForPhone } from '@/lib/auth/legacy-login'
+import { ensureLiveBuUser } from '@/lib/auth/live-user'
 
 const schema = z.object({
   display_name: z.string().min(2).max(80),
@@ -150,8 +151,21 @@ export async function POST(request: Request) {
         .eq('invited_bu_id', phoneE164)
         .is('invited_user_id', null)
 
-      const session = {
+      const live = await ensureLiveBuUser({
         id: createdUser.id,
+        displayName: body.display_name,
+        phone: phoneE164,
+        email: ticketEmail ?? usedEmail,
+        pin: body.pin,
+        pinHash,
+        role: body.role === 'organizer' ? 'organizer' : 'guest',
+      })
+      if (!live.ok) {
+        console.error('signup live user sync failed', live.reason)
+      }
+
+      const session = {
+        id: live.ok ? live.userId : createdUser.id,
         email: ticketEmail ?? usedEmail,
         display_name: body.display_name,
         phone: body.phone,
@@ -159,7 +173,10 @@ export async function POST(request: Request) {
         role: body.role === 'organizer' ? 'organizer' : 'guest',
       }
       await writeBuSession(session)
-      return attachBuSession(successResponse({ user: createdUser, bu_id: phoneE164 }, 'Account created'), session)
+      return attachBuSession(
+        successResponse({ user: { id: session.id, email: session.email }, bu_id: phoneE164 }, 'Account created'),
+        session,
+      )
     }
 
     let lastError: string | null = null
@@ -210,11 +227,22 @@ export async function POST(request: Request) {
           display_name: body.display_name,
         })
         .eq('id', createdUser.id)
-    }
 
-    if (createdUser) {
-      const session = {
+      const live = await ensureLiveBuUser({
         id: createdUser.id,
+        displayName: body.display_name,
+        phone: phoneE164,
+        email: ticketEmail ?? usedEmail,
+        pin: body.pin,
+        pinHash,
+        role: 'guest',
+      })
+      if (!live.ok) {
+        console.error('signup live user sync failed', live.reason)
+      }
+
+      const session = {
+        id: live.ok ? live.userId : createdUser.id,
         email: ticketEmail ?? usedEmail,
         display_name: body.display_name,
         phone: body.phone,
@@ -222,7 +250,10 @@ export async function POST(request: Request) {
         role: 'guest',
       }
       await writeBuSession(session)
-      return attachBuSession(successResponse({ user: createdUser, bu_id: phoneE164 }, 'Account created'), session)
+      return attachBuSession(
+        successResponse({ user: { id: session.id, email: session.email }, bu_id: phoneE164 }, 'Account created'),
+        session,
+      )
     }
 
     return successResponse({ user: createdUser, bu_id: phoneE164 }, 'Account created')

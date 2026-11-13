@@ -8,11 +8,11 @@ export default function GatewayPage() {
     <div className="theme-pink min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-16">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">ɃU Gateway</p>
-        <h1 className="mt-3 text-4xl font-bold">Keep your website. Take ticket money through ɃU.</h1>
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Bucks Gateway</p>
+        <h1 className="mt-3 text-4xl font-bold">Keep your website. Take ticket money through Bucks.</h1>
         <p className="mt-4 max-w-2xl text-muted-foreground">
-          Built like Paystack. Your other site stores a ɃU secret key, starts a payment, redirects the guest, then
-          verifies. Paystack stays inside ɃU. Tickets land in ɃU Access.
+          Built like Paystack. Your other site stores a Bucks secret key, starts a payment, redirects the guest, then
+          verifies. Paystack stays inside Bucks. Tickets land in Bucks Access.
         </p>
         <div className="mt-8 flex gap-3">
           <Button asChild>

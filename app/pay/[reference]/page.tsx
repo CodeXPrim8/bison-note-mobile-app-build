@@ -67,7 +67,7 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
               <Link href={ticketsHref}>View tickets</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/app?page=tickets">Open ɃU app</Link>
+              <Link href="/app?page=tickets">Open Bucks app</Link>
             </Button>
           </div>
         </Card>

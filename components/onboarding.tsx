@@ -17,7 +17,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <div className="flex justify-center">
             <div className="text-6xl animate-bounce">💝</div>
           </div>
-          <h1 className="text-4xl font-bold text-foreground">Bison Note</h1>
+          <h1 className="text-4xl font-bold text-foreground">Bucks</h1>
           <p className="text-lg text-muted-foreground">
             Celebrate Better Without Cash
           </p>

@@ -8,6 +8,7 @@ import { authEmailsFromBuId, pinSchema, supabasePinPassword } from '@/lib/auth/p
 import { clientIp, rateLimit } from '@/lib/api/rate-limit'
 import { isSupabaseConfigured } from '@/lib/env'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { ensureLiveBuUser } from '@/lib/auth/live-user'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
 import { getUserControl } from '@/lib/admin/platform'
 
@@ -136,12 +137,34 @@ export async function POST(request: Request) {
     for (const email of emails) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (!error && data.user) {
+        const displayName =
+          (data.user.user_metadata?.display_name as string | undefined) || 'ɃU member'
+        const phone =
+          (data.user.user_metadata?.phone_e164 as string | undefined) ||
+          (data.user.user_metadata?.phone as string | undefined) ||
+          body.phone ||
+          null
+        let userId = data.user.id
+        if (phone) {
+          const live = await ensureLiveBuUser({
+            id: data.user.id,
+            displayName,
+            phone,
+            email: data.user.email ?? null,
+            pin: body.pin,
+            pinHash,
+            role: (data.user.user_metadata?.role as string | undefined) || 'guest',
+          })
+          if (live.ok) userId = live.userId
+        }
         const session = {
-          id: data.user.id,
+          id: userId,
           email: data.user.email ?? null,
-          display_name: (data.user.user_metadata?.display_name as string | undefined) || 'ɃU member',
-          phone: (data.user.user_metadata?.phone as string | undefined) ?? null,
-          phone_e164: (data.user.user_metadata?.phone_e164 as string | undefined) ?? null,
+          display_name: displayName,
+          phone: (data.user.user_metadata?.phone as string | undefined) ?? body.phone ?? null,
+          phone_e164:
+            (data.user.user_metadata?.phone_e164 as string | undefined) ??
+            (phone ? normalizePhone(phone) : null),
           role: (data.user.user_metadata?.role as string | undefined) || 'guest',
         }
         await assertActiveAccount(session.id)

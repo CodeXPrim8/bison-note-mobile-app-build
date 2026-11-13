@@ -250,9 +250,43 @@ function fromPayment(row: Record<string, unknown>): WalletHistoryItem | null {
   }
 }
 
+function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
+  const type = String(row.type ?? 'deposit')
+  const rawDescription = String(row.description ?? type)
+  const direction =
+    row.direction === 'credit' || row.direction === 'debit'
+      ? row.direction
+      : walletDirection({
+          type,
+          description: rawDescription,
+          metadata: row.metadata,
+          amount: Number(row.amount ?? row.naira ?? 0),
+        })
+  const reference =
+    typeof row.reference === 'string' && row.reference ? row.reference : null
+  return {
+    id: String(row.id ?? reference ?? `${rawDescription}-${row.created_at}`),
+    type,
+    amount: Math.abs(Number(row.amount ?? row.naira ?? 0)),
+    description: historyLabel({ type, description: rawDescription, direction }),
+    created_at: String(row.created_at ?? ''),
+    status: String(row.status ?? 'completed'),
+    reference,
+    direction,
+    bucket: historyBucket({ type, description: rawDescription }),
+  }
+}
+
 export async function listWalletHistory(userId: string, limit = 200): Promise<WalletHistoryItem[]> {
   if (!userId) return []
   const db = tryCreateAdminClient() ?? createDataClient()
+
+  const rpc = await db.rpc('bu_list_user_wallet_history', { p_user_id: userId, p_limit: limit })
+  if (!rpc.error) {
+    const rows = asRows(rpc.data).map(fromRpcRow)
+    if (rows.length) return mergeHistory(rows).slice(0, limit)
+  }
+
   const saleTable = await db
     .from('bu_sale_credits')
     .select('*')

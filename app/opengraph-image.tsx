@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
-import { BU_BRAND_DARK, BU_BRAND_RED } from '@/lib/brand'
+import { BU_BRAND_DARK, BU_BRAND_RED, BU_SITE_NAME } from '@/lib/brand'
 
-export const alt = 'ɃU'
+export const alt = BU_SITE_NAME
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -35,7 +35,7 @@ export default function OpenGraphImage() {
             letterSpacing: -6,
           }}
         >
-          Ƀ
+          B
         </div>
         <div
           style={{
@@ -46,7 +46,7 @@ export default function OpenGraphImage() {
             letterSpacing: 2,
           }}
         >
-          ɃU
+          Bucks
         </div>
         <div
           style={{

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 const AFFILIATE_LINKS = [
   { href: '/affiliate', label: 'Desk' },
-  { href: '/app', label: 'ɃU wallet' },
+  { href: '/app', label: 'Bucks wallet' },
   { href: '/organizer', label: 'Organiser' },
   { href: '/events', label: 'Events' },
 ]
@@ -81,9 +81,9 @@ function ShellNav({
 }
 
 export function AffiliateNav() {
-  return <ShellNav id="affiliate-mobile-nav" title="ɃU Affiliate" links={AFFILIATE_LINKS} />
+  return <ShellNav id="affiliate-mobile-nav" title="Bucks Affiliate" links={AFFILIATE_LINKS} />
 }
 
 export function AdminNav() {
-  return <ShellNav id="admin-mobile-nav" title="ɃU Super Admin" links={ADMIN_LINKS} />
+  return <ShellNav id="admin-mobile-nav" title="Bucks Super Admin" links={ADMIN_LINKS} />
 }

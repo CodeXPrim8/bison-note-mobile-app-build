@@ -57,13 +57,15 @@ export async function transferBu(input: {
     : fromName
       ? `BU received from ${fromName}`
       : 'BU received'
+  const moveId = crypto.randomUUID()
+  const sharedMeta = { ...meta, move_id: moveId }
   await moveLiveWallet(db, {
     userId: input.fromUserId,
     naira: input.amount,
     direction: 'debit',
     type: debitType,
     description: debitDescription,
-    metadata: { ...meta, to: input.toUserId },
+    metadata: { ...sharedMeta, to: input.toUserId },
   })
   await moveLiveWallet(db, {
     userId: input.toUserId,
@@ -71,6 +73,6 @@ export async function transferBu(input: {
     direction: 'credit',
     type: creditType,
     description: creditDescription,
-    metadata: { ...meta, from: input.fromUserId },
+    metadata: { ...sharedMeta, from: input.fromUserId },
   })
 }
