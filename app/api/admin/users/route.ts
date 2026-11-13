@@ -4,6 +4,7 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireAdmin } from '@/lib/admin/session'
 import { writeAdminAudit } from '@/lib/admin/platform'
 import { listAdminUsers } from '@/lib/admin/users'
+import { ensureLiveBuUser } from '@/lib/auth/live-user'
 import { normalizePhone } from '@/lib/phone'
 import { pinSchema } from '@/lib/auth/pin'
 
@@ -47,30 +48,32 @@ export async function POST(request: Request) {
     const body = createSchema.parse(await request.json())
     const phone = normalizePhone(body.phone)
     if (!phone) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID (phone number)')
-    const existing = await db.from('users').select('id').eq('phone_number', phone).maybeSingle()
-    if (existing.data) throw new ApiError(409, 'BU_ID_TAKEN', 'That ɃU ID is already registered')
     const pin_hash = await bcrypt.hash(body.pin, 10)
-    const insert = await db
-      .from('users')
-      .insert({
-        id: crypto.randomUUID(),
-        phone_number: phone,
-        first_name: body.first_name.trim(),
-        last_name: body.last_name?.trim() || null,
-        account_name: [body.first_name.trim(), body.last_name?.trim()].filter(Boolean).join(' '),
-        email: body.email || null,
-        role: body.role,
-        pin_hash,
-      })
-      .select('id, email, phone_number, first_name, last_name, account_name, role')
-      .maybeSingle()
-    if (insert.error || !insert.data) {
-      throw new ApiError(500, 'CREATE_FAILED', insert.error?.message ?? 'Could not create user')
+    const displayName = [body.first_name.trim(), body.last_name?.trim()].filter(Boolean).join(' ')
+    const synced = await ensureLiveBuUser({
+      id: crypto.randomUUID(),
+      displayName,
+      phone,
+      email: body.email || null,
+      pinHash: pin_hash,
+      role: body.role,
+    })
+    if (!synced.ok) {
+      throw new ApiError(
+        500,
+        'CREATE_FAILED',
+        synced.reason.includes('row-level security')
+          ? 'Could not create user. Run supabase/migrations/0028_ensure_live_user_rpc.sql in the live Supabase SQL editor, or set SUPABASE_SERVICE_ROLE_KEY in .env.local.'
+          : synced.reason,
+      )
     }
-    const id = String((insert.data as { id: string }).id)
-    await db.from('wallets').upsert({ user_id: id, bu_balance: 0, naira_available: 0 }, { onConflict: 'user_id' })
-    await writeAdminAudit(liveId, 'user.create', id, { phone, role: body.role })
-    return successResponse({ user: insert.data }, 'User created', 201)
+    const { data: created } = await db
+      .from('users')
+      .select('id, email, phone_number, first_name, last_name, account_name, role')
+      .eq('id', synced.userId)
+      .maybeSingle()
+    await writeAdminAudit(liveId, 'user.create', synced.userId, { phone, role: body.role })
+    return successResponse({ user: created ?? { id: synced.userId, phone_number: phone } }, 'User created', 201)
   } catch (error) {
     return handleRouteError(error)
   }

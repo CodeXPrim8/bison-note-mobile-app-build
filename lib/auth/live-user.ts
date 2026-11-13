@@ -16,6 +16,10 @@ function isDuplicate(message?: string | null) {
   return /duplicate|unique|already exists/i.test(message ?? '')
 }
 
+function asId(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
 async function ensureWallet(userId: string) {
   const db = tryCreateAdminClient() ?? createDataClient()
   const first = await db.from('wallets').upsert(
@@ -56,7 +60,10 @@ async function selectProfile(eqColumn: 'phone_e164' | 'phone', variant: string):
   const db = tryCreateAdminClient() ?? createDataClient()
   for (const columns of [PROFILE_COLUMNS, PROFILE_COLUMNS_LEAN]) {
     const { data, error } = await db.from('profiles').select(columns).eq(eqColumn, variant).maybeSingle()
-    if (error && /pin_hash|column/i.test(error.message)) continue
+    if (error) {
+      if (/pin_hash|column|schema cache|does not exist/i.test(error.message)) continue
+      return null
+    }
     const hit = asProfileHit(data as Record<string, unknown> | null)
     if (hit) return hit
   }
@@ -82,7 +89,10 @@ export async function findProfileByBuId(phone: string): Promise<ProfileHit | nul
         .select(columns)
         .or(`phone_e164.ilike.%${needle}%,phone.ilike.%${needle}%`)
         .limit(8)
-      if (error && /pin_hash|column/i.test(error.message)) continue
+      if (error) {
+        if (/pin_hash|column|schema cache|does not exist/i.test(error.message)) continue
+        break
+      }
       const match = ((data as Record<string, unknown>[] | null) ?? []).find((row) => {
         const digits = String(row.phone_e164 || row.phone || '').replace(/[^\d]/g, '')
         return digits.slice(-10) === needle
@@ -93,6 +103,36 @@ export async function findProfileByBuId(phone: string): Promise<ProfileHit | nul
     }
   }
   return null
+}
+
+async function ensureViaRpc(input: {
+  id: string
+  phone: string
+  first_name: string
+  last_name: string
+  email?: string | null
+  pin_hash?: string | null
+  role?: string | null
+}): Promise<string | null> {
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const rpc = await db.rpc('bu_ensure_live_user', {
+    p_id: input.id,
+    p_phone: input.phone,
+    p_first_name: input.first_name,
+    p_last_name: input.last_name,
+    p_email: input.email ?? null,
+    p_pin_hash: input.pin_hash ?? null,
+    p_role: input.role ?? 'guest',
+  })
+  if (rpc.error) {
+    if (!/could not find the function|schema cache|PGRST202/i.test(rpc.error.message)) {
+      console.error('bu_ensure_live_user', rpc.error.message)
+    }
+    return null
+  }
+  if (typeof rpc.data === 'string') return rpc.data
+  if (Array.isArray(rpc.data) && typeof rpc.data[0] === 'string') return rpc.data[0]
+  return asId(rpc.data)
 }
 
 /**
@@ -137,6 +177,20 @@ export async function ensureLiveBuUser(input: {
       ? input.role
       : 'guest'
 
+  const viaRpc = await ensureViaRpc({
+    id: input.id,
+    phone,
+    first_name: names.first_name,
+    last_name: names.last_name,
+    email: input.email,
+    pin_hash,
+    role,
+  })
+  if (viaRpc) {
+    await ensureWallet(viaRpc)
+    return { ok: true, userId: viaRpc }
+  }
+
   const attempts: Record<string, unknown>[] = [
     {
       id: input.id,
@@ -163,35 +217,6 @@ export async function ensureLiveBuUser(input: {
       first_name: names.first_name,
       last_name: names.last_name,
       account_name: names.account_name,
-      email: input.email?.trim().toLowerCase() || null,
-      role,
-    },
-    {
-      id: input.id,
-      phone_number: phone,
-      first_name: names.first_name,
-      last_name: names.last_name,
-      account_name: names.account_name,
-    },
-    {
-      id: input.id,
-      phone_number: `+${phone}`,
-      first_name: names.first_name,
-      last_name: names.last_name,
-      account_name: names.account_name,
-      email: input.email?.trim().toLowerCase() || null,
-      role,
-      pin_hash,
-    },
-    {
-      id: input.id,
-      phone_number: phone.startsWith('234') && phone.length === 13 ? `0${phone.slice(3)}` : phone,
-      first_name: names.first_name,
-      last_name: names.last_name,
-      account_name: names.account_name,
-      email: input.email?.trim().toLowerCase() || null,
-      role,
-      pin_hash,
     },
   ]
 
@@ -206,10 +231,6 @@ export async function ensureLiveBuUser(input: {
     if (isDuplicate(inserted.error?.message)) {
       const again = await lookupLiveUser(phone)
       if (again?.id) return { ok: true, userId: again.id }
-      const bySameId = await db.from('users').select('id').eq('id', input.id).maybeSingle()
-      if (bySameId.data && typeof (bySameId.data as { id?: string }).id === 'string') {
-        return { ok: true, userId: (bySameId.data as { id: string }).id }
-      }
     }
   }
 
@@ -217,36 +238,63 @@ export async function ensureLiveBuUser(input: {
   return { ok: false, reason: lastError || 'insert failed' }
 }
 
+async function backfillFromAuth(buId: string) {
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const rpc = await db.rpc('bu_backfill_live_user_by_phone', { p_phone: buId })
+  if (rpc.error) {
+    if (!/could not find the function|schema cache|PGRST202/i.test(rpc.error.message)) {
+      console.error('bu_backfill_live_user_by_phone', rpc.error.message)
+    }
+    return null
+  }
+  const row = (Array.isArray(rpc.data) ? rpc.data[0] : rpc.data) as
+    | { user_id?: string; phone_number?: string; display_name?: string }
+    | null
+    | undefined
+  const id = asId(row?.user_id)
+  if (!id) return null
+  return {
+    id,
+    display_name: row?.display_name || 'Bucks member',
+    phone: row?.phone_number || normalizePhone(buId),
+    email: null as string | null,
+  }
+}
+
 /**
- * Send-ɃU recipient lookup: live users first, then sync website profiles into live users.
+ * Send-ɃU recipient lookup: live users first, then sync website profiles / auth into live users.
  */
 export async function resolveSendBuRecipient(buId: string) {
   const found = await lookupLiveUser(buId)
   if (found?.id) return found
 
   const profile = await findProfileByBuId(buId)
-  if (!profile?.id) return null
-
-  const phone = profile.phone_e164 || profile.phone || buId
-  const synced = await ensureLiveBuUser({
-    id: profile.id,
-    displayName: profile.display_name || 'Bucks member',
-    phone,
-    email: profile.email,
-    pinHash: profile.pin_hash,
-    role: profile.role,
-  })
-  if (synced.ok === false) {
-    console.error('resolveSendBuRecipient sync failed', synced.reason)
-    return null
+  if (profile?.id) {
+    const phone = profile.phone_e164 || profile.phone || buId
+    const synced = await ensureLiveBuUser({
+      id: profile.id,
+      displayName: profile.display_name || 'Bucks member',
+      phone,
+      email: profile.email,
+      pinHash: profile.pin_hash,
+      role: profile.role,
+    })
+    if (synced.ok === true) {
+      return (
+        (await lookupLiveUser(phone)) ?? {
+          id: synced.userId,
+          display_name: profile.display_name || 'Bucks member',
+          phone: normalizePhone(phone),
+          email: profile.email,
+        }
+      )
+    }
   }
 
-  return (
-    (await lookupLiveUser(phone)) ?? {
-      id: synced.userId,
-      display_name: profile.display_name || 'Bucks member',
-      phone: normalizePhone(phone),
-      email: profile.email,
-    }
-  )
+  const backfilled = await backfillFromAuth(buId)
+  if (backfilled?.id) {
+    return (await lookupLiveUser(buId)) ?? backfilled
+  }
+
+  return null
 }
