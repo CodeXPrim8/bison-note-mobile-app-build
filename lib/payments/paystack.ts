@@ -239,6 +239,43 @@ export async function listDedicatedVirtualAccounts(customer: string | number): P
   return data ? [data] : []
 }
 
+const requeryCooldown = new Map<string, number>()
+
+/** Ask Paystack to pull pending bank transfers into charge.success (max once / 10 min per account). */
+export async function requeryDedicatedVirtualAccount(input: {
+  accountNumber: string
+  providerSlug: string
+  date?: string
+}): Promise<{ ok: boolean; message?: string; skipped?: boolean }> {
+  const accountNumber = input.accountNumber.replace(/\D/g, '')
+  const providerSlug = input.providerSlug.trim().toLowerCase()
+  if (!accountNumber || !providerSlug) return { ok: false, message: 'Missing account or bank' }
+
+  const key = `${accountNumber}:${providerSlug}`
+  const last = requeryCooldown.get(key) ?? 0
+  if (Date.now() - last < 10 * 60 * 1000) {
+    return { ok: true, skipped: true, message: 'Requery recently sent' }
+  }
+
+  const date = input.date || new Date().toISOString().slice(0, 10)
+  const path =
+    `/dedicated_account/requery?account_number=${encodeURIComponent(accountNumber)}` +
+    `&provider_slug=${encodeURIComponent(providerSlug)}` +
+    `&date=${encodeURIComponent(date)}`
+  try {
+    const json = await paystackRequest<{ message?: string }>(path)
+    requeryCooldown.set(key, Date.now())
+    return { ok: true, message: json.message }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Requery failed'
+    if (/once every|10 minute|rate/i.test(message)) {
+      requeryCooldown.set(key, Date.now())
+      return { ok: true, skipped: true, message }
+    }
+    return { ok: false, message }
+  }
+}
+
 export async function createTransferRecipient(input: {
   name: string
   accountNumber: string

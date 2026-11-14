@@ -215,9 +215,35 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
 
     const timer = window.setInterval(() => void tick(), PULSE_MS)
+
+    let syncBusy = false
+    let syncTicks = 0
+    async function syncBankTopUps() {
+      if (stopped || syncBusy || document.visibilityState !== 'visible') return
+      syncBusy = true
+      syncTicks += 1
+      try {
+        await fetch('/api/wallet/virtual-account/sync', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requery: syncTicks === 1 }),
+          cache: 'no-store',
+        })
+        await tick()
+      } catch {
+        // Next interval retries.
+      } finally {
+        syncBusy = false
+      }
+    }
+    void syncBankTopUps()
+    const syncTimer = window.setInterval(() => void syncBankTopUps(), 1500)
+
     return () => {
       stopped = true
       window.clearInterval(timer)
+      window.clearInterval(syncTimer)
     }
   }, [snapshot.userId, ingestWallet])
 

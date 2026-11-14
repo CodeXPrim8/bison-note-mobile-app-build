@@ -1,5 +1,10 @@
 import { ApiError } from '@/lib/api/errors'
-import { isPaystackConfigured, listPaystackTransactions, verifyTransaction } from '@/lib/payments/paystack'
+import {
+  isPaystackConfigured,
+  listPaystackTransactions,
+  requeryDedicatedVirtualAccount,
+  verifyTransaction,
+} from '@/lib/payments/paystack'
 import {
   findVirtualAccountByAccountNumber,
   findVirtualAccountByCustomerCode,
@@ -46,75 +51,75 @@ async function walletHasReference(userId: string, reference: string): Promise<bo
   return Boolean(prior.data?.length)
 }
 
-export async function fulfillDedicatedNubanCharge(data: PaystackChargeData) {
-  if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+async function resolveDvaUserId(data: PaystackChargeData, meta: Record<string, unknown>) {
+  const accountNumber = receiverAccountNumber(data)
+  const customerCode = String(data.customer?.customer_code || '').trim()
+  const metaUserId = typeof meta.user_id === 'string' ? meta.user_id : ''
+  if (metaUserId) return { userId: metaUserId, accountNumber, customerCode }
+  if (accountNumber) {
+    const byAccount = await findVirtualAccountByAccountNumber(accountNumber)
+    if (byAccount?.user_id) return { userId: byAccount.user_id, accountNumber, customerCode }
   }
+  if (customerCode) {
+    const byCustomer = await findVirtualAccountByCustomerCode(customerCode)
+    if (byCustomer?.user_id) return { userId: byCustomer.user_id, accountNumber, customerCode }
+  }
+  return { userId: '', accountNumber, customerCode }
+}
+
+async function creditDedicatedNubanRow(
+  knownUserId: string | null,
+  data: PaystackChargeData,
+  options?: { verify?: boolean },
+) {
   const reference = String(data.reference || '').trim()
   if (!reference) {
     throw new ApiError(400, 'NO_REFERENCE', 'Missing transaction reference')
   }
 
-  const verified = await verifyTransaction(reference)
-  if (verified.status !== 'success') {
-    throw new ApiError(402, 'PAYMENT_FAILED', 'Payment was not successful', {
-      paystack_status: verified.status,
-    })
+  let charge = data
+  if (options?.verify !== false) {
+    const verified = await verifyTransaction(reference)
+    if (verified.status !== 'success') {
+      throw new ApiError(402, 'PAYMENT_FAILED', 'Payment was not successful', {
+        paystack_status: verified.status,
+      })
+    }
+    charge = {
+      reference: verified.reference,
+      amount: verified.amount,
+      status: verified.status,
+      channel: verified.channel,
+      fees: verified.fees,
+      customer: verified.customer,
+      metadata: verified.metadata,
+      authorization: verified.authorization,
+    }
   }
 
-  const verifiedAsCharge: PaystackChargeData = {
-    reference: verified.reference,
-    amount: verified.amount,
-    status: verified.status,
-    channel: verified.channel,
-    fees: verified.fees,
-    customer: verified.customer,
-    metadata: verified.metadata,
-    authorization: verified.authorization,
+  if (String(charge.status || data.status || '') !== 'success' && options?.verify === false) {
+    throw new ApiError(402, 'PAYMENT_FAILED', 'Payment was not successful')
   }
 
-  const verifiedMeta = (verified.metadata ?? {}) as Record<string, unknown>
-  const amountKobo = Number(verified.amount ?? data.amount ?? 0)
+  const meta = (charge.metadata ?? data.metadata ?? {}) as Record<string, unknown>
+  const amountKobo = Number(charge.amount ?? data.amount ?? 0)
   const creditNaira = Math.round(amountKobo) / 100
   if (!(creditNaira > 0)) {
     throw new ApiError(400, 'INVALID_AMOUNT', 'Charge amount must be greater than zero')
   }
 
-  const accountNumber = receiverAccountNumber(data) || receiverAccountNumber(verifiedAsCharge)
-  const customerCode = String(data.customer?.customer_code || verified.customer?.customer_code || '').trim()
-  const metaUserId = typeof verifiedMeta.user_id === 'string' ? verifiedMeta.user_id : ''
-
-  let userId = metaUserId
-  if (!userId && accountNumber) {
-    const byAccount = await findVirtualAccountByAccountNumber(accountNumber)
-    userId = byAccount?.user_id || ''
-  }
-  if (!userId && customerCode) {
-    const byCustomer = await findVirtualAccountByCustomerCode(customerCode)
-    userId = byCustomer?.user_id || ''
-  }
+  const resolved = await resolveDvaUserId({ ...data, ...charge }, meta)
+  const userId = knownUserId || resolved.userId
   if (!userId) {
     throw new ApiError(404, 'VIRTUAL_ACCOUNT_USER_NOT_FOUND', 'No Bucks user matched this dedicated account payment', {
       reference,
-      account_number: accountNumber || null,
-      customer_code: customerCode || null,
+      account_number: resolved.accountNumber || null,
+      customer_code: resolved.customerCode || null,
     })
   }
 
   if (await walletHasReference(userId, reference)) {
-    return {
-      payment: {
-        reference,
-        status: 'success',
-        kind: 'deposit',
-        channel: 'dedicated_nuban',
-        user_id: userId,
-        amount: creditNaira,
-        callback_url: null,
-        already_credited: true,
-      },
-      tickets: [] as unknown[],
-    }
+    return { already_credited: true, userId, amount: creditNaira, reference }
   }
 
   const db = createDataClient()
@@ -125,35 +130,46 @@ export async function fulfillDedicatedNubanCharge(data: PaystackChargeData) {
     type: 'deposit',
     description: 'Bank transfer top-up',
     metadata: {
-      ...verifiedMeta,
+      ...meta,
       reference,
       move_id: reference,
       kind: 'deposit',
       channel: 'dedicated_nuban',
-      account_number: accountNumber || null,
-      customer_code: customerCode || null,
+      account_number: resolved.accountNumber || null,
+      customer_code: resolved.customerCode || null,
       paystack_amount_kobo: amountKobo,
-      paystack_fees: data.fees ?? verified.fees ?? null,
+      paystack_fees: charge.fees ?? data.fees ?? null,
     },
   })
 
+  return { already_credited: false, userId, amount: creditNaira, reference }
+}
+
+export async function fulfillDedicatedNubanCharge(data: PaystackChargeData) {
+  if (!isPaystackConfigured()) {
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+  }
+  const result = await creditDedicatedNubanRow(null, data, { verify: true })
   return {
     payment: {
-      reference,
+      reference: result.reference,
       status: 'success',
       kind: 'deposit',
       channel: 'dedicated_nuban',
-      user_id: userId,
-      amount: creditNaira,
+      user_id: result.userId,
+      amount: result.amount,
       callback_url: null,
-      already_credited: false,
+      already_credited: result.already_credited,
     },
     tickets: [] as unknown[],
   }
 }
 
 /** Pull recent Paystack DVA charges for this user and credit any that are still missing. */
-export async function syncUserDedicatedNubanCredits(userId: string) {
+export async function syncUserDedicatedNubanCredits(
+  userId: string,
+  options?: { requery?: boolean },
+) {
   if (!isPaystackConfigured()) {
     throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
   }
@@ -162,25 +178,46 @@ export async function syncUserDedicatedNubanCredits(userId: string) {
     return { credited: [] as Array<{ reference: string; amount: number }>, checked: 0 }
   }
 
-  const customerKey = account.customer_id || account.customer_code
-  const rows = await listPaystackTransactions({ customer: customerKey, perPage: 30 })
-  const credited: Array<{ reference: string; amount: number }> = []
-  let checked = 0
+  const shouldRequery = options?.requery !== false
+  let requery: { ok: boolean; message?: string; skipped?: boolean } | null = null
+  if (shouldRequery && account.bank_slug) {
+    requery = await requeryDedicatedVirtualAccount({
+      accountNumber: account.account_number,
+      providerSlug: account.bank_slug,
+    })
+  }
 
-  for (const row of rows) {
-    if (String(row.status) !== 'success') continue
-    if (!isDedicatedNubanCharge(row)) continue
+  const customerKey = account.customer_id || account.customer_code
+  const rows = await listPaystackTransactions({ customer: customerKey, perPage: 20 })
+  const candidates = rows.filter((row) => {
+    if (String(row.status) !== 'success') return false
+    if (!isDedicatedNubanCharge(row)) return false
     const receiver = receiverAccountNumber(row)
-    if (receiver && receiver !== account.account_number) continue
-    checked += 1
-    const reference = String(row.reference || '')
-    if (!reference) continue
-    if (await walletHasReference(userId, reference)) continue
-    const result = await fulfillDedicatedNubanCharge(row)
-    if (!result.payment.already_credited) {
-      credited.push({ reference, amount: Number(result.payment.amount) })
+    if (receiver && receiver !== account.account_number) return false
+    return Boolean(row.reference)
+  })
+
+  const presence = await Promise.all(
+    candidates.map(async (row) => ({
+      row,
+      seen: await walletHasReference(userId, String(row.reference)),
+    })),
+  )
+
+  const credited: Array<{ reference: string; amount: number }> = []
+  for (const item of presence) {
+    if (item.seen) continue
+    // List rows are already success on Paystack — credit immediately without a second verify round-trip.
+    const result = await creditDedicatedNubanRow(userId, item.row, { verify: false })
+    if (!result.already_credited) {
+      credited.push({ reference: String(item.row.reference), amount: Number(result.amount) })
     }
   }
 
-  return { credited, checked, account_number: account.account_number }
+  return {
+    credited,
+    checked: candidates.length,
+    account_number: account.account_number,
+    requery,
+  }
 }

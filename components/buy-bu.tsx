@@ -104,14 +104,18 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   useEffect(() => {
     if (fundMode !== 'bank' || !virtualAccount?.account_number) return
     let cancelled = false
+    let ticks = 0
 
-    async function syncOnce() {
+    async function syncOnce(forceRequery = false) {
       if (cancelled || syncingRef.current) return
       syncingRef.current = true
+      ticks += 1
       try {
         const res = await fetch('/api/wallet/virtual-account/sync', {
           method: 'POST',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requery: forceRequery || ticks === 1 || ticks % 8 === 0 }),
         })
         const json = await res.json()
         if (cancelled || !json.status) return
@@ -129,8 +133,8 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
       }
     }
 
-    void syncOnce()
-    const timer = window.setInterval(() => void syncOnce(), 2000)
+    void syncOnce(true)
+    const timer = window.setInterval(() => void syncOnce(false), 800)
     return () => {
       cancelled = true
       window.clearInterval(timer)
@@ -265,7 +269,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Transfer any amount. Watching Paystack every 2 seconds — credits land as soon as the bank confirms.
+                  Transfer any amount. Stay on this screen — we check Paystack several times a second and credit the moment it confirms.
                 </p>
                 {syncNote && <p className="text-sm font-semibold text-primary">{syncNote}</p>}
                 <div className="flex gap-2">
