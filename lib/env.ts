@@ -87,6 +87,15 @@ export function getPaystackWebhookSecret(): string {
   return optional('PAYSTACK_WEBHOOK_SECRET') ?? getPaystackSecret()
 }
 
+/** Paystack Dedicated Virtual Account preferred bank slug (wema-bank, titan-paystack, test-bank). */
+export function getPaystackDvaPreferredBank(): string {
+  const explicit = optional('PAYSTACK_DVA_PREFERRED_BANK')?.trim()
+  if (explicit) return explicit
+  const key = optional('PAYSTACK_SECRET_KEY')?.trim() ?? ''
+  if (key.startsWith('sk_test_')) return 'test-bank'
+  return 'wema-bank'
+}
+
 export function isResendConfigured(): boolean {
   return Boolean(optional('RESEND_API_KEY'))
 }

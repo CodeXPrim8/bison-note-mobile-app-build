@@ -48,7 +48,7 @@ export function walletDirection(input: {
   if (Number.isFinite(amount) && amount < 0) return 'debit'
   const type = String(input.type ?? '').toLowerCase()
   const desc = String(input.description ?? '').toLowerCase()
-  if (/received|ticket sale|affiliate commission|wallet top-up|wallet top up/.test(desc)) return 'credit'
+  if (/received|ticket sale|affiliate commission|wallet top-up|wallet top up|bank transfer top-up/.test(desc)) return 'credit'
   if (/^sent Ƀu$|^sent bu$/.test(desc)) return 'debit'
   if (meta.from && !meta.to) return 'credit'
   if (meta.to && !meta.from) return 'debit'
@@ -102,7 +102,7 @@ export function historyLabel(input: {
   if (/^tip to /i.test(desc) || /^tip$/i.test(desc)) return credit ? 'Tip received' : desc.replace(/^tip to /i, 'Tip sent to ') || 'Tip sent'
   if (!desc) {
     const type = String(input.type ?? '').toLowerCase()
-    if (type === 'deposit') return 'Wallet top-up'
+    if (type === 'deposit') return 'Bank transfer top-up'
     if (type === 'withdrawal') return 'Withdrawal'
     if (type === 'spray') return credit ? 'Received ɃU' : 'Sent ɃU'
     if (type === 'spray_credit') return 'Received ɃU'

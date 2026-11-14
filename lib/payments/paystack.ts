@@ -1,7 +1,12 @@
 import { createHmac, timingSafeEqual } from 'crypto'
-import { getPaystackSecret, getPaystackWebhookSecret, isPaystackConfigured } from '@/lib/env'
+import {
+  getPaystackDvaPreferredBank,
+  getPaystackSecret,
+  getPaystackWebhookSecret,
+  isPaystackConfigured,
+} from '@/lib/env'
 
-export { isPaystackConfigured }
+export { isPaystackConfigured, getPaystackDvaPreferredBank }
 
 const PAYSTACK_BASE = 'https://api.paystack.co'
 
@@ -81,10 +86,52 @@ export async function verifyTransaction(reference: string): Promise<{
   status: string
   amount: number
   reference: string
-  customer: { email: string }
+  channel?: string
+  fees?: number
+  customer: { email: string; customer_code?: string; id?: number }
   metadata: Record<string, unknown>
+  authorization?: {
+    channel?: string
+    receiver_bank_account_number?: string
+    receiver_bank?: string
+    account_number?: string
+    bank?: string
+  }
 }> {
   return paystackFetch(`/transaction/verify/${encodeURIComponent(reference)}`)
+}
+
+export async function listPaystackTransactions(input?: {
+  customer?: string | number
+  perPage?: number
+  page?: number
+}): Promise<
+  Array<{
+    status: string
+    amount: number
+    reference: string
+    channel?: string
+    fees?: number
+    paid_at?: string | null
+    created_at?: string
+    customer?: { email?: string; customer_code?: string; id?: number }
+    metadata?: Record<string, unknown>
+    authorization?: {
+      channel?: string
+      receiver_bank_account_number?: string
+      receiver_bank?: string
+      account_number?: string
+      bank?: string
+    }
+  }>
+> {
+  const params = new URLSearchParams()
+  params.set('perPage', String(input?.perPage ?? 25))
+  params.set('page', String(input?.page ?? 1))
+  if (input?.customer != null && String(input.customer).trim()) {
+    params.set('customer', String(input.customer).trim())
+  }
+  return paystackFetch(`/transaction?${params.toString()}`)
 }
 
 export async function createSubaccount(input: {
@@ -115,6 +162,81 @@ export function verifyPaystackSignature(rawBody: string, signature: string | nul
 
 export function nairaToKobo(naira: number): number {
   return Math.round(naira * 100)
+}
+
+export type PaystackCustomer = {
+  id: number
+  customer_code: string
+  email: string
+  first_name?: string | null
+  last_name?: string | null
+  phone?: string | null
+}
+
+export type PaystackDedicatedAccount = {
+  id?: number
+  account_number: string
+  account_name: string
+  currency?: string
+  active?: boolean
+  assigned?: boolean
+  bank: { name: string; id?: number; slug?: string }
+  customer?: { id?: number; customer_code?: string; email?: string }
+}
+
+export async function createPaystackCustomer(input: {
+  email: string
+  firstName: string
+  lastName: string
+  phone: string
+  metadata?: Record<string, unknown>
+}): Promise<PaystackCustomer> {
+  return paystackFetch<PaystackCustomer>('/customer', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: input.email,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      phone: input.phone,
+      metadata: input.metadata,
+    }),
+  })
+}
+
+export async function fetchPaystackCustomer(emailOrCode: string): Promise<PaystackCustomer | null> {
+  try {
+    return await paystackFetch<PaystackCustomer>(`/customer/${encodeURIComponent(emailOrCode)}`)
+  } catch {
+    return null
+  }
+}
+
+export async function createDedicatedVirtualAccount(input: {
+  customer: string | number
+  preferredBank?: string
+  firstName?: string
+  lastName?: string
+  phone?: string
+}): Promise<PaystackDedicatedAccount> {
+  const body: Record<string, unknown> = {
+    customer: input.customer,
+    preferred_bank: input.preferredBank || getPaystackDvaPreferredBank(),
+  }
+  if (input.firstName) body.first_name = input.firstName
+  if (input.lastName) body.last_name = input.lastName
+  if (input.phone) body.phone = input.phone
+  return paystackFetch<PaystackDedicatedAccount>('/dedicated_account', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listDedicatedVirtualAccounts(customer: string | number): Promise<PaystackDedicatedAccount[]> {
+  const data = await paystackFetch<PaystackDedicatedAccount[] | PaystackDedicatedAccount>(
+    `/dedicated_account?customer=${encodeURIComponent(String(customer))}`,
+  )
+  if (Array.isArray(data)) return data
+  return data ? [data] : []
 }
 
 export async function createTransferRecipient(input: {

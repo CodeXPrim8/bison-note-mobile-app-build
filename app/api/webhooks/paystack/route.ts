@@ -2,6 +2,7 @@ import { verifyPaystackSignature, isPaystackConfigured } from '@/lib/payments/pa
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
 import { fulfillDepositReference } from '@/lib/payments/verify'
+import { fulfillDedicatedNubanCharge, isDedicatedNubanCharge, type PaystackChargeData } from '@/lib/payments/dva-credit'
 import { isServiceRoleConfigured } from '@/lib/env'
 import { errorResponse, successResponse } from '@/lib/api/errors'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
@@ -16,9 +17,15 @@ export async function POST(request: Request) {
     return errorResponse(401, 'INVALID_SIGNATURE', 'Invalid Paystack signature')
   }
 
-  let event: { event?: string; data?: { reference?: string; transfer_code?: string; status?: string } }
+  let event: {
+    event?: string
+    data?: PaystackChargeData & { transfer_code?: string; status?: string; reference?: string }
+  }
   try {
-    event = JSON.parse(raw) as { event?: string; data?: { reference?: string; transfer_code?: string; status?: string } }
+    event = JSON.parse(raw) as {
+      event?: string
+      data?: PaystackChargeData & { transfer_code?: string; status?: string; reference?: string }
+    }
   } catch {
     return errorResponse(400, 'INVALID_JSON', 'Invalid webhook body')
   }
@@ -35,6 +42,13 @@ export async function POST(request: Request) {
   }
 
   if (event.event === 'charge.success') {
+    if (isDedicatedNubanCharge(event.data)) {
+      const result = await fulfillDedicatedNubanCharge(event.data ?? {})
+      return successResponse(
+        { reference, tickets: 0, channel: 'dedicated_nuban', amount: result.payment.amount },
+        'Fulfilled',
+      )
+    }
     if (reference.startsWith('DEPOSIT_')) {
       if (isServiceRoleConfigured()) {
         try {
