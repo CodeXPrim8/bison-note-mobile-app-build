@@ -38,17 +38,17 @@ export function OrganizerNav() {
     <>
       <aside className="hidden w-60 shrink-0 border-r border-border bg-card/40 p-4 md:block">
         <Link href="/" className="mb-6 block text-lg font-bold text-primary">
-          Bucks Organiser
+          Ƀucks Organiser
         </Link>
         <NavLinks />
       </aside>
 
       <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:hidden">
         <Link href="/organizer" className="shrink-0 font-bold text-primary">
-          Bucks Organiser
+          Ƀucks Organiser
         </Link>
         <p className="min-w-0 truncate text-sm text-muted-foreground">{current}</p>
-        <MobileNavDrawer id="organizer-mobile-nav" title="Bucks Organiser">
+        <MobileNavDrawer id="organizer-mobile-nav" title="Ƀucks Organiser">
           {(close) => <NavLinks onNavigate={close} />}
         </MobileNavDrawer>
       </header>

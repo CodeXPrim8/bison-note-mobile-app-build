@@ -31,7 +31,7 @@ export const AD_SLOTS = [
   },
   {
     id: 'app_home',
-    label: 'Bucks app home',
+    label: 'Ƀucks app home',
     surface: 'App',
     width: 390,
     height: 220,

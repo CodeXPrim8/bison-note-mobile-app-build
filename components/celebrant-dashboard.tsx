@@ -1,14 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { ArrowDown, ArrowUp, Banknote, TrendingUp, Calendar } from 'lucide-react'
-import { amountIconTone, amountTone, historyLabel, walletDirection } from '@/lib/wallet/direction'
+import { ArrowDown, Banknote, CalendarDays, History, Sparkles } from 'lucide-react'
+import { historyLabel, walletDirection } from '@/lib/wallet/direction'
 import { formatEventDateTime } from '@/lib/datetime'
-import { buFromNaira, formatBu, formatNairaPlain, BU_MIN_WITHDRAW } from '@/lib/bu-rate'
+import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import {
+  ModeHeroAction,
+  ModeIconRow,
+  ModeIconTile,
+  ModeListRow,
+  ModeWalletHero,
+} from '@/components/mode-home-shell'
+import ModeSwitcher from '@/components/mode-switcher'
 
 interface Event {
   id: string
@@ -45,8 +51,17 @@ function mapEvents(list: Array<Record<string, unknown>>): Event[] {
   }))
 }
 
-export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
-  const { greetingName, userId } = useAccount()
+export default function CelebrantDashboard({
+  onNavigate,
+  onModeChange,
+  currentMode = 'celebrant',
+}: {
+  onNavigate?: (page: string) => void
+  onModeChange?: (mode: 'user' | 'celebrant' | 'vendor') => void
+  currentMode?: 'user' | 'celebrant' | 'vendor'
+} = {}) {
+  const { greetingName, userId, buBalance, nairaBalance } = useAccount()
+  const [balanceVisible, setBalanceVisible] = useState(true)
   const [events, setEvents] = useState<Event[]>([])
   const [recentTransfers, setRecentTransfers] = useState<BUTransfer[]>([])
   const [eventsReady, setEventsReady] = useState(false)
@@ -142,120 +157,101 @@ export default function CelebrantDashboard({ onNavigate }: { onNavigate?: (page:
   }, [userId])
 
   const totalBUReceived = events.reduce((sum, event) => sum + event.totalBUReceived, 0)
+  const latest = recentTransfers[0]
 
   return (
-    <div className="space-y-6 pb-24 pt-4">
-      <div className="space-y-4 bg-gradient-to-b from-primary to-primary/80 px-4 py-8 text-primary-foreground">
-        <div>
-          <p className="text-sm opacity-90">Welcome Back</p>
-          <h2 className="text-2xl font-bold">{greetingName || '\u00a0'}</h2>
-        </div>
-
-        <div className="space-y-3 rounded-2xl bg-primary-foreground/10 p-4 backdrop-blur">
-          <p className="text-sm opacity-90">Total ɃU Received</p>
-          <div className="flex items-center justify-between">
-            <div className="text-3xl font-bold">
-              {eventsReady ? `Ƀ ${formatBu(buFromNaira(totalBUReceived))}` : '\u00a0'}
-            </div>
-            <div className="rounded-full bg-primary-foreground/20 p-2">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-          <div className="text-sm opacity-90">
-            {eventsReady ? `≈ ₦${formatNairaPlain(totalBUReceived)}` : '\u00a0'}
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            className="h-20 flex-col gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => onNavigate?.('redemption')}
+    <div className="space-y-6 bg-white pb-28 text-neutral-950">
+      <ModeWalletHero
+        title={greetingName ? `Celebrant · ${greetingName}` : 'Celebrant'}
+        balanceLabel={buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
+        balanceVisible={balanceVisible}
+        onToggleBalance={() => setBalanceVisible((value) => !value)}
+        subtitle={
+          nairaBalance == null
+            ? '\u00a0'
+            : `≈ ₦${formatNairaPlain(nairaBalance)} · Events Ƀ ${formatBu(buFromNaira(totalBUReceived))}`
+        }
+        actions={
+          <>
+            <ModeHeroAction label="Receive" Icon={ArrowDown} onClick={() => onNavigate?.('receive-bu')} />
+            <ModeHeroAction label="Send to bank" Icon={Banknote} onClick={() => onNavigate?.('redemption')} />
+            <ModeHeroAction label="History" Icon={History} onClick={() => onNavigate?.('history')} />
+          </>
+        }
+        footer={
+          <button
+            type="button"
+            onClick={() => onNavigate?.('history')}
+            className="bu-press flex w-full items-center gap-3 border-t border-white/10 bg-black px-5 py-3.5 text-left"
           >
-            <Banknote className="h-5 w-5" />
-            <span>Withdraw ɃU</span>
-          </Button>
-          <Button variant="outline" className="h-20 flex-col gap-2" onClick={() => onNavigate?.('events')}>
-            <Calendar className="h-5 w-5" />
-            <span>My Events</span>
-          </Button>
-        </div>
-      </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white/90">
+                {latest ? latest.eventName : 'No transfers yet'}
+              </p>
+              {latest ? (
+                <p
+                  className={`mt-0.5 text-sm font-semibold tabular-nums ${
+                    latest.direction === 'credit' ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  {latest.direction === 'credit' ? '+' : '−'}Ƀ {formatBu(buFromNaira(latest.amount))}
+                </p>
+              ) : null}
+            </div>
+            <span className="shrink-0 text-xs font-medium text-white/55">Transactions ›</span>
+          </button>
+        }
+      />
 
-      <div className="px-4">
-        <h3 className="mb-4 text-lg font-bold">My Events</h3>
-        <div className="space-y-3">
-          {eventsReady && events.length === 0 && <p className="text-sm text-muted-foreground">No events yet.</p>}
-          {events.map((event) => (
-            <Card key={event.id} className="border-primary/20 bg-card p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h4 className="font-semibold">{event.name}</h4>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {event.date} · {event.vendorName}
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="rounded-full bg-green-400/20 px-2 py-1 text-xs text-green-400">Active</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-primary">Ƀ {formatBu(buFromNaira(event.totalBUReceived))}</p>
-                  <p className="text-xs text-muted-foreground">Received</p>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <div className="bu-rise space-y-6 px-4" style={{ animationDelay: '80ms' }}>
+        <ModeIconRow>
+          <ModeIconTile label="To Bank" Icon={Banknote} onClick={() => onNavigate?.('redemption')} />
+          <ModeIconTile label="My Events" Icon={CalendarDays} onClick={() => onNavigate?.('events')} />
+          <ModeIconTile label="Receive tip" Icon={Sparkles} onClick={() => onNavigate?.('receive-bu')} />
+        </ModeIconRow>
 
-      <div className="px-4">
-        <h3 className="mb-4 text-lg font-bold">Recent ɃU Transfers</h3>
-        <div className="space-y-3">
-          {transfersReady && recentTransfers.length === 0 && (
-            <p className="text-sm text-muted-foreground">No ɃU movements yet.</p>
-          )}
-          {recentTransfers.map((transfer) => {
-            const credit = transfer.direction !== 'debit'
-            return (
-            <Card key={transfer.id} className="border-border/50 bg-card/50 p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`rounded-full p-2 ${amountIconTone(credit ? 'credit' : 'debit')}`}>
-                    {credit ? (
-                      <ArrowDown className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <ArrowUp className="h-4 w-4 text-red-500" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold">{transfer.eventName}</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">{transfer.fromGuest}</p>
-                    <p className="text-xs text-muted-foreground">{transfer.timestamp}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`font-bold ${amountTone(credit ? 'credit' : 'debit')}`}>
-                    {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(transfer.amount))}
-                  </p>
-                </div>
-              </div>
-            </Card>
-            )
-          })}
-        </div>
-      </div>
+        {onModeChange ? <ModeSwitcher currentMode={currentMode} onModeChange={onModeChange} /> : null}
 
-      <div className="px-4">
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6">
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-neutral-950">My events</h3>
           <div className="space-y-2">
-            <h3 className="font-semibold">How It Works</h3>
-            <p className="text-sm text-muted-foreground">
-              Guests send ɃU directly to your wallet through events. All value is transferred digitally before physical
-              notes are issued. You can withdraw {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU or more to your bank at 1 ɃU = ₦1.
-            </p>
+            {eventsReady && events.length === 0 ? (
+              <p className="text-sm text-neutral-500">No events yet.</p>
+            ) : null}
+            {events.map((event) => (
+              <ModeListRow
+                key={event.id}
+                title={event.name}
+                detail={[event.date, event.vendorName].filter(Boolean).join(' · ')}
+                amount={`Ƀ ${formatBu(buFromNaira(event.totalBUReceived))}`}
+                onClick={() => onNavigate?.('events')}
+              />
+            ))}
           </div>
-        </Card>
+        </div>
+
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-neutral-950">Recent ɃU</h3>
+          <div className="space-y-2">
+            {transfersReady && recentTransfers.length === 0 ? (
+              <p className="text-sm text-neutral-500">No ɃU movements yet.</p>
+            ) : null}
+            {recentTransfers.map((transfer) => (
+              <ModeListRow
+                key={transfer.id}
+                title={transfer.eventName}
+                detail={[transfer.fromGuest, transfer.timestamp].filter(Boolean).join(' · ')}
+                amount={`${transfer.direction === 'credit' ? '+' : '−'}Ƀ ${formatBu(buFromNaira(transfer.amount))}`}
+                amountTone={transfer.direction === 'credit' ? 'credit' : 'debit'}
+                onClick={() => onNavigate?.('history')}
+              />
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs leading-relaxed text-neutral-500">
+          Guests send ɃU to your wallet through events. Send to bank anytime at 1 ɃU = ₦1.
+        </p>
       </div>
     </div>
   )

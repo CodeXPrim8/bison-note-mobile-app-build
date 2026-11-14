@@ -9,6 +9,8 @@ import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
 import { formatEventDateTime } from '@/lib/datetime'
 import { BU_MIN_SPRAY, BU_SPRAY_NOTES, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
+import { BuInvoiceActions } from '@/components/bu-invoice'
+import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
 
 interface EventDetails {
   eventId: string
@@ -29,6 +31,7 @@ interface BUTransfer {
   message: string
   date: string
   status: 'completed' | 'pending'
+  invoice: BuInvoice
 }
 
 function eventFromPayload(data: Record<string, unknown>): EventDetails | null {
@@ -48,7 +51,7 @@ function eventFromPayload(data: Record<string, unknown>): EventDetails | null {
 }
 
 export default function SprayingQR() {
-  const { applySpendBu, refreshWallet } = useAccount()
+  const { applySpendBu, refreshWallet, displayName } = useAccount()
   const [mode, setMode] = useState<'scan' | 'details' | 'send-bu' | 'confirmation'>('scan')
   const [eventDetails, setEventDetails] = useState<EventDetails | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -116,6 +119,7 @@ export default function SprayingQR() {
           to_user_id: eventDetails.celebrantWalletId,
           amount: Number(sprayForm.amount),
           event_id: eventDetails.eventId,
+          note: sprayForm.message,
           pin: txPin,
         }),
       })
@@ -127,16 +131,31 @@ export default function SprayingQR() {
         return
       }
       void refreshWallet()
+      const data = (json.data ?? {}) as Record<string, unknown>
+      const moveId = String(data.invoice_number || Date.now())
+      const amount = Number(sprayForm.amount)
       setTransfers([
         {
-          id: eventDetails.eventId,
+          id: moveId,
           eventId: eventDetails.eventId,
           eventName: eventDetails.eventName,
           celebrantName: eventDetails.celebrantName,
-          amount: Number(sprayForm.amount),
+          amount,
           message: sprayForm.message,
           date: new Date().toISOString(),
           status: 'completed',
+          invoice: {
+            number: invoiceNumberFromId(moveId),
+            issuedAt: new Date().toISOString(),
+            kind: 'spray',
+            fromName: String(data.from_name || displayName || 'You'),
+            toName: String(data.to_name || eventDetails.celebrantName),
+            toId: eventDetails.eventName,
+            amountBu: amount,
+            amountNaira: nairaFromBu(amount),
+            note: sprayForm.message || undefined,
+            status: 'Paid',
+          },
         },
         ...transfers,
       ])
@@ -382,6 +401,10 @@ export default function SprayingQR() {
                 </div>
               </div>
             </Card>
+
+            <div className="mb-4">
+              <BuInvoiceActions invoice={transfers[0].invoice} />
+            </div>
 
             <Button
               onClick={() => {

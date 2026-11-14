@@ -16,6 +16,9 @@ export type WalletHistoryItem = {
   reference: string | null
   direction: WalletDirection
   bucket: HistoryBucket
+  counterparty?: string | null
+  counterpartyUserId?: string | null
+  note?: string | null
 }
 
 export function timeMs(value: unknown): number {
@@ -54,6 +57,114 @@ function asRows(raw: unknown): Array<Record<string, unknown>> {
 
 function kindOf(row: Record<string, unknown>) {
   return String(row.kind ?? row.type ?? '')
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function looksLikeUserId(value: string) {
+  return UUID_RE.test(value.trim())
+}
+
+function firstName(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (!trimmed || looksLikeUserId(trimmed)) continue
+    return trimmed
+  }
+  return null
+}
+
+function firstUserId(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (looksLikeUserId(trimmed)) return trimmed
+  }
+  return null
+}
+
+function partyOf(meta: Record<string, unknown>, direction: WalletDirection) {
+  if (direction === 'debit') {
+    return firstName(meta.to_name, meta.recipient_name, meta.counterparty, meta.to)
+  }
+  return firstName(meta.from_name, meta.sender_name, meta.counterparty, meta.from)
+}
+
+function partyUserIdOf(meta: Record<string, unknown>, direction: WalletDirection) {
+  if (direction === 'debit') {
+    return firstUserId(meta.to, meta.counterparty_user_id, meta.recipient_id)
+  }
+  return firstUserId(meta.from, meta.counterparty_user_id, meta.sender_id)
+}
+
+function userDisplayName(row: Record<string, unknown> | null | undefined) {
+  if (!row) return null
+  const name = [row.first_name, row.last_name]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join(' ')
+    .trim()
+  if (name) return name
+  if (typeof row.account_name === 'string' && row.account_name.trim()) return row.account_name.trim()
+  if (typeof row.phone_number === 'string' && row.phone_number.trim()) return row.phone_number.trim()
+  return null
+}
+
+async function enrichCounterparties(
+  db: { from: (table: string) => any },
+  items: WalletHistoryItem[],
+) {
+  const missingIds = Array.from(
+    new Set(
+      items
+        .filter((item) => item.bucket === 'bu_transfer' && !item.counterparty && item.counterpartyUserId)
+        .map((item) => String(item.counterpartyUserId)),
+    ),
+  )
+  if (!missingIds.length) return items
+
+  const { data, error } = await db
+    .from('users')
+    .select('id, first_name, last_name, account_name, phone_number')
+    .in('id', missingIds)
+  if (error || !data?.length) return items
+
+  const byId = new Map<string, string>()
+  for (const row of data as Array<Record<string, unknown>>) {
+    const id = String(row.id ?? '')
+    const label = userDisplayName(row)
+    if (id && label) byId.set(id, label)
+  }
+  if (!byId.size) return items
+
+  return items.map((item) => {
+    if (item.counterparty || !item.counterpartyUserId) return item
+    const label = byId.get(item.counterpartyUserId)
+    if (!label) return item
+    return { ...item, counterparty: label }
+  })
+}
+
+function partyFromDescription(description: string, direction: WalletDirection) {
+  const text = String(description ?? '').trim()
+  if (!text) return null
+  const received = text.match(/^(?:received Ƀu|received bu|bu received)(?: from)?\s+(.+)$/i)
+  if (received?.[1]) return received[1].trim()
+  const sent = text.match(/^(?:sent Ƀu|sent bu|bu transfer)(?: to)?\s+(.+)$/i)
+  if (sent?.[1] && !/^bu transfer$/i.test(sent[1].trim())) return sent[1].trim()
+  const tip = text.match(/^tip (?:sent to|to)\s+(.+)$/i)
+  if (tip?.[1]) return tip[1].trim()
+  if (direction === 'credit') {
+    const from = text.match(/\bfrom\s+(.+)$/i)
+    if (from?.[1]) return from[1].trim()
+  }
+  return null
+}
+
+function noteOf(meta: Record<string, unknown>) {
+  const value = meta.note
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function rowMeta(row: Record<string, unknown>): Record<string, unknown> {
@@ -116,9 +227,12 @@ function fromSale(row: Record<string, unknown>): WalletHistoryItem {
     description,
     created_at: String(row.created_at ?? ''),
     status: 'completed',
-    reference,
+    reference: typeof rowMeta(row).move_id === 'string' ? String(rowMeta(row).move_id) : reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription }),
+    counterparty: partyOf(rowMeta(row), direction) || partyFromDescription(rawDescription, direction),
+    counterpartyUserId: partyUserIdOf(rowMeta(row), direction),
+    note: noteOf(rowMeta(row)),
   }
 }
 
@@ -148,9 +262,14 @@ function fromTx(row: Record<string, unknown>): WalletHistoryItem {
     description,
     created_at: String(row.created_at ?? ''),
     status: String(row.status ?? 'completed'),
-    reference,
+    reference: typeof meta.move_id === 'string' ? String(meta.move_id) : reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription }),
+    counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
+    counterpartyUserId:
+      partyUserIdOf(meta, direction) ||
+      firstUserId(row.counterparty_user_id, meta.counterparty_user_id),
+    note: noteOf(meta),
   }
 }
 
@@ -158,6 +277,13 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
   const rawDescription = String(row.description ?? 'ɃU movement')
   const direction: WalletDirection = row.direction === 'debit' ? 'debit' : 'credit'
   const type = String(row.type ?? (direction === 'debit' ? 'spray' : 'spray_credit'))
+  const meta = rowMeta(row)
+  const reference =
+    typeof meta.move_id === 'string'
+      ? String(meta.move_id)
+      : typeof row.reference === 'string'
+        ? row.reference
+        : null
   return {
     id: String(row.id ?? ''),
     type,
@@ -165,9 +291,12 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
     description: historyLabel({ type, description: rawDescription, direction }),
     created_at: String(row.created_at ?? ''),
     status: 'completed',
-    reference: typeof row.reference === 'string' ? row.reference : null,
+    reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription }),
+    counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
+    counterpartyUserId: partyUserIdOf(meta, direction),
+    note: noteOf(meta),
   }
 }
 
@@ -252,7 +381,8 @@ function fromPayment(row: Record<string, unknown>): WalletHistoryItem | null {
 
 function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
   const type = String(row.type ?? 'deposit')
-  const rawDescription = String(row.description ?? type)
+  const meta = rowMeta(row)
+  const rawDescription = String(row.description ?? meta.description ?? type)
   const direction =
     row.direction === 'credit' || row.direction === 'debit'
       ? row.direction
@@ -264,6 +394,10 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
         })
   const reference =
     typeof row.reference === 'string' && row.reference ? row.reference : null
+  const counterparty =
+    firstName(row.counterparty) ||
+    partyOf(meta, direction) ||
+    partyFromDescription(rawDescription, direction)
   return {
     id: String(row.id ?? reference ?? `${rawDescription}-${row.created_at}`),
     type,
@@ -274,6 +408,11 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
     reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription }),
+    counterparty,
+    counterpartyUserId:
+      partyUserIdOf(meta, direction) ||
+      firstUserId(row.counterparty_user_id, meta.counterparty_user_id),
+    note: noteOf(meta),
   }
 }
 
@@ -284,7 +423,10 @@ export async function listWalletHistory(userId: string, limit = 200): Promise<Wa
   const rpc = await db.rpc('bu_list_user_wallet_history', { p_user_id: userId, p_limit: limit })
   if (!rpc.error) {
     const rows = asRows(rpc.data).map(fromRpcRow)
-    if (rows.length) return mergeHistory(rows).slice(0, limit)
+    if (rows.length) {
+      const merged = mergeHistory(rows).slice(0, limit)
+      return enrichCounterparties(db, merged)
+    }
   }
 
   const saleTable = await db
@@ -333,5 +475,6 @@ export async function listWalletHistory(userId: string, limit = 200): Promise<Wa
   const funded = pays.error
     ? []
     : ((pays.data ?? []) as Array<Record<string, unknown>>).map(fromPayment).filter((row): row is WalletHistoryItem => Boolean(row))
-  return mergeHistory([...sales, ...extra, ...ledgers, ...withdrawn, ...funded]).slice(0, limit)
+  const merged = mergeHistory([...sales, ...extra, ...ledgers, ...withdrawn, ...funded]).slice(0, limit)
+  return enrichCounterparties(db, merged)
 }

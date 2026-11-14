@@ -1,17 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, History as HistoryIcon, RefreshCw, Ticket } from 'lucide-react'
+import { History as HistoryIcon, RefreshCw, Ticket } from 'lucide-react'
 import { isEventPast } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 import { useAccount, useWalletPulse } from '@/components/account-store'
+import { BuInvoiceDialog } from '@/components/bu-invoice'
+import { invoiceNumberFromId, type BuInvoice, type BuInvoiceKind } from '@/lib/invoice/document'
 import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 import {
-  amountIconTone,
-  amountTone,
   historyBucket,
   historyLabel,
   walletDirection,
@@ -29,6 +29,9 @@ interface Transaction {
   status: 'completed' | 'pending' | 'failed' | string
   direction: WalletDirection
   bucket: HistoryBucket
+  reference?: string | null
+  counterparty?: string | null
+  note?: string | null
 }
 
 interface HistoryTicket extends TicketRecord {
@@ -45,9 +48,42 @@ const FILTERS: Array<{ id: 'all' | HistoryBucket; label: string }> = [
   { id: 'withdrawal', label: 'Withdrawals' },
 ]
 
+function metaOf(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  return {}
+}
+
+function isUserId(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())
+}
+
+function partyFromMeta(meta: Record<string, unknown>, direction: WalletDirection) {
+  const keys =
+    direction === 'debit'
+      ? ['to_name', 'recipient_name', 'counterparty']
+      : ['from_name', 'sender_name', 'counterparty']
+  for (const key of keys) {
+    const value = meta[key]
+    if (typeof value === 'string' && value.trim() && !isUserId(value)) return value.trim()
+  }
+  return null
+}
+
+function partyFromLabel(description: string) {
+  const text = String(description ?? '').trim()
+  const from = text.match(/^(?:received Ƀu|received bu|bu received)(?: from)?\s+(.+)$/i)
+  if (from?.[1]) return from[1].trim()
+  const to = text.match(/^(?:sent Ƀu|sent bu|bu transfer)(?: to)?\s+(.+)$/i)
+  if (to?.[1] && !/^bu transfer$/i.test(to[1].trim())) return to[1].trim()
+  const tip = text.match(/^tip (?:sent to|to)\s+(.+)$/i)
+  if (tip?.[1]) return tip[1].trim()
+  return null
+}
+
 function mapWalletTx(tx: Record<string, unknown>): Transaction {
   const type = String(tx.type ?? tx.kind ?? 'deposit')
-  const rawDescription = String(tx.description ?? tx.type ?? 'ɃU movement')
+  const meta = metaOf(tx.metadata)
+  const rawDescription = String(tx.description ?? meta.description ?? tx.type ?? 'ɃU movement')
   const direction =
     tx.direction === 'credit' || tx.direction === 'debit'
       ? tx.direction
@@ -60,17 +96,54 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
         })
   const createdAt = new Date(String(tx.created_at ?? '')).getTime() || 0
   const statusRaw = String(tx.status ?? 'completed')
+  const labeled = historyLabel({ type, description: rawDescription, direction })
+  const counterparty =
+    (typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null) ||
+    partyFromMeta(meta, direction) ||
+    partyFromLabel(rawDescription) ||
+    partyFromLabel(labeled)
   return {
     id: String(tx.id ?? `${createdAt}-${rawDescription}`),
     type,
     amount: Math.abs(Number(tx.amount ?? 0)),
     date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
     createdAt,
-    description: historyLabel({ type, description: rawDescription, direction }),
+    description: labeled,
     status: statusRaw,
     direction,
     bucket: (tx.bucket as HistoryBucket | undefined) || historyBucket({ type, description: rawDescription }),
+    reference: typeof tx.reference === 'string' ? tx.reference : null,
+    counterparty,
+    note: typeof tx.note === 'string' ? tx.note : typeof meta.note === 'string' ? meta.note : null,
   }
+}
+
+function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
+  const credit = tx.direction === 'credit'
+  const kind: BuInvoiceKind = /tip/i.test(`${tx.type} ${tx.description}`)
+    ? 'tip'
+    : /spray/i.test(tx.type) && tx.direction === 'debit'
+      ? 'spray'
+      : 'transfer'
+  return {
+    number: invoiceNumberFromId(tx.reference || tx.id),
+    issuedAt: new Date(tx.createdAt || Date.now()).toISOString(),
+    kind,
+    fromName: credit ? tx.counterparty || 'Sender' : senderName || 'You',
+    toName: credit ? senderName || 'You' : tx.counterparty || tx.description,
+    amountBu: buFromNaira(tx.amount),
+    amountNaira: tx.amount,
+    note: tx.note || undefined,
+    status: tx.status === 'completed' ? 'Paid' : tx.status,
+  }
+}
+
+function activityTitle(tx: Transaction) {
+  const party = tx.counterparty?.trim() || partyFromLabel(tx.description)
+  if (tx.bucket === 'bu_transfer' && party) {
+    return party
+  }
+  return tx.description
 }
 
 function normalizeRows(rows: Transaction[]) {
@@ -86,7 +159,7 @@ function normalizeRows(rows: Transaction[]) {
 }
 
 export default function History() {
-  const { userId, refreshWallet } = useAccount()
+  const { userId, displayName, refreshWallet } = useAccount()
   const [tab, setTab] = useState<'activity' | 'events'>('activity')
   const [filter, setFilter] = useState<'all' | HistoryBucket>('all')
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -94,13 +167,17 @@ export default function History() {
   const [ready, setReady] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [openInvoice, setOpenInvoice] = useState<BuInvoice | null>(null)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     bindAccountSnapshots(userId || null)
     if (!opts?.silent) setRefreshing(true)
 
     const cached = readSessionSnapshot<{ transactions: Transaction[]; pastTickets: HistoryTicket[] }>('bu_history')
-    if (cached?.transactions?.length) {
+    const cachedHasNames = Boolean(
+      cached?.transactions?.some((row) => row.bucket === 'bu_transfer' && Boolean(row.counterparty?.trim())),
+    )
+    if (cached?.transactions?.length && cachedHasNames) {
       setTransactions(normalizeRows(cached.transactions))
     }
     if (cached?.pastTickets?.length) {
@@ -246,34 +323,56 @@ export default function History() {
             ) : (
               filteredTransactions.map((tx, index) => {
                 const credit = tx.direction === 'credit'
-                return (
-                  <div
-                    key={`${tx.id}-${tx.createdAt}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-card/40 px-4 py-3"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`rounded-full p-2.5 ${amountIconTone(tx.direction)}`}>
-                        {credit ? (
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <ArrowUp className="h-4 w-4 text-red-500" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{tx.description}</p>
-                        <p className="text-xs text-muted-foreground">{tx.date}</p>
-                      </div>
+                const canOpenInvoice = tx.bucket === 'bu_transfer'
+                const rowClass = credit
+                  ? 'bg-neutral-100 text-neutral-950'
+                  : 'bg-neutral-950 text-white'
+                const amountClass = credit ? 'text-emerald-600' : 'text-rose-400'
+                const subClass = credit ? 'text-neutral-500' : 'text-white/50'
+                const badgeClass = credit ? 'bg-white text-neutral-950' : 'bg-white/15 text-white'
+                const content = (
+                  <>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${badgeClass}`}>
+                      {credit ? 'In' : 'Out'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{activityTitle(tx)}</p>
+                      <p className={`text-xs ${subClass}`}>{tx.date}</p>
                     </div>
-                    <div className={`shrink-0 text-right font-semibold ${amountTone(tx.direction)}`}>
-                      {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(tx.amount))}
-                      <p className="text-xs font-normal text-muted-foreground">
-                        {credit ? '+' : '-'}₦{formatNairaPlain(tx.amount)}
+                    <div className={`shrink-0 text-right text-sm font-semibold tabular-nums ${amountClass}`}>
+                      {credit ? '+' : '−'}Ƀ {formatBu(buFromNaira(tx.amount))}
+                      <p className={`text-xs font-normal ${subClass}`}>
+                        {credit ? '+' : '−'}₦{formatNairaPlain(tx.amount)}
                       </p>
                     </div>
+                  </>
+                )
+                return canOpenInvoice ? (
+                  <button
+                    key={`${tx.id}-${tx.createdAt}-${index}`}
+                    type="button"
+                    onClick={() => setOpenInvoice(invoiceFromActivity(tx, displayName))}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition active:scale-[0.99] ${rowClass}`}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div
+                    key={`${tx.id}-${tx.createdAt}-${index}`}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 ${rowClass}`}
+                  >
+                    {content}
                   </div>
                 )
               })
             )}
+            <BuInvoiceDialog
+              invoice={openInvoice}
+              open={Boolean(openInvoice)}
+              onOpenChange={(open) => {
+                if (!open) setOpenInvoice(null)
+              }}
+            />
           </div>
         ) : (
           <div className="space-y-3">

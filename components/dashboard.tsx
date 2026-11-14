@@ -1,37 +1,94 @@
 'use client';
 
 import { useEffect, useState } from 'react'
-import { Bell, Settings, Eye, EyeOff } from 'lucide-react'
-import type { EventInvitation, EventRecord, EventWithTiers, TicketRecord, TicketTier } from '@/lib/types/database'
-import { isEventUpcoming, isUpcomingListingEvent, listingRemaining } from '@/lib/events/sale'
-import { formatEventDate } from '@/lib/datetime'
-import { EventStatusBadge } from '@/components/event-status-badge'
-import { TicketPass } from '@/components/ticket-pass'
+import {
+  ArrowDown,
+  ArrowUp,
+  Banknote,
+  Bell,
+  CalendarDays,
+  Eye,
+  EyeOff,
+  Mail,
+  Plus,
+  Smartphone,
+  Sparkles,
+  Ticket,
+  Wifi,
+} from 'lucide-react'
 import { useAccount, useWalletPulse } from '@/components/account-store'
-import { formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { displayBuId } from '@/lib/phone'
+import { historyLabel, walletDirection } from '@/lib/wallet/direction'
 import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 
-interface OwnedTicket extends TicketRecord {
-  event: EventRecord | null
-  tier: TicketTier | null
-  display_status: string
+interface HomeMovement {
+  id: string
+  label: string
+  amount: number
+  credit: boolean
+  counterparty?: string | null
 }
 
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void
 }
 
+function showBuId(phone: string) {
+  const local = displayBuId(phone.replace(/\D/g, ''))
+  const shown = local.startsWith('0') ? local.slice(1) : local
+  if (shown.length === 10) return `${shown.slice(0, 3)} ${shown.slice(3, 6)} ${shown.slice(6)}`
+  if (shown.length === 11) return `${shown.slice(0, 4)} ${shown.slice(4, 7)} ${shown.slice(7)}`
+  return shown || 'Your number'
+}
+
+function movementFromWallet(tx: Record<string, unknown>, index: number): HomeMovement {
+  const type = String(tx.type ?? tx.kind ?? '')
+  const description = String(tx.description ?? tx.type ?? 'ɃU movement')
+  const direction =
+    tx.direction === 'credit' || tx.direction === 'debit'
+      ? tx.direction
+      : walletDirection({
+          type,
+          description,
+          metadata: tx.metadata,
+          amount: Number(tx.amount ?? 0),
+        })
+  const counterparty = typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null
+  const baseLabel = historyLabel({ type, description, direction })
+  const label = counterparty
+    ? direction === 'credit'
+      ? `Received from ${counterparty}`
+      : `Sent to ${counterparty}`
+    : baseLabel
+  return {
+    id: String(tx.id ?? index),
+    label,
+    amount: Math.abs(Number(tx.amount ?? 0)),
+    credit: direction === 'credit',
+    counterparty,
+  }
+}
+
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
-  const [publicEvents, setPublicEvents] = useState<EventWithTiers[]>([])
-  const [invites, setInvites] = useState<Array<EventInvitation & { event: EventRecord | null }>>([])
-  const [myTickets, setMyTickets] = useState<OwnedTicket[]>([])
-  const [ticketsLoaded, setTicketsLoaded] = useState(false)
-  const [invitesLoaded, setInvitesLoaded] = useState(false)
-  const [eventsLoaded, setEventsLoaded] = useState(false)
   const [unreadAlerts, setUnreadAlerts] = useState(0)
   const { greetingName, buBalance, nairaBalance, userId, refreshWallet } = useAccount()
+  const [movements, setMovements] = useState<HomeMovement[]>([])
+  const [buId, setBuId] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [soonNotice, setSoonNotice] = useState<string | null>(null)
+
+  function applyWalletPayload(transactions: Array<Record<string, unknown>>) {
+    setUnreadAlerts(countUnseenAlerts(transactions))
+    setMovements(transactions.slice(0, 1).map(movementFromWallet))
+  }
+
+  function showComingSoon(label: string) {
+    setSoonNotice(`${label} is coming soon`)
+    window.setTimeout(() => setSoonNotice(null), 2200)
+  }
 
   useWalletPulse(() => {
     if (!userId) return
@@ -39,45 +96,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
-        setUnreadAlerts(countUnseenAlerts((json.data?.transactions ?? []) as Array<Record<string, unknown>>))
-        void refreshWallet()
+        applyWalletPayload((json.data?.transactions ?? []) as Array<Record<string, unknown>>)
       })
       .catch(() => undefined)
   })
 
   useEffect(() => {
     if (!userId) {
-      setInvites([])
-      setMyTickets([])
-      setInvitesLoaded(false)
-      setTicketsLoaded(false)
       setUnreadAlerts(0)
+      setMovements([])
+      setBuId('')
+      setAvatarUrl('')
       return
     }
-    fetch('/api/events', { credentials: 'include' })
+    fetch('/api/me', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
-        if (json.status) {
-          setPublicEvents(
-            (json.data ?? [])
-              .filter((event: EventWithTiers) => isUpcomingListingEvent(event))
-              .slice(0, 2),
-          )
-        }
+        const profile = json.data?.profile as { phone_e164?: string; phone?: string; avatar_url?: string } | null
+        setBuId(String(profile?.phone_e164 || profile?.phone || ''))
+        setAvatarUrl(String(profile?.avatar_url || ''))
       })
       .catch(() => undefined)
-      .finally(() => setEventsLoaded(true))
-    fetch('/api/invites', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        if (!json.status) {
-          setInvites([])
-          return
-        }
-        setInvites((json.data ?? []).slice(0, 2))
-      })
-      .catch(() => setInvites([]))
-      .finally(() => setInvitesLoaded(true))
     fetch('/api/wallet', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -85,245 +124,213 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           setUnreadAlerts(0)
           return
         }
-        setUnreadAlerts(countUnseenAlerts((json.data?.transactions ?? []) as Array<Record<string, unknown>>))
-        void refreshWallet()
+        applyWalletPayload((json.data?.transactions ?? []) as Array<Record<string, unknown>>)
       })
       .catch(() => setUnreadAlerts(0))
-    fetch('/api/tickets/mine', { credentials: 'include' })
-      .then(async (res) => {
-        const json = await res.json()
-        if (!json.status) {
-          setMyTickets([])
-          return
-        }
-        const list = (json.data ?? []) as OwnedTicket[]
-        setMyTickets(list.filter((ticket) => isEventUpcoming(ticket.event)).slice(0, 4))
-      })
-      .catch(() => setMyTickets([]))
-      .finally(() => setTicketsLoaded(true))
   }, [userId, refreshWallet])
 
+  const initial = (greetingName || 'B').slice(0, 1).toUpperCase()
+  const latest = movements[0] ?? null
+
   return (
-    <div className="space-y-6 pb-24">
-      {/* Header Section */}
-      <div className="space-y-4 bg-gradient-to-b from-primary to-primary/80 px-4 py-8 text-primary-foreground">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm opacity-90">Good Evening</p>
-            <h2 className="text-2xl font-bold">{greetingName || '\u00a0'}</h2>
-          </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => onNavigate('notifications')}
-              className="relative rounded-full bg-primary-foreground/20 p-2 backdrop-blur hover:bg-primary-foreground/30 transition"
-            >
-              <Bell size={20} />
-              {unreadAlerts > 0 ? (
-                <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-green-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
-                  {unreadAlerts > 9 ? '9+' : unreadAlerts}
-                </span>
-              ) : null}
-            </button>
-            <button 
-              onClick={() => onNavigate('profile', { view: 'settings' })}
-              className="rounded-full bg-primary-foreground/20 p-2 backdrop-blur hover:bg-primary-foreground/30 transition"
-            >
-              <Settings size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Account Balance */}
-        <div className="space-y-3 rounded-2xl bg-primary-foreground/10 p-4 backdrop-blur">
-          <p className="text-sm opacity-90">ɃU Balance</p>
-          <div className="flex items-center justify-between">
-            <div className="text-3xl font-bold">
-              {balanceVisible
-                ? buBalance == null
-                  ? '\u00a0'
-                  : `Ƀ ${formatBu(buBalance)}`
-                : 'Ƀ ••••••'}
+    <div className="space-y-6 bg-white pb-4 text-neutral-950">
+      <div className="sticky top-0 z-30 bg-white px-4 pb-3 pt-4">
+        <div className="bu-rise overflow-hidden rounded-[32px] bg-neutral-950 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
+          <div className="px-5 pb-5 pt-5">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => onNavigate('profile')}
+                className="bu-press flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/15 text-sm font-semibold"
+                aria-label="Open profile"
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  initial
+                )}
+              </button>
+              <p className="text-sm font-medium">Your Wallet</p>
+              <button
+                type="button"
+                onClick={() => onNavigate('notifications')}
+                className="bu-press relative flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+                {unreadAlerts > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-white px-1 text-center text-[10px] font-bold leading-[18px] text-neutral-950">
+                    {unreadAlerts > 9 ? '9+' : unreadAlerts}
+                  </span>
+                ) : null}
+              </button>
             </div>
-            <button 
-              onClick={() => setBalanceVisible(!balanceVisible)}
-              className="rounded-full bg-primary-foreground/20 p-2 hover:bg-primary-foreground/30 transition"
-            >
-              {balanceVisible ? (
-                <Eye className="h-5 w-5 text-foreground" />
-              ) : (
-                <EyeOff className="h-5 w-5 text-foreground" />
-              )}
-            </button>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-mono">
-              {balanceVisible
-                ? nairaBalance == null
-                  ? '\u00a0'
-                  : `≈ ₦${formatNairaPlain(nairaBalance)}`
-                : '≈ ₦••••••'}
-            </span>
-            <button
-              onClick={() => onNavigate('history')}
-              className="rounded-full bg-green-400/20 px-3 py-1 text-green-300 hover:bg-green-400/30 transition"
-            >
-              History
-            </button>
-          </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button 
-            onClick={() => onNavigate('buy-bu')}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-foreground/20 py-3 backdrop-blur transition hover:bg-primary-foreground/30"
+            <div className="mt-6 flex flex-col items-center">
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium">ɃU</span>
+              <div className="mt-3 flex items-center gap-2">
+                <p key={balanceVisible ? String(buBalance ?? '') : 'hidden'} className="bu-balance text-4xl font-semibold tracking-tight">
+                  {balanceVisible ? (buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`) : 'Ƀ ••••••'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setBalanceVisible(!balanceVisible)}
+                  className="rounded-full p-1 text-white/70"
+                  aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
+                >
+                  {balanceVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-white/60">
+                {balanceVisible
+                  ? nairaBalance == null
+                    ? '\u00a0'
+                    : `≈ ₦${formatNairaPlain(nairaBalance)}`
+                  : '≈ ₦••••••'}
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <div className="flex items-center rounded-full bg-white/10">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('send-bu')}
+                  className="bu-press flex h-12 w-12 items-center justify-center"
+                  aria-label="Send ɃU"
+                >
+                  <ArrowUp className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('receive-bu')}
+                  className="bu-press flex h-12 w-12 items-center justify-center"
+                  aria-label="Receive ɃU"
+                >
+                  <ArrowDown className="h-5 w-5" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('buy-bu')}
+                className="bu-press flex h-12 w-12 items-center justify-center rounded-full bg-white/10"
+                aria-label="Fund wallet"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between">
+              <p className="font-mono text-sm tracking-wide text-white/90">{showBuId(buId)}</p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-xs font-bold text-neutral-950">
+                  Ƀ
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('receive-bu')}
+                  className="bu-press flex h-8 w-8 items-center justify-center rounded-full border border-white/20"
+                  aria-label="Show receive QR"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigate('history')}
+            className="bu-press flex w-full items-center gap-3 border-t border-white/10 bg-black px-5 py-3.5 text-left"
+            aria-label="Open transactions history"
           >
-            <span>➕</span>
-            <span className="font-semibold">Fund Wallet</span>
-          </button>
-          <button 
-            onClick={() => onNavigate('send-bu')}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary-foreground/20 py-3 backdrop-blur transition hover:bg-primary-foreground/30"
-          >
-            <span>✨</span>
-            <span className="font-semibold">Send ɃU</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white/90">
+                {latest ? latest.label : 'No transfers yet'}
+              </p>
+              {latest ? (
+                <p
+                  className={`mt-0.5 text-sm font-semibold tabular-nums ${
+                    latest.credit ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  {latest.credit ? '+' : '−'}Ƀ {formatBu(buFromNaira(latest.amount))}
+                </p>
+              ) : null}
+            </div>
+            <span className="shrink-0 text-xs font-medium text-white/55">Transactions ›</span>
           </button>
         </div>
+      </div>
+
+      <div className="bu-rise px-4" style={{ animationDelay: '80ms' }}>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'To Ƀucks', action: 'send-bu', Icon: ArrowUp },
+            { label: 'Spray', action: 'spraying', Icon: Sparkles },
+            { label: 'To Bank', action: 'redemption', Icon: Banknote },
+          ].map(({ label, action, Icon }) => (
+            <button
+              key={action}
+              type="button"
+              onClick={() => onNavigate(action)}
+              className="bu-press flex flex-col items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-4"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-950 text-white">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-semibold">{label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          {[
+            { label: 'Airtime', Icon: Smartphone },
+            { label: 'Data', Icon: Wifi },
+          ].map(({ label, Icon }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => showComingSoon(label)}
+              className="bu-press flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="text-[11px] text-neutral-500">Coming soon</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {[
+            { label: 'My tickets', action: 'tickets', Icon: Ticket },
+            { label: 'Invites', action: 'invites', Icon: Mail },
+            { label: 'Events', action: 'events', Icon: CalendarDays },
+          ].map(({ label, action, Icon }) => (
+            <button
+              key={`${action}-${label}`}
+              type="button"
+              onClick={() => onNavigate(action)}
+              className="bu-press flex flex-col items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-3 py-4"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-800">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="text-center text-[11px] font-semibold leading-tight">{label}</span>
+            </button>
+          ))}
+        </div>
+        {soonNotice ? (
+          <p className="mt-2 text-center text-xs font-medium text-neutral-500">{soonNotice}</p>
+        ) : null}
       </div>
 
       <div className="px-4">
         <AdSlot slot="app_home" />
       </div>
 
-      {/* Quick Access - Moved before events */}
-      <div className="px-4">
-        <h3 className="mb-4 text-lg font-bold">Quick Actions</h3>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { icon: '🎫', label: 'Tickets', action: 'tickets' },
-            { icon: '✨', label: 'Spray', action: 'spraying' },
-            { icon: '💰', label: 'Withdraw', action: 'redemption' },
-          ].map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => onNavigate(item.action)}
-              className="flex flex-col items-center gap-2 rounded-xl bg-card p-4 transition hover:bg-card/80"
-            >
-              <div className="text-3xl">{item.icon}</div>
-              <span className="text-xs font-medium text-center">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold">My tickets</h3>
-          <button onClick={() => onNavigate('tickets')} className="text-sm font-semibold text-primary">
-            View All
-          </button>
-        </div>
-        <div className="space-y-3">
-          {ticketsLoaded && myTickets.length === 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">No upcoming tickets. Past events you paid for are in History.</p>
-              <button type="button" onClick={() => onNavigate('history')} className="text-sm font-semibold text-primary">
-                Open history
-              </button>
-            </div>
-          ) : null}
-          {myTickets.map((ticket) => (
-            <TicketPass
-              key={ticket.id}
-              ticket={ticket}
-              variant="mini"
-              onOpen={() => onNavigate('tickets', { ticketId: ticket.id })}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Invites Section */}
-      <div className="px-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Invites</h3>
-          <button
-            onClick={() => onNavigate('invites')}
-            className="text-sm text-primary font-semibold"
-          >
-            View All
-          </button>
-        </div>
-        <div className="space-y-3">
-          {invitesLoaded && invites.length === 0 && (
-            <p className="text-sm text-muted-foreground">No private invites yet.</p>
-          )}
-          {invites.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => (item.event_id ? onNavigate('event-info', item.event_id) : onNavigate('invites'))}
-              className="flex cursor-pointer gap-3 rounded-xl bg-card p-3 transition hover:bg-card/80"
-            >
-              <div className="text-3xl">💌</div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <h4 className="font-semibold">{item.event?.title ?? 'Private event'}</h4>
-                  <span className="rounded-full bg-primary/20 px-2 py-1 text-xs text-primary">
-                    {item.event ? formatEventDate(item.event.start_time) : ''}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">{item.event?.venue_name}</p>
-                <span className="mt-2 inline-block rounded-full bg-yellow-400/20 px-2 py-1 text-xs font-semibold text-yellow-400">
-                  {item.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Upcoming Events Section */}
-      <div className="px-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Upcoming Events</h3>
-          <button
-            onClick={() => onNavigate('events')}
-            className="text-sm text-primary font-semibold"
-          >
-            View All
-          </button>
-        </div>
-        <div className="space-y-3">
-          {eventsLoaded && publicEvents.length === 0 && (
-            <p className="text-sm text-muted-foreground">No public upcoming events yet.</p>
-          )}
-          {publicEvents.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onNavigate('event-info', item.id)}
-              className="flex cursor-pointer gap-3 rounded-xl bg-card p-3 transition hover:bg-card/80"
-            >
-              <div className="text-3xl">🎊</div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <h4 className="font-semibold">{item.title}</h4>
-                  <span className="rounded-full bg-primary/20 px-2 py-1 text-xs text-primary">
-                    {formatEventDate(item.start_time)}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    🎫 ₦{Number(item.starting_price ?? 0).toLocaleString()}
-                  </p>
-                  <EventStatusBadge event={item} remaining={listingRemaining(item)} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Updates Section */}
       <div className="px-4">
         <h3 className="mb-4 text-lg font-bold">Campaign Updates</h3>
         <div className="relative h-48 overflow-hidden rounded-xl bg-gradient-to-r from-primary to-primary/60 p-4">

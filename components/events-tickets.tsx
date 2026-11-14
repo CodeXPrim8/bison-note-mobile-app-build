@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Search } from 'lucide-react'
@@ -60,52 +59,62 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   })
 
   return (
-    <div className="space-y-6 pb-24 pt-4">
+    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
       <div className="px-4">
-        <h2 className="mb-4 text-xl font-bold">Upcoming Events</h2>
-        <Card className="mb-4 border-primary/20 bg-card p-4">
-          <div className="flex items-center gap-3">
-            <Search className="h-5 w-5 text-primary" />
-            <Input placeholder="Search events..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-        </Card>
-        {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+        <h2 className="mb-4 text-lg font-semibold">Upcoming events</h2>
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-neutral-500" />
+          <Input
+            placeholder="Search events..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+          />
+        </div>
+        {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
         {filtered.length === 0 ? (
           ready ? (
-            <Card className="p-8 text-center text-muted-foreground">No public upcoming events.</Card>
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-8 text-center text-sm text-neutral-500">
+              No public upcoming events.
+            </div>
           ) : null
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filtered.map((event) => (
-              <Card
+              <button
+                type="button"
                 key={event.id}
                 onClick={() => (onNavigate ? onNavigate('event-info', event.id) : (window.location.href = `/events/${event.slug}`))}
-                className="cursor-pointer border-primary/20 bg-card p-4"
+                className="bu-press w-full rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-left"
               >
                 <div className="mb-2 flex justify-between gap-2">
-                  <h3 className="font-semibold">{event.title}</h3>
+                  <h3 className="font-semibold text-neutral-950">{event.title}</h3>
                   <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs text-primary">{formatEventDate(event.start_time)}</span>
+                    <span className="text-xs font-medium text-neutral-600">{formatEventDate(event.start_time)}</span>
                     <EventStatusBadge event={event} remaining={listingRemaining(event)} />
                   </div>
                 </div>
-                <p className="line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
-                <div className="mt-2 flex items-center gap-1 text-sm">
-                  <MapPin className="h-4 w-4 text-primary" />
+                <p className="line-clamp-2 text-sm text-neutral-500">{event.description}</p>
+                <div className="mt-2 flex items-center gap-1 text-sm text-neutral-700">
+                  <MapPin className="h-4 w-4 text-neutral-950" />
                   {eventVenueLabel(event)}
                 </div>
                 <div className="mt-3">
                   <EventTicketList tiers={event.ticket_tiers} ended={eventDateHasPassed(event)} />
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
                   <Calendar className="h-3 w-3" />
                   {event.organizer_name ?? event.celebrant_name}
                 </div>
-              </Card>
+              </button>
             ))}
           </div>
         )}
-        <Button className="mt-4 w-full" variant="outline" onClick={() => (window.location.href = '/events')}>
+        <Button
+          className="mt-4 w-full rounded-full border-neutral-200"
+          variant="outline"
+          onClick={() => (window.location.href = '/events')}
+        >
           Open full event site
         </Button>
       </div>

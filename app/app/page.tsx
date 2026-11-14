@@ -38,6 +38,11 @@ function profileViewFromPageData(pageData: unknown) {
   return undefined
 }
 
+function intentFromPageData(pageData: unknown): 'tip' | undefined {
+  if (!pageData || typeof pageData !== 'object' || !('intent' in pageData)) return undefined
+  return (pageData as { intent?: string }).intent === 'tip' ? 'tip' : undefined
+}
+
 export default function MobileApp() {
   return (
     <AccountProvider>
@@ -55,6 +60,12 @@ function MobileAppShell() {
   const [allowed, setAllowed] = useState(false)
 
   const handleNavigate = (page: string, data?: unknown) => {
+    // User home already covers wallet tools; drop the separate Wallet page.
+    if (mode === 'user' && page === 'wallet') {
+      setCurrentPage('dashboard')
+      setPageData(null)
+      return
+    }
     setCurrentPage(page)
     setPageData(data)
   }
@@ -98,8 +109,10 @@ function MobileAppShell() {
     } else if ((page === 'event-info' || page === 'event') && event) {
       setCurrentPage('event-info')
       setPageData(event)
-    } else if (page === 'wallet' || page === 'buy-bu' || page === 'redemption' || page === 'history' || page === 'send-bu') {
+    } else if (page === 'buy-bu' || page === 'redemption' || page === 'history' || page === 'send-bu') {
       setCurrentPage(page)
+    } else if (page === 'wallet') {
+      setCurrentPage(mode === 'user' ? 'dashboard' : 'wallet')
     }
   }, [allowed])
 
@@ -145,36 +158,30 @@ function MobileAppShell() {
                   ? 'History'
                   : currentPage
 
+  const guestChrome = true
+  const hideTopBar = currentPage === 'dashboard'
+
   return (
-    <div className={`${theme} min-h-screen bg-background text-foreground`}>
+    <div className={guestChrome ? 'bu-user-shell min-h-screen' : `${theme} min-h-screen bg-background text-foreground`}>
       <div className="mx-auto max-w-md">
-        <div className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-          {currentPage !== 'dashboard' ? (
-            <button
-              onClick={() => setCurrentPage('dashboard')}
-              className="text-xl text-foreground transition hover:text-primary"
-            >
-              ←
-            </button>
-          ) : (
-            <a href="/" className="text-xs font-semibold text-primary">
-              Bucks
-            </a>
-          )}
-          <h1 className="text-lg font-bold capitalize text-primary">{title}</h1>
+        {!hideTopBar && (
+        <div className="sticky top-0 z-40 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 backdrop-blur">
+          <span className="w-8" aria-hidden />
+          <h1 className="text-lg font-bold capitalize text-neutral-950">{title}</h1>
           <ThemeSelector theme={theme} onThemeChange={setTheme} />
         </div>
-
-        {currentPage === 'dashboard' && <ModeSwitcher currentMode={mode} onModeChange={setMode} />}
+        )}
 
         <div>
           {mode === 'user' ? (
             <>
               <div hidden={currentPage !== 'dashboard'}>
                 <Dashboard onNavigate={handleNavigate} />
+                <div className="px-4 pb-28">
+                  <ModeSwitcher currentMode={mode} onModeChange={setMode} />
+                </div>
               </div>
-              {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
-              {currentPage === 'spraying' && <Spraying />}
+              {currentPage === 'spraying' && <Spraying onNavigate={handleNavigate} />}
               {currentPage === 'redemption' && <Redemption />}
               {currentPage === 'profile' && (
                 <Profile
@@ -197,16 +204,26 @@ function MobileAppShell() {
               {currentPage === 'event-info' && (
                 <EventInfo eventId={typeof pageData === 'string' ? pageData : undefined} onNavigate={handleNavigate} />
               )}
-              {currentPage === 'send-bu' && <SendBU />}
-              {currentPage === 'receive-bu' && <ReceiveBU />}
+              {currentPage === 'send-bu' && <SendBU key={`send-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />}
+              {currentPage === 'receive-bu' && (
+                <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
+              )}
             </>
           ) : mode === 'celebrant' ? (
             <>
               <div hidden={currentPage !== 'dashboard'}>
-                <CelebrantDashboard onNavigate={handleNavigate} />
+                <CelebrantDashboard
+                  onNavigate={handleNavigate}
+                  onModeChange={setMode}
+                  currentMode={mode}
+                />
               </div>
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
               {currentPage === 'redemption' && <Redemption />}
+              {currentPage === 'history' && <History />}
+              {currentPage === 'receive-bu' && (
+                <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
+              )}
               {currentPage === 'tickets' && (
                 <MyTickets onNavigate={handleNavigate} ticketId={ticketIdFromPageData(pageData)} />
               )}
@@ -229,10 +246,15 @@ function MobileAppShell() {
           ) : (
             <>
               <div hidden={currentPage !== 'dashboard'}>
-                <VendorDashboard />
+                <VendorDashboard
+                  onNavigate={handleNavigate}
+                  onModeChange={setMode}
+                  currentMode={mode}
+                />
               </div>
               {currentPage === 'wallet' && <VendorPOS />}
               {currentPage === 'spraying' && <QRScanner />}
+              {currentPage === 'history' && <History />}
               {currentPage === 'profile' && (
                 <Profile
                   onNavigate={handleNavigate}

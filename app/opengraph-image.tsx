@@ -46,7 +46,7 @@ export default function OpenGraphImage() {
             letterSpacing: 2,
           }}
         >
-          Bucks
+          Ƀucks
         </div>
         <div
           style={{

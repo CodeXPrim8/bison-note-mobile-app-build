@@ -122,12 +122,6 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
       onClick: () => onNavigate('history'),
     },
     {
-      icon: '💳',
-      title: 'My Accounts',
-      desc: 'Account details, statement, e.t.c.',
-      onClick: () => onNavigate('wallet'),
-    },
-    {
       icon: '📱',
       title: 'Contactless Pay',
       desc: 'Setup your account for contactless pay',

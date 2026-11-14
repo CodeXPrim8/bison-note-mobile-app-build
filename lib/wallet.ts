@@ -16,6 +16,7 @@ async function liveUserLabel(userId: string) {
   const name = [row.first_name, row.last_name].filter((part) => typeof part === 'string' && part.trim()).join(' ').trim()
   if (name) return name
   if (typeof row.account_name === 'string' && row.account_name.trim()) return row.account_name.trim()
+  if (typeof row.phone_number === 'string' && row.phone_number.trim()) return row.phone_number.trim()
   return ''
 }
 
@@ -25,6 +26,7 @@ export async function transferBu(input: {
   amount: number
   eventId?: string
   isTip?: boolean
+  note?: string
 }) {
   if (input.fromUserId === input.toUserId) {
     throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
@@ -33,13 +35,14 @@ export async function transferBu(input: {
   const bu = buFromNaira(input.amount)
   const [fromName, toName] = await Promise.all([liveUserLabel(input.fromUserId), liveUserLabel(input.toUserId)])
   const meta = {
-    kind: input.isTip ? 'tip' : 'transfer',
+    kind: input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer',
     bu,
     naira: input.amount,
     value_rate: getBuNairaValue(),
     event_id: input.eventId ?? null,
     from_name: fromName,
     to_name: toName,
+    note: input.note?.trim() || null,
   }
   const debitType = 'spray'
   const creditType = 'spray_credit'
@@ -75,4 +78,12 @@ export async function transferBu(input: {
     description: creditDescription,
     metadata: { ...sharedMeta, from: input.fromUserId },
   })
+  return {
+    moveId,
+    fromName,
+    toName,
+    bu,
+    naira: input.amount,
+    kind: input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer',
+  }
 }

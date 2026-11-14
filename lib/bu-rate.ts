@@ -11,9 +11,9 @@ export const BU_NAIRA_BUY_MAX = 1.08
 export const BU_MIN_PURCHASE = 2000
 export const BU_MIN_SPRAY = 200
 export const BU_MIN_TRANSFER = 1
-export const BU_MIN_WITHDRAW = 5000
+export const BU_MIN_WITHDRAW = 100
 export const BU_SPRAY_NOTES = [200, 500, 1000] as const
-export const BU_BUY_PRESETS = [2000, 5000, 10000, 20000, 50000] as const
+export const BU_BUY_PRESETS = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000] as const
 
 let runtimeBuNairaValue = BU_NAIRA_VALUE
 

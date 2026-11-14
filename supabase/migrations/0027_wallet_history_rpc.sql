@@ -53,7 +53,15 @@ begin
         'reference', l.reference,
         'metadata', coalesce(l.metadata, '{}'::jsonb),
         'direction', l.direction,
-        'status', 'completed'
+        'status', 'completed',
+        'counterparty', case
+          when l.direction = 'debit' then nullif(coalesce(l.metadata->>'to_name', ''), '')
+          else nullif(coalesce(l.metadata->>'from_name', ''), '')
+        end,
+        'counterparty_user_id', case
+          when l.direction = 'debit' then nullif(coalesce(l.metadata->>'to', ''), '')
+          else nullif(coalesce(l.metadata->>'from', ''), '')
+        end
       ) as entry,
       l.created_at as sort_at
       from public.bu_wallet_ledger l
@@ -73,9 +81,31 @@ begin
         'naira', c.naira,
         'description', case
           when c.kind = 'affiliate_commission' then 'Affiliate commission'
-          when c.kind = 'wallet_debit' then coalesce(c.metadata->>'description', 'BU transfer')
-          when c.kind = 'wallet_credit' then coalesce(c.metadata->>'description', 'BU received')
+          when c.kind = 'wallet_debit' then coalesce(
+            nullif(c.metadata->>'description', ''),
+            case
+              when coalesce(c.metadata->>'to_name', '') <> '' then 'BU transfer to ' || (c.metadata->>'to_name')
+              else 'BU transfer'
+            end
+          )
+          when c.kind = 'wallet_credit' then coalesce(
+            nullif(c.metadata->>'description', ''),
+            case
+              when coalesce(c.metadata->>'from_name', '') <> '' then 'BU received from ' || (c.metadata->>'from_name')
+              else 'BU received'
+            end
+          )
           else 'Ticket sale'
+        end,
+        'counterparty', case
+          when c.kind = 'wallet_debit' then nullif(c.metadata->>'to_name', '')
+          when c.kind = 'wallet_credit' then nullif(c.metadata->>'from_name', '')
+          else null
+        end,
+        'counterparty_user_id', case
+          when c.kind = 'wallet_debit' then nullif(c.metadata->>'to', '')
+          when c.kind = 'wallet_credit' then nullif(c.metadata->>'from', '')
+          else null
         end,
         'created_at', c.created_at,
         'reference', c.reference,
@@ -107,7 +137,19 @@ begin
           when t.type::text in ('spray', 'withdrawal', 'purchase', 'ticket_purchase') then 'debit'
           else 'credit'
         end,
-        'status', coalesce(t.status, 'completed')
+        'status', coalesce(t.status, 'completed'),
+        'counterparty', case
+          when coalesce(t.metadata->>'direction', '') = 'debit'
+            or t.type::text in ('spray', 'withdrawal', 'purchase', 'ticket_purchase')
+            then nullif(coalesce(t.metadata->>'to_name', ''), '')
+          else nullif(coalesce(t.metadata->>'from_name', ''), '')
+        end,
+        'counterparty_user_id', case
+          when coalesce(t.metadata->>'direction', '') = 'debit'
+            or t.type::text in ('spray', 'withdrawal', 'purchase', 'ticket_purchase')
+            then nullif(coalesce(t.metadata->>'to', ''), '')
+          else nullif(coalesce(t.metadata->>'from', ''), '')
+        end
       ) as entry,
       t.created_at as sort_at
       from public.bu_transactions t

@@ -6,7 +6,7 @@ import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 
 function splitName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
-  const first_name = parts[0] || 'Bucks'
+  const first_name = parts[0] || 'Ƀucks'
   const last_name = parts.slice(1).join(' ') || 'Member'
   const account_name = [first_name, last_name].filter(Boolean).join(' ')
   return { first_name, last_name, account_name }
@@ -255,7 +255,7 @@ async function backfillFromAuth(buId: string) {
   if (!id) return null
   return {
     id,
-    display_name: row?.display_name || 'Bucks member',
+    display_name: row?.display_name || 'Ƀucks member',
     phone: row?.phone_number || normalizePhone(buId),
     email: null as string | null,
   }
@@ -273,7 +273,7 @@ export async function resolveSendBuRecipient(buId: string) {
     const phone = profile.phone_e164 || profile.phone || buId
     const synced = await ensureLiveBuUser({
       id: profile.id,
-      displayName: profile.display_name || 'Bucks member',
+      displayName: profile.display_name || 'Ƀucks member',
       phone,
       email: profile.email,
       pinHash: profile.pin_hash,
@@ -283,7 +283,7 @@ export async function resolveSendBuRecipient(buId: string) {
       return (
         (await lookupLiveUser(phone)) ?? {
           id: synced.userId,
-          display_name: profile.display_name || 'Bucks member',
+          display_name: profile.display_name || 'Ƀucks member',
           phone: normalizePhone(phone),
           email: profile.email,
         }

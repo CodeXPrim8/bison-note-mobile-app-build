@@ -9,8 +9,8 @@ export function paystackPayoutMessage(error: unknown) {
   if (/third party payouts|starter business|transfers are not available/i.test(message)) {
     return 'Paystack Transfers are not enabled on this business. Enable Transfers in Paystack, fund the balance, then retry.'
   }
-  if (/insufficient|not enough balance|balance is low/i.test(message)) {
-    return 'The Paystack balance is too low to pay this withdrawal. Fund Paystack, then retry.'
+  if (/insufficient|not enough balance|balance is low|not enough to fulfil|not enough to fulfill/i.test(message)) {
+    return 'Paystack business balance is too low to send this payout (not your Ƀucks wallet). Top up Paystack → Balance, then retry.'
   }
   if (/otp/i.test(message)) {
     return 'Paystack is waiting for a transfer OTP. Complete it in the Paystack dashboard, or turn off Transfer OTP.'
@@ -46,7 +46,27 @@ function transferReference(id: string) {
   return `buwd${compact.slice(0, 18)}${Date.now().toString(36)}`.slice(0, 50)
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null
+    } catch {
+      return null
+    }
+  }
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
 async function updateWithdrawal(db: SupabaseClient, id: string, patch: Record<string, unknown>) {
+  const rpc = await db.rpc('bu_update_withdrawal', { p_id: id, p_patch: patch })
+  if (!rpc.error) return
+  if (!/schema cache|does not exist|Could not find the function/i.test(rpc.error.message)) {
+    throw new Error(rpc.error.message)
+  }
   let updated = await db.from('bu_withdrawals').update(patch).eq('id', id)
   if (updated.error && /column|schema cache/i.test(updated.error.message)) {
     if (patch.status == null) return
@@ -63,6 +83,19 @@ async function updateWithdrawal(db: SupabaseClient, id: string, patch: Record<st
 }
 
 export async function insertWithdrawalRow(db: SupabaseClient, payload: Record<string, unknown>) {
+  const rpc = await db.rpc('bu_insert_withdrawal', { p_row: payload })
+  if (!rpc.error) {
+    return asRecord(rpc.data) ?? payload
+  }
+  const rpcMissing = /schema cache|does not exist|Could not find the function/i.test(rpc.error.message)
+  if (!rpcMissing) {
+    if (/row-level security/i.test(rpc.error.message)) {
+      throw new Error(
+        'Bank send needs a Supabase update. Run supabase/run_once_withdrawals_rpc.sql in the SQL editor.',
+      )
+    }
+    throw new Error(rpc.error.message)
+  }
   let inserted = await db.from('bu_withdrawals').insert(payload).select('*').maybeSingle()
   if (inserted.error && /column|schema cache/i.test(inserted.error.message)) {
     inserted = await db
@@ -82,8 +115,40 @@ export async function insertWithdrawalRow(db: SupabaseClient, payload: Record<st
       .select('*')
       .maybeSingle()
   }
-  if (inserted.error) throw new Error(inserted.error.message)
+  if (inserted.error) {
+    if (/row-level security/i.test(inserted.error.message)) {
+      throw new Error(
+        'Bank send needs a Supabase update. Run supabase/run_once_withdrawals_rpc.sql in the SQL editor.',
+      )
+    }
+    throw new Error(inserted.error.message)
+  }
   return (inserted.data as Record<string, unknown> | null) ?? payload
+}
+
+export async function listWithdrawalRows(db: SupabaseClient, userId: string, limit = 50) {
+  const rpc = await db.rpc('bu_list_withdrawals', { p_user_id: userId, p_limit: limit })
+  if (!rpc.error) {
+    const raw = rpc.data
+    if (Array.isArray(raw)) return raw as Array<Record<string, unknown>>
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : []
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+  const result = await db
+    .from('bu_withdrawals')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (result.error) return []
+  return (result.data ?? []) as Array<Record<string, unknown>>
 }
 
 export async function createPayoutRecipient(row: Record<string, unknown>) {

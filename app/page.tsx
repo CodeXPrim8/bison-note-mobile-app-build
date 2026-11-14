@@ -12,20 +12,20 @@ export default function WebsiteHome() {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/25 via-background to-background" />
         <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
-          <p className="mb-4 text-sm font-semibold tracking-[0.2em] text-primary uppercase">Bucks Event Platform</p>
+          <p className="mb-4 text-sm font-semibold tracking-[0.2em] text-primary uppercase">Ƀucks Event Platform</p>
           <h1 className="max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">
             Create Events.
             <br />
             Sell Tickets.
             <br />
-            Celebrate with Bucks.
+            Celebrate with Ƀucks.
           </h1>
           <div className="mt-6 max-w-xl space-y-4 text-lg text-muted-foreground">
             <p>
               Create and manage your event, sell tickets online, invite your guests and check them in—all in one place.
             </p>
             <p>
-              From weddings and birthdays to parties, concerts and special events, Bucks makes event ticketing simple for
+              From weddings and birthdays to parties, concerts and special events, Ƀucks makes event ticketing simple for
               organisers and guests.
             </p>
           </div>
@@ -37,7 +37,7 @@ export default function WebsiteHome() {
               <Link href="/events">Explore events</Link>
             </Button>
             <Button asChild size="lg" variant="ghost">
-              <Link href="/app">Open Bucks app</Link>
+              <Link href="/app">Open Ƀucks app</Link>
             </Button>
           </div>
         </div>
@@ -51,7 +51,7 @@ export default function WebsiteHome() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h2 className="text-3xl font-bold">Upcoming events</h2>
-            <p className="text-muted-foreground">Public events appear here and inside the Bucks app.</p>
+            <p className="text-muted-foreground">Public events appear here and inside the Ƀucks app.</p>
           </div>
           <Button asChild variant="ghost">
             <Link href="/events">View all</Link>
@@ -81,14 +81,14 @@ export default function WebsiteHome() {
             <ol className="mt-6 space-y-4 text-muted-foreground">
               <li>1. Organiser creates a PUBLIC or PRIVATE event.</li>
               <li>2. Guests discover it in Upcoming Events or Invites.</li>
-              <li>3. After payment, Bucks issues tickets with a QR and backup code, and emails them to the buyer.</li>
-              <li>4. Tickets also appear in the Bucks app. Staff authenticate at the door.</li>
+              <li>3. After payment, Ƀucks issues tickets with a QR and backup code, and emails them to the buyer.</li>
+              <li>4. Tickets also appear in the Ƀucks app. Staff authenticate at the door.</li>
             </ol>
           </div>
           <div>
-            <h2 className="text-3xl font-bold">Bucks Gateway</h2>
+            <h2 className="text-3xl font-bold">Ƀucks Gateway</h2>
             <p className="mt-4 text-muted-foreground">
-              Keep your own website. Use Bucks for ticketing and delivering tickets to guests.
+              Keep your own website. Use Ƀucks for ticketing and delivering tickets to guests.
             </p>
             <Button asChild className="mt-6">
               <Link href="/gateway">Developer docs & keys</Link>
@@ -99,13 +99,13 @@ export default function WebsiteHome() {
 
       <section className="mx-auto max-w-6xl px-4 py-16">
         <Card className="border-primary/30 bg-gradient-to-br from-primary/20 to-background p-8 md:p-12">
-          <h2 className="text-3xl font-bold">Open the Bucks app</h2>
+          <h2 className="text-3xl font-bold">Open the Ƀucks app</h2>
           <p className="mt-3 max-w-xl text-muted-foreground">
-            Wallet, spraying, invites, tickets, and withdrawals — one Bucks account across web and mobile. Physical Bison
+            Wallet, spraying, invites, tickets, and withdrawals — one Ƀucks account across web and mobile. Physical Bison
             Notes stay ceremonial. Value lives in the wallet.
           </p>
           <Button asChild className="mt-6">
-            <Link href="/app">Open Bucks app</Link>
+            <Link href="/app">Open Ƀucks app</Link>
           </Button>
         </Card>
       </section>

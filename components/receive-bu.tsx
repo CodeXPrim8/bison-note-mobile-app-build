@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { QrCode, Share2, Copy, CheckCircle } from 'lucide-react'
+import { QrCode, Share2, Copy, CheckCircle, Check } from 'lucide-react'
 import QRCode from 'qrcode'
 import { displayBuId } from '@/lib/phone'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu } from '@/lib/bu-rate'
 import { useAccount, useWalletPulse } from '@/components/account-store'
+import { WalletPageSummary } from '@/components/wallet-summary'
 import { historyBucket, walletDirection } from '@/lib/wallet/direction'
 
 interface ReceivedTransfer {
@@ -21,16 +22,25 @@ interface ReceivedTransfer {
   date: string
 }
 
-export default function ReceiveBU() {
+export default function ReceiveBU({ initialIntent }: { initialIntent?: 'tip' | 'receive' } = {}) {
   const { displayName: accountName, userId } = useAccount()
   const [pulse, setPulse] = useState(0)
   useWalletPulse(() => setPulse((value) => value + 1))
-  const [mode, setMode] = useState<'menu' | 'qr' | 'history'>('menu')
+  const [mode, setMode] = useState<'menu' | 'qr' | 'history'>(initialIntent === 'tip' ? 'qr' : 'menu')
   const [qrValue, setQrValue] = useState('')
   const [qrImage, setQrImage] = useState('')
   const [displayName, setDisplayName] = useState(accountName)
   const [buIdLabel, setBuIdLabel] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [copied, setCopied] = useState(false)
   const [receivedTransfers, setReceivedTransfers] = useState<ReceivedTransfer[]>([])
+
+  function formatAccountNumber(phone: string) {
+    const local = displayBuId(phone.replace(/\D/g, ''))
+    const shown = local.startsWith('0') ? local.slice(1) : local
+    if (shown.length === 10) return `${shown.slice(0, 3)} ${shown.slice(3, 6)} ${shown.slice(6)}`
+    return shown
+  }
 
   useEffect(() => {
     if (accountName) setDisplayName(accountName)
@@ -41,6 +51,7 @@ export default function ReceiveBU() {
       setQrValue('')
       setQrImage('')
       setBuIdLabel('')
+      setAccountNumber('')
       setReceivedTransfers([])
       return
     }
@@ -53,7 +64,11 @@ export default function ReceiveBU() {
         const name = String(profile?.display_name || accountName || '')
         if (name) setDisplayName(name)
         const phone = String(profile?.phone_e164 || profile?.phone || '')
-        if (phone) setBuIdLabel(displayBuId(phone))
+        if (phone) {
+          const formatted = formatAccountNumber(phone)
+          setBuIdLabel(formatted)
+          setAccountNumber(formatted.replace(/\s/g, ''))
+        }
         const payload = JSON.stringify({
           type: 'receive_bu',
           userId: user.id,
@@ -101,13 +116,41 @@ export default function ReceiveBU() {
     if (qrValue) void navigator.clipboard.writeText(qrValue)
   }
 
+  async function handleCopyAccount() {
+    if (!accountNumber) return
+    try {
+      await navigator.clipboard.writeText(accountNumber)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  async function handleShareAccount() {
+    if (!accountNumber) return
+    const text = `Send me ɃU on Ƀucks. My account number is ${accountNumber}`
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'My Ƀucks account number', text })
+        return
+      }
+      await navigator.clipboard.writeText(accountNumber)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      // user cancelled share
+    }
+  }
+
   return (
-    <div className="space-y-6 pb-24 pt-4">
+    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
       {mode === 'menu' && (
         <>
           <div className="px-4">
-            <h2 className="text-xl font-bold mb-4">Receive ɃU</h2>
-            <p className="text-sm text-muted-foreground mb-4">
+            <WalletPageSummary kicker="Receive" title="Receive ɃU" detail="Show your QR or share your phone ID." />
+            <h2 className="sr-only">Receive ɃU</h2>
+            <p className="mb-4 mt-6 text-sm text-muted-foreground">
               Receive ɃU from other users or accept tips instantly via QR code scan
             </p>
 
@@ -129,19 +172,43 @@ export default function ReceiveBU() {
                 </div>
               </Card>
 
-              <Card className="border-border/50 bg-card/50 p-6">
+              <Card className="border-neutral-200 bg-white p-5 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20">
-                    <span className="text-2xl">💳</span>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-neutral-950 text-white">
+                    <Share2 className="h-5 w-5" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold">{displayName}</h3>
-                    <p className="mt-2 text-sm font-mono text-primary">
-                      {buIdLabel || 'Sign in to show your ɃU ID'}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-lg font-semibold">{displayName || 'Your account'}</h3>
+                    <p className="mt-2 font-mono text-base font-semibold tracking-wide text-neutral-950">
+                      {buIdLabel || 'Sign in to show your account number'}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Share your ɃU ID (phone) for others to send ɃU directly
+                      Share your account number so others can send ɃU to you
                     </p>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleCopyAccount()}
+                        disabled={!accountNumber}
+                        className="gap-1.5"
+                      >
+                        {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                        {copied ? 'Copied' : 'Copy'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleShareAccount()}
+                        disabled={!accountNumber}
+                        className="gap-1.5"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Share
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </Card>

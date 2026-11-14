@@ -31,7 +31,7 @@ export default function GatewayDocs() {
     <div className="theme-pink min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Bucks Gateway</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Ƀucks Gateway</p>
         <h1 className="mt-2 text-4xl font-bold">API reference</h1>
         <p className="mt-3 text-muted-foreground">
           Same shape as Paystack: secret key on your server, public key in the browser, initialize, redirect, verify,
@@ -124,7 +124,7 @@ export default function GatewayDocs() {
         <h2 className="mt-10 text-2xl font-bold">Who can sell</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Keys are tied to the ɃU organiser who registered them. They only sell that organiser&apos;s live events. Guests
-          do not need a Bucks login. If their phone is already a ɃU ID, the ticket also appears in the Bucks app.
+          do not need a Ƀucks login. If their phone is already a ɃU ID, the ticket also appears in the Ƀucks app.
         </p>
       </main>
       <SiteFooter />

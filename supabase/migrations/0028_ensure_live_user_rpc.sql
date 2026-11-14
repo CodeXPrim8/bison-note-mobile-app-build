@@ -1,10 +1,10 @@
-﻿-- Paste this whole file into the live Supabase SQL editor and run once.
+-- Paste this whole file into the live Supabase SQL editor and run once.
 -- Registers Daniella (07026056067) for Send ɃU.
 
 create or replace function public.bu_ensure_live_user(
   p_id uuid,
   p_phone text,
-  p_first_name text default 'Bucks',
+  p_first_name text default 'Ƀucks',
   p_last_name text default 'Member',
   p_email text default null,
   p_pin_hash text default null,
@@ -47,7 +47,7 @@ begin
   end if;
 
   if v_first is null then
-    v_first := 'Bucks';
+    v_first := 'Ƀucks';
   end if;
   if v_last is null then
     v_last := 'Member';
@@ -180,7 +180,7 @@ begin
     return;
   end if;
 
-  v_name := coalesce(nullif(trim(v_meta->>'display_name'), ''), 'Bucks Member');
+  v_name := coalesce(nullif(trim(v_meta->>'display_name'), ''), 'Ƀucks Member');
   v_ensured := public.bu_ensure_live_user(
     v_auth_id,
     coalesce(nullif(v_meta->>'phone_e164', ''), nullif(v_meta->>'phone', ''), v_digits),

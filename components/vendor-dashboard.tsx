@@ -1,14 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { BarChart3, TrendingUp, DollarSign, Calendar } from 'lucide-react'
+import { CalendarDays, History, Package, ShoppingBag } from 'lucide-react'
 import Events from '@/components/events'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
+import {
+  ModeHeroAction,
+  ModeIconRow,
+  ModeIconTile,
+  ModeListRow,
+  ModeSegmented,
+  ModeWalletHero,
+} from '@/components/mode-home-shell'
+import ModeSwitcher from '@/components/mode-switcher'
 
 interface VendorStats {
   totalSales: number
@@ -42,8 +49,17 @@ const emptyStats: VendorStats = {
   todayEarnings: 0,
 }
 
-export default function VendorDashboard() {
+export default function VendorDashboard({
+  onNavigate,
+  onModeChange,
+  currentMode = 'vendor',
+}: {
+  onNavigate?: (page: string) => void
+  onModeChange?: (mode: 'user' | 'celebrant' | 'vendor') => void
+  currentMode?: 'user' | 'celebrant' | 'vendor'
+} = {}) {
   const { buBalance, nairaBalance, userId } = useAccount()
+  const [balanceVisible, setBalanceVisible] = useState(true)
   const [stats, setStats] = useState<VendorStats>(emptyStats)
   const [sales, setSales] = useState<Sale[]>([])
   const [statsReady, setStatsReady] = useState(false)
@@ -125,151 +141,118 @@ export default function VendorDashboard() {
   }, [userId])
 
   return (
-    <div className="space-y-6 pb-24 pt-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="border-primary/20 bg-card p-4">
-          <p className="text-xs text-muted-foreground">ɃU received on events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">
-            {statsReady ? `₦${stats.todayEarnings.toLocaleString()}` : '\u00a0'}
-          </p>
-          <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-            <TrendingUp className="h-3 w-3" />
-            <span>From your live ɃU events</span>
+    <div className="space-y-6 bg-white pb-28 text-neutral-950">
+      <ModeWalletHero
+        title="Vendor"
+        balanceLabel={buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
+        balanceVisible={balanceVisible}
+        onToggleBalance={() => setBalanceVisible((value) => !value)}
+        subtitle={
+          nairaBalance == null
+            ? '\u00a0'
+            : `≈ ₦${formatNairaPlain(nairaBalance)} · ${statsReady ? `${stats.activeSessions} events` : '…'}`
+        }
+        actions={
+          <>
+            <ModeHeroAction label="POS" Icon={ShoppingBag} onClick={() => onNavigate?.('wallet')} />
+            <ModeHeroAction label="Events" Icon={CalendarDays} onClick={() => setCurrentView('events')} />
+            <ModeHeroAction label="Sales" Icon={History} onClick={() => setCurrentView('sales')} />
+          </>
+        }
+        footer={
+          <button
+            type="button"
+            onClick={() => setCurrentView('sales')}
+            className="bu-press flex w-full items-center justify-between border-t border-white/10 bg-black px-5 py-3.5 text-left"
+          >
+            <div>
+              <p className="text-sm font-medium text-white/90">ɃU on events</p>
+              <p className="mt-0.5 text-sm font-semibold text-emerald-400">
+                {statsReady ? `Ƀ ${formatBu(buFromNaira(stats.todayEarnings))}` : '…'}
+              </p>
+            </div>
+            <span className="text-xs font-medium text-white/55">Sales ›</span>
+          </button>
+        }
+      />
+
+      <div className="bu-rise space-y-6 px-4" style={{ animationDelay: '80ms' }}>
+        <ModeIconRow columns={2}>
+          <ModeIconTile label="POS" Icon={ShoppingBag} onClick={() => onNavigate?.('wallet')} />
+          <ModeIconTile label="Events" Icon={CalendarDays} onClick={() => setCurrentView('events')} />
+          <ModeIconTile label="Sales" Icon={History} onClick={() => setCurrentView('sales')} tone="light" />
+          <ModeIconTile label="Inventory" Icon={Package} onClick={() => setCurrentView('inventory')} tone="light" />
+        </ModeIconRow>
+
+        {onModeChange ? <ModeSwitcher currentMode={currentMode} onModeChange={onModeChange} /> : null}
+
+        <ModeSegmented
+          value={currentView}
+          onChange={(id) => setCurrentView(id as typeof currentView)}
+          options={[
+            { id: 'overview', label: 'Overview' },
+            { id: 'sales', label: 'Sales' },
+            { id: 'inventory', label: 'Stock' },
+            { id: 'events', label: 'Events' },
+          ]}
+        />
+
+        {currentView === 'overview' && (
+          <div className="space-y-2">
+            <ModeListRow
+              title="Total ɃU received"
+              detail="Across your events"
+              amount={statsReady ? `Ƀ ${formatBu(buFromNaira(stats.totalSales))}` : '…'}
+            />
+            <ModeListRow
+              title="Wallet balance"
+              detail="Live ɃU wallet"
+              amount={buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+              amountTone="credit"
+            />
+            <ModeListRow
+              title="Active events"
+              detail="Sessions you manage"
+              amount={statsReady ? String(stats.activeSessions) : '…'}
+            />
           </div>
-        </Card>
+        )}
 
-        <Card className="border-primary/20 bg-card p-4">
-          <p className="text-xs text-muted-foreground">Wallet ɃU</p>
-          <p className="mt-2 text-2xl font-bold text-primary">
-            {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {statsReady ? `${stats.activeSessions} events` : '\u00a0'}
-          </p>
-        </Card>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto">
-        <Button
-          onClick={() => setCurrentView('overview')}
-          variant={currentView === 'overview' ? 'default' : 'outline'}
-          className="flex-shrink-0"
-        >
-          Overview
-        </Button>
-        <Button
-          onClick={() => setCurrentView('events')}
-          variant={currentView === 'events' ? 'default' : 'outline'}
-          className="flex-shrink-0"
-        >
-          Events
-        </Button>
-        <Button
-          onClick={() => setCurrentView('sales')}
-          variant={currentView === 'sales' ? 'default' : 'outline'}
-          className="flex-shrink-0"
-        >
-          Sales Log
-        </Button>
-        <Button
-          onClick={() => setCurrentView('inventory')}
-          variant={currentView === 'inventory' ? 'default' : 'outline'}
-          className="flex-shrink-0"
-        >
-          Inventory
-        </Button>
-      </div>
-
-      {currentView === 'overview' && (
-        <>
-          <div className="space-y-3">
-            <h3 className="font-semibold">Key Metrics</h3>
-            <Card className="border-border/50 bg-card/50 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="text-sm font-semibold">Total ɃU received</p>
-                    <p className="text-xs text-muted-foreground">Across your events</p>
-                  </div>
-                </div>
-                <p className="text-xl font-bold">{statsReady ? `₦${stats.totalSales.toLocaleString()}` : '\u00a0'}</p>
-              </div>
-            </Card>
-            <Card className="border-border/50 bg-card/50 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="text-sm font-semibold">Wallet balance</p>
-                    <p className="text-xs text-muted-foreground">Live ɃU wallet</p>
-                  </div>
-                </div>
-                <p className="text-xl font-bold text-green-400">
-                  {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
-                </p>
-              </div>
-            </Card>
-          </div>
-        </>
-      )}
-
-      {currentView === 'sales' && (
-        <>
-          <h3 className="font-semibold">Events</h3>
-          <div className="space-y-3">
-            {sales.length === 0 && (
-              <p className="text-sm text-muted-foreground">No event ɃU received yet.</p>
-            )}
+        {currentView === 'sales' && (
+          <div className="space-y-2">
+            {sales.length === 0 ? <p className="text-sm text-neutral-500">No event ɃU received yet.</p> : null}
             {sales.map((sale) => (
-              <Card key={sale.id} className="border-border/50 bg-card/50 p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-semibold">{sale.eventName}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">{sale.timestamp}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-primary">₦{formatNairaPlain(sale.amount)}</p>
-                    <p className="text-xs text-muted-foreground">Ƀ {formatBu(buFromNaira(sale.buAmount))}</p>
-                  </div>
-                </div>
-              </Card>
+              <ModeListRow
+                key={sale.id}
+                title={sale.eventName}
+                detail={sale.timestamp}
+                amount={`Ƀ ${formatBu(buFromNaira(sale.buAmount))}`}
+              />
             ))}
           </div>
-        </>
-      )}
+        )}
 
-      {currentView === 'inventory' && (
-        <>
-          <h3 className="font-semibold">ɃU Inventory</h3>
-          <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6">
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Wallet stock</p>
-                <p className="mt-2 text-3xl font-bold text-primary">
-                  {buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
-                </p>
-              </div>
-              <div className="rounded-lg bg-background/50 p-3">
-                <p className="text-xs text-muted-foreground">Estimated Value</p>
-                <p className="mt-1 font-bold">
-                  {nairaBalance == null ? '\u00a0' : `₦${formatNairaPlain(nairaBalance)}`}
-                </p>
-              </div>
-            </div>
-          </Card>
-        </>
-      )}
-
-      {currentView === 'events' && (
-        <>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Event Management</h3>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+        {currentView === 'inventory' && (
+          <div className="space-y-2">
+            <ModeListRow
+              title="Wallet stock"
+              detail="Available to use at events"
+              amount={buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+            />
+            <ModeListRow
+              title="Estimated value"
+              detail="1 ɃU = ₦1"
+              amount={nairaBalance == null ? '…' : `₦${formatNairaPlain(nairaBalance)}`}
+            />
           </div>
-          <Events mode="vendor" />
-        </>
-      )}
+        )}
+
+        {currentView === 'events' && (
+          <div className="rounded-[24px] border border-neutral-200 bg-white p-3">
+            <Events mode="vendor" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

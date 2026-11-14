@@ -111,7 +111,7 @@ async function creditDedicatedNubanRow(
   const resolved = await resolveDvaUserId({ ...data, ...charge }, meta)
   const userId = knownUserId || resolved.userId
   if (!userId) {
-    throw new ApiError(404, 'VIRTUAL_ACCOUNT_USER_NOT_FOUND', 'No Bucks user matched this dedicated account payment', {
+    throw new ApiError(404, 'VIRTUAL_ACCOUNT_USER_NOT_FOUND', 'No Ƀucks user matched this dedicated account payment', {
       reference,
       account_number: resolved.accountNumber || null,
       customer_code: resolved.customerCode || null,

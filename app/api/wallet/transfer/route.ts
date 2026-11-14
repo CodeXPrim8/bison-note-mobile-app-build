@@ -14,6 +14,7 @@ const schema = z.object({
   amount: z.number().positive(),
   event_id: z.string().uuid().optional(),
   is_tip: z.boolean().optional(),
+  note: z.string().max(160).optional(),
   pin: pinSchema,
 })
 
@@ -57,14 +58,26 @@ export async function POST(request: Request) {
       )
     }
     const naira = nairaFromBu(body.amount)
-    await transferBu({
+    const moved = await transferBu({
       fromUserId,
       toUserId: body.to_user_id,
       amount: naira,
       eventId: body.event_id,
       isTip: body.is_tip,
+      note: body.note,
     })
-    return successResponse({ ok: true, bu: body.amount, naira }, 'Transferred')
+    return successResponse(
+      {
+        ok: true,
+        bu: body.amount,
+        naira,
+        invoice_number: moved.moveId,
+        from_name: moved.fromName,
+        to_name: moved.toName,
+        kind: moved.kind,
+      },
+      'Transferred',
+    )
   } catch (error) {
     return handleRouteError(error)
   }

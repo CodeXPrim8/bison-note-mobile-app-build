@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
 import { formatEventDateTime } from '@/lib/datetime'
 import { useAccount, useWalletPulse } from '@/components/account-store'
 import { AdSlot } from '@/components/web/ad-slot'
+import { WalletPageSummary } from '@/components/wallet-summary'
 import { amountIconTone, amountTone, historyLabel, walletDirection, type WalletDirection } from '@/lib/wallet/direction'
 import {
   BU_BUY_PRESETS,
@@ -137,20 +138,16 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
   }
 
   return (
-    <div className="space-y-6 pb-24 pt-4">
-      <Card className="border-primary/20 bg-card p-6">
-        <p className="text-sm text-muted-foreground">Total Balance</p>
-        <h2 className="mt-2 text-4xl font-bold text-primary">
-          {nairaBalance == null ? '\u00a0' : `₦${formatNairaPlain(nairaBalance)}`}
-        </h2>
-        <p className="mt-4 text-sm">
-          <span className="font-semibold">{buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}</span>
-          {buBalance != null ? ' Available' : ''}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')} to spray or withdraw. Card buy ₦{formatNairaRate(cardBuyRate())}.
-        </p>
-      </Card>
+    <div className="space-y-6 bg-white px-4 pb-28 pt-4 text-neutral-950">
+      <WalletPageSummary
+        kicker="Your Wallet"
+        title={buBalance == null ? 'ɃU' : `Ƀ ${formatBu(buBalance)}`}
+        detail={
+          nairaBalance == null
+            ? `1 ɃU = ₦${BU_NAIRA_VALUE.toLocaleString('en-NG')} to spray or withdraw`
+            : `≈ ₦${formatNairaPlain(nairaBalance)} · card buy ₦${formatNairaRate(cardBuyRate())}`
+        }
+      />
 
       <AdSlot slot="app_wallet" />
 

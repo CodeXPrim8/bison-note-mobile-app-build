@@ -11,10 +11,14 @@ import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { isPaystackConfigured } from '@/lib/env'
 import { NGN_BANKS, bankCodeFromName, displayBankName } from '@/lib/payments/ngn-banks'
 import { moveLiveWallet } from '@/lib/wallet/move'
+import { pinSchema } from '@/lib/auth/pin'
+import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { resolveNuban } from '@/lib/payments/paystack'
 import {
   createPayoutRecipient,
   guestBanks,
   insertWithdrawalRow,
+  listWithdrawalRows,
   markWithdrawalFailed,
   paystackPayoutMessage,
   publicWithdrawalLabel,
@@ -28,9 +32,16 @@ const schema = z.object({
   bank_name: z.string().min(2),
   bank_code: z.string().min(2).optional(),
   account_number: z.string().regex(/^\d{10}$/, 'Account number must be a 10-digit NUBAN'),
-  account_name: z.string().min(2),
+  account_name: z.string().min(2).optional(),
+  remark: z.string().max(160).optional(),
+  pin: pinSchema,
 }).refine((body) => body.bu != null || body.amount != null, {
-  message: 'Enter ɃU to withdraw',
+  message: 'Enter ɃU to send',
+})
+
+const resolveSchema = z.object({
+  bank_code: z.string().min(2),
+  account_number: z.string().regex(/^\d{10}$/, 'Account number must be a 10-digit NUBAN'),
 })
 
 async function liveUser() {
@@ -63,16 +74,34 @@ function guestRow(row: Record<string, unknown>) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, liveId } = await liveUser()
-    const db = tryCreateAdminClient() ?? createDataClient()
-    let query = db.from('bu_withdrawals').select('*').eq('user_id', liveId).order('created_at', { ascending: false }).limit(50)
-    let result = await query
-    if ((!result.data || result.data.length === 0) && liveId !== user.id) {
-      result = await db.from('bu_withdrawals').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50)
+    const url = new URL(request.url)
+    const accountNumber = url.searchParams.get('account_number')
+    const bankCode = url.searchParams.get('bank_code')
+    if (accountNumber && bankCode) {
+      const parsed = resolveSchema.parse({ account_number: accountNumber, bank_code: bankCode })
+      if (!isPaystackConfigured()) {
+        throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+      }
+      try {
+        const resolved = await resolveNuban(parsed.account_number, parsed.bank_code)
+        return successResponse({
+          account_number: resolved.account_number,
+          account_name: resolved.account_name,
+          bank_code: parsed.bank_code,
+        })
+      } catch (error) {
+        throw new ApiError(400, 'BANK_INVALID', paystackPayoutMessage(error))
+      }
     }
-    const rows = result.error ? [] : ((result.data ?? []) as Array<Record<string, unknown>>)
+
+    const db = tryCreateAdminClient() ?? createDataClient()
+    let rows = await listWithdrawalRows(db, liveId, 50)
+    if ((!rows.length) && liveId !== user.id) {
+      rows = await listWithdrawalRows(db, user.id, 50)
+    }
     return successResponse({
       withdrawals: rows.map(guestRow),
       banks: await guestBanks(),
@@ -94,6 +123,19 @@ export async function POST(request: Request) {
     }
     const settings = await getPlatformSettings(db)
     const body = schema.parse(await request.json())
+    const session = await readBuSession()
+    const phone = session?.phone_e164 || session?.phone
+    if (!phone) {
+      throw new ApiError(400, 'PIN_REQUIRED', 'Enter the transaction PIN you created for this account.')
+    }
+    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
+    if ('wrongPin' in pinCheck) {
+      throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
+    }
+    if (!('session' in pinCheck)) {
+      throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before sending to bank.')
+    }
+
     const bankCode = (body.bank_code || bankCodeFromName(body.bank_name)).trim()
     if (!bankCode) {
       throw new ApiError(400, 'UNKNOWN_BANK', 'Choose a listed Nigerian bank.')
@@ -121,20 +163,30 @@ export async function POST(request: Request) {
       )
     }
 
+    let accountName = body.account_name?.trim() || ''
     let recipientReady: Awaited<ReturnType<typeof createPayoutRecipient>> | null = null
     if (isPaystackConfigured()) {
       try {
+        if (!accountName) {
+          const resolved = await resolveNuban(body.account_number, bankCode)
+          accountName = resolved.account_name
+        }
         recipientReady = await createPayoutRecipient({
           bank_code: bankCode,
           bank_name: bankName,
           account_number: body.account_number,
-          account_name: body.account_name.trim(),
+          account_name: accountName,
         })
+        accountName = recipientReady.accountName || accountName
       } catch (error) {
         throw new ApiError(400, 'BANK_INVALID', paystackPayoutMessage(error))
       }
     }
+    if (!accountName) {
+      throw new ApiError(400, 'ACCOUNT_NAME_REQUIRED', 'Could not resolve the bank account name.')
+    }
 
+    const remark = body.remark?.trim() || ''
     const meta = {
       bu: quote.bu,
       naira: quote.naira,
@@ -145,7 +197,9 @@ export async function POST(request: Request) {
       bank_name: bankName,
       bank_code: bankCode,
       account_number_last4: body.account_number.slice(-4),
-      account_name: body.account_name,
+      account_name: accountName,
+      remark: remark || null,
+      kind: 'bank_send',
     }
 
     await moveLiveWallet(db, {
@@ -153,7 +207,7 @@ export async function POST(request: Request) {
       naira: quote.naira,
       direction: 'debit',
       type: 'withdrawal',
-      description: `Withdrawal to ${bankName}`,
+      description: remark ? `Sent to ${bankName} · ${remark}` : `Sent to ${bankName}`,
       metadata: meta,
     })
 
@@ -169,7 +223,7 @@ export async function POST(request: Request) {
         bank_name: bankName,
         bank_code: recipientReady?.bankCode ?? bankCode,
         account_number: body.account_number,
-        account_name: recipientReady?.accountName || body.account_name.trim(),
+        account_name: recipientReady?.accountName || accountName,
         paystack_recipient: recipientReady?.recipient.recipient_code ?? null,
         status: queuedStatus,
         mode: settings.withdrawal_mode,
@@ -181,16 +235,22 @@ export async function POST(request: Request) {
         naira: quote.naira,
         direction: 'credit',
         type: 'refund',
-        description: 'Withdrawal rolled back',
+        description: 'Bank send rolled back',
         metadata: { ...meta, reason: 'insert_failed' },
       }).catch(() => undefined)
-      throw new ApiError(500, 'WITHDRAW_FAILED', error instanceof Error ? error.message : 'Could not save withdrawal')
+      throw new ApiError(500, 'WITHDRAW_FAILED', error instanceof Error ? error.message : 'Could not save bank send')
     }
 
     if (!automatic) {
       return successResponse(
-        { ...guestRow(row), bank_naira: quote.bankNaira, paystack_transfer_fee: quote.paystackFee },
-        'Withdrawal sent for Super Admin approval',
+        {
+          ...guestRow(row),
+          bank_naira: quote.bankNaira,
+          paystack_transfer_fee: quote.paystackFee,
+          remark: remark || null,
+          invoice_number: id,
+        },
+        'Sent for Super Admin approval',
       )
     }
 
@@ -198,8 +258,15 @@ export async function POST(request: Request) {
       const payout = await sendWithdrawalPayout(row, db)
       const paidRow = { ...row, status: payout.status, paid_at: payout.status === 'paid' ? new Date().toISOString() : null }
       return successResponse(
-        { ...guestRow(paidRow), bank_naira: quote.bankNaira, paystack_transfer_fee: quote.paystackFee, paystack_reference: payout.reference },
-        payout.status === 'paid' ? 'Naira sent to your bank' : 'Withdrawal sent to your bank',
+        {
+          ...guestRow(paidRow),
+          bank_naira: quote.bankNaira,
+          paystack_transfer_fee: quote.paystackFee,
+          paystack_reference: payout.reference,
+          remark: remark || null,
+          invoice_number: id,
+        },
+        payout.status === 'paid' ? 'Sent to bank' : 'Send submitted to bank',
       )
     } catch (error) {
       const message = paystackPayoutMessage(error)
@@ -209,7 +276,7 @@ export async function POST(request: Request) {
           naira: quote.naira,
           direction: 'credit',
           type: 'refund',
-          description: 'Withdrawal refunded after payout failed',
+          description: 'Bank send refunded after payout failed',
           metadata: { ...meta, withdrawal_id: id, reason: message },
         })
         await markWithdrawalFailed(id, message, db, 'failed')

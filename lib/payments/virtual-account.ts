@@ -37,7 +37,7 @@ function nigeriaLocalPhone(phone: string): string {
 
 function splitName(displayName: string): { firstName: string; lastName: string } {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return { firstName: 'Bucks', lastName: 'User' }
+  if (parts.length === 0) return { firstName: 'Ƀucks', lastName: 'User' }
   if (parts.length === 1) return { firstName: parts[0], lastName: 'User' }
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
 }
@@ -204,7 +204,7 @@ export async function getOrCreateVirtualAccount(input: {
     throw new ApiError(400, 'PHONE_REQUIRED', 'This account has no phone number. Complete signup before bank transfer funding.')
   }
   const phone = nigeriaLocalPhone(phoneRaw)
-  const { firstName, lastName } = splitName(input.displayName || 'Bucks User')
+  const { firstName, lastName } = splitName(input.displayName || 'Ƀucks User')
 
   let customer = await fetchPaystackCustomer(email)
   if (!customer) {

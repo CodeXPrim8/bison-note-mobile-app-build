@@ -163,8 +163,8 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   const shareText = useMemo(() => {
     if (!virtualAccount?.account_number) return ''
     const bank = virtualAccount.bank_name || 'Paystack'
-    const name = virtualAccount.account_name || 'Bucks'
-    return `Transfer to Bucks\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}\n1 ɃU = ₦1`
+    const name = virtualAccount.account_name || 'Ƀucks'
+    return `Transfer to Ƀucks\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}\n1 ɃU = ₦1`
   }, [virtualAccount])
 
   async function handleCopyAccount() {
@@ -182,7 +182,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
     if (!shareText) return
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Bucks bank details', text: shareText })
+        await navigator.share({ title: 'Ƀucks bank details', text: shareText })
         return
       }
       await navigator.clipboard.writeText(shareText)
@@ -251,7 +251,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
 
           <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6">
             {vaLoading ? (
-              <p className="text-sm text-muted-foreground">Loading your Bucks account number…</p>
+              <p className="text-sm text-muted-foreground">Loading your Ƀucks account number…</p>
             ) : virtualAccount ? (
               <div className="space-y-4">
                 <div>
@@ -260,7 +260,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Account name</p>
-                  <p className="mt-1 text-base font-medium">{virtualAccount.account_name || 'Bucks'}</p>
+                  <p className="mt-1 text-base font-medium">{virtualAccount.account_name || 'Ƀucks'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Account number</p>

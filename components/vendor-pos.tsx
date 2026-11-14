@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, AlertCircle } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
+import { WalletPageSummary } from '@/components/wallet-summary'
+import { ModeListRow, ModeSegmented } from '@/components/mode-home-shell'
 
 interface BUTransfer {
   id: string
@@ -45,11 +46,9 @@ export default function VendorPOS() {
   const handleConfirmTransfer = (transferId: string) => {
     setPendingTransfers((prev) =>
       prev.map((transfer) =>
-        transfer.id === transferId
-          ? { ...transfer, status: 'confirmed' as const }
-          : transfer
-        )
-      )
+        transfer.id === transferId ? { ...transfer, status: 'confirmed' as const } : transfer,
+      ),
+    )
   }
 
   const handleIssueNotes = (transferId: string) => {
@@ -61,175 +60,121 @@ export default function VendorPOS() {
         ...prev,
       ])
     }
-    }
+  }
 
-  const filteredPending = selectedEvent === 'all'
-    ? pendingTransfers
-    : pendingTransfers.filter((t) => t.eventId === selectedEvent)
+  const filteredPending =
+    selectedEvent === 'all' ? pendingTransfers : pendingTransfers.filter((t) => t.eventId === selectedEvent)
 
   return (
-    <div className="space-y-6 pb-24 pt-4">
-      {/* Info Card */}
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+      <div className="px-4">
+        <WalletPageSummary
+          kicker="Vendor"
+          title="POS"
+          detail="Confirm guest ɃU transfers, then issue ceremonial Bison Notes."
+        />
+
+        <div className="mt-6 space-y-4">
+          <ModeSegmented
+            value={mode}
+            onChange={(id) => setMode(id as 'pending' | 'history')}
+            options={[
+              { id: 'pending', label: `Pending (${pendingTransfers.length})` },
+              { id: 'history', label: 'History' },
+            ]}
+          />
+
+          {mode === 'pending' && (
+            <>
               <div>
-            <h3 className="font-semibold">Note Issuance System</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Confirm ɃU transfers from guests, then issue physical Bison Notes. Notes are ceremonial tokens with zero monetary value.
-                </p>
-              </div>
-              </div>
-            </Card>
-
-      {/* Mode Tabs */}
-      <div className="flex gap-2">
-        <Button
-          onClick={() => setMode('pending')}
-          variant={mode === 'pending' ? 'default' : 'outline'}
-          className="flex-1"
-        >
-          Pending ({pendingTransfers.length})
-        </Button>
-            <Button
-          onClick={() => setMode('history')}
-          variant={mode === 'history' ? 'default' : 'outline'}
-          className="flex-1"
-            >
-          History
-            </Button>
-          </div>
-
-      {mode === 'pending' && (
-        <>
-          {/* Event Filter */}
-          <div>
-            <label className="text-sm font-semibold mb-2 block">Filter by Event</label>
-            <select
-              value={selectedEvent}
-              onChange={(e) => setSelectedEvent(e.target.value)}
-              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground"
-            >
-              <option value="all">All Events</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <h3 className="font-semibold">Pending ɃU Transfers</h3>
-
-          {filteredPending.length === 0 ? (
-            <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">No pending transfers</p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredPending.map((transfer) => (
-                <Card
-                  key={transfer.id}
-                  className="border-yellow-400/30 bg-yellow-400/10 p-4"
+                <label className="mb-2 block text-sm font-semibold">Filter by event</label>
+                <select
+                  value={selectedEvent}
+                  onChange={(e) => setSelectedEvent(e.target.value)}
+                  className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm text-neutral-950"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold">{transfer.eventName}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Guest: {transfer.guestName}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {transfer.timestamp}
-                      </p>
-            </div>
-                    <div className="text-right">
-                      <p className="font-bold text-primary">
-                        Ƀ {transfer.amount.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        ₦{transfer.amount.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex gap-2">
-                    {transfer.status === 'pending' && (
-                      <>
-                      <Button
-                          onClick={() => handleConfirmTransfer(transfer.id)}
-                          className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                      >
-                          Confirm Transfer
-                      </Button>
-                      <Button
-                          onClick={() => handleIssueNotes(transfer.id)}
-                          variant="outline"
-                          className="flex-1"
-                          disabled
-                      >
-                          Issue Notes
-                      </Button>
-                      </>
-                    )}
-                    {transfer.status === 'confirmed' && (
-                      <Button
-                        onClick={() => handleIssueNotes(transfer.id)}
-                        className="w-full bg-green-400 text-white hover:bg-green-400/90"
-                      >
-                        Issue Physical Notes
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-                ))}
+                  <option value="all">All events</option>
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-          )}
-        </>
-      )}
 
-      {mode === 'history' && (
-        <>
-          <h3 className="font-semibold">Completed Note Issuances</h3>
-
-          {completedTransfers.length === 0 ? (
-            <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">No completed issuances yet</p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {completedTransfers.map((transfer) => (
-                <Card
-                  key={transfer.id}
-                  className="border-green-400/30 bg-green-400/10 p-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-400" />
-                        <h4 className="font-semibold">{transfer.eventName}</h4>
+              <div className="space-y-2">
+                {filteredPending.length === 0 ? (
+                  <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
+                    No pending transfers
+                  </p>
+                ) : (
+                  filteredPending.map((transfer) => (
+                    <div key={transfer.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold">{transfer.eventName}</p>
+                          <p className="mt-1 text-sm text-neutral-500">Guest: {transfer.guestName}</p>
+                          <p className="text-xs text-neutral-400">{transfer.timestamp}</p>
+                        </div>
+                        <p className="font-bold tabular-nums">Ƀ {transfer.amount.toLocaleString()}</p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Guest: {transfer.guestName}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {transfer.timestamp}
-                      </p>
+                      <div className="mt-4 flex gap-2">
+                        {transfer.status === 'pending' && (
+                          <>
+                            <Button
+                              onClick={() => handleConfirmTransfer(transfer.id)}
+                              className="flex-1 bg-neutral-950 text-white hover:bg-neutral-800"
+                            >
+                              Confirm
+                            </Button>
+                            <Button onClick={() => handleIssueNotes(transfer.id)} variant="outline" className="flex-1" disabled>
+                              Issue notes
+                            </Button>
+                          </>
+                        )}
+                        {transfer.status === 'confirmed' && (
+                          <Button
+                            onClick={() => handleIssueNotes(transfer.id)}
+                            className="w-full bg-neutral-950 text-white hover:bg-neutral-800"
+                          >
+                            Issue physical notes
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-primary">
-                        Ƀ {transfer.amount.toLocaleString()}
-                      </p>
-                      <span className="inline-block rounded-full bg-green-400/20 px-2 py-1 text-xs text-green-400 mt-1">
-                        Notes Issued
-                      </span>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
+          {mode === 'history' && (
+            <div className="space-y-2">
+              {completedTransfers.length === 0 ? (
+                <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
+                  No completed issuances yet
+                </p>
+              ) : (
+                completedTransfers.map((transfer) => (
+                  <ModeListRow
+                    key={transfer.id}
+                    title={transfer.eventName}
+                    detail={`Guest: ${transfer.guestName} · ${transfer.timestamp}`}
+                    amount={`Ƀ ${transfer.amount.toLocaleString()}`}
+                    amountTone="credit"
+                  />
+                ))
+              )}
+              {completedTransfers.length > 0 ? (
+                <p className="flex items-center gap-2 text-xs text-neutral-500">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                  Notes issued are ceremonial tokens with zero monetary value.
+                </p>
+              ) : null}
             </div>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   )
 }

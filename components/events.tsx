@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Plus, X } from 'lucide-react'
@@ -149,168 +148,154 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
 
   if (mode === 'vendor') {
     return (
-      <div className="space-y-6 pb-24 pt-4">
-        <div className="px-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Manage Events</h2>
-            <Button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Event
-            </Button>
-          </div>
+      <div className="space-y-4 bg-white pb-4 text-neutral-950">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-neutral-950">Manage events</h2>
+          <button
+            type="button"
+            onClick={() => setShowCreateForm(true)}
+            className="bu-press inline-flex items-center gap-1.5 rounded-full bg-neutral-950 px-3 py-2 text-xs font-semibold text-white"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create
+          </button>
+        </div>
 
-          {showCreateForm && (
-            <Card className="border-primary/20 bg-card p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Create New Event</h3>
+        {showCreateForm && (
+          <div className="mb-2 rounded-[24px] border border-neutral-200 bg-neutral-50 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Create new event</h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="rounded-full p-1.5 text-neutral-500 hover:bg-white"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-neutral-600">Event name</label>
+                <Input
+                  placeholder="Event name"
+                  value={newEvent.name}
+                  onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
+                  className="mt-1.5 rounded-2xl border-neutral-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-600">Celebrant name</label>
+                <Input
+                  placeholder="Enter celebrant's full name"
+                  value={newEvent.celebrantName}
+                  onChange={(e) => setNewEvent({ ...newEvent, celebrantName: e.target.value })}
+                  className="mt-1.5 rounded-2xl border-neutral-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-600">Celebrant wallet ID</label>
+                <Input
+                  placeholder="Enter celebrant's wallet ID"
+                  value={newEvent.celebrantWalletId}
+                  onChange={(e) => setNewEvent({ ...newEvent, celebrantWalletId: e.target.value })}
+                  className="mt-1.5 rounded-2xl border-neutral-200 bg-white"
+                />
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  Link the celebrant&apos;s wallet to receive ɃU transfers
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-600">Event date</label>
+                <Input
+                  type="date"
+                  value={newEvent.eventDate}
+                  onChange={(e) => setNewEvent({ ...newEvent, eventDate: e.target.value })}
+                  className="mt-1.5 rounded-2xl border-neutral-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-600">Location (optional)</label>
+                <Input
+                  placeholder="e.g. Lagos, Nigeria"
+                  value={newEvent.location}
+                  onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                  className="mt-1.5 rounded-2xl border-neutral-200 bg-white"
+                />
+              </div>
+
+              {createError ? <p className="text-sm text-rose-600">{createError}</p> : null}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  onClick={() => void handleCreateEvent()}
+                  disabled={creating}
+                  className="flex-1 rounded-full bg-neutral-950 text-white hover:bg-neutral-800"
+                >
+                  {creating ? 'Saving…' : 'Create event'}
+                </Button>
                 <Button
                   onClick={() => setShowCreateForm(false)}
-                  variant="ghost"
-                  size="sm"
+                  variant="outline"
+                  className="flex-1 rounded-full border-neutral-200"
                 >
-                  <X className="h-4 w-4" />
+                  Cancel
                 </Button>
               </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-semibold">Event Name</label>
-                  <Input
-                    placeholder="Event name"
-                    value={newEvent.name}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, name: e.target.value })
-                    }
-                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold">Celebrant Name</label>
-                  <Input
-                    placeholder="Enter celebrant's full name"
-                    value={newEvent.celebrantName}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, celebrantName: e.target.value })
-                    }
-                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold">Celebrant Wallet ID</label>
-                  <Input
-                    placeholder="Enter celebrant's wallet ID"
-                    value={newEvent.celebrantWalletId}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, celebrantWalletId: e.target.value })
-                    }
-                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Link the celebrant's wallet to receive ɃU transfers
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold">Event Date</label>
-                  <Input
-                    type="date"
-                    value={newEvent.eventDate}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, eventDate: e.target.value })
-                    }
-                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold">Location (Optional)</label>
-                  <Input
-                    placeholder="e.g. Lagos, Nigeria"
-                    value={newEvent.location}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, location: e.target.value })
-                    }
-                    className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-
-                {createError && <p className="text-sm text-destructive">{createError}</p>}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => void handleCreateEvent()}
-                    disabled={creating}
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    {creating ? 'Saving…' : 'Create Event'}
-                  </Button>
-                  <Button
-                    onClick={() => setShowCreateForm(false)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          <div className="space-y-3">
-            {events.length === 0 && (
-              <p className="text-sm text-muted-foreground">No events yet.</p>
-            )}
-            {events.map((event) => (
-                <Card
-                  key={event.id}
-                  className="border-border/50 bg-card/50 p-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold">{event.name}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Celebrant: {event.celebrantName}
-                      </p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {event.eventDate}
-                        </span>
-                        {event.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {event.location}
-                          </span>
-                        )}
-                      </div>
-                      <span
-                        className={`mt-2 inline-block rounded-full px-2 py-1 text-xs font-semibold ${
-                          event.status === 'active'
-                            ? 'bg-green-400/20 text-green-400'
-                            : event.status === 'completed'
-                              ? 'bg-gray-400/20 text-gray-400'
-                              : 'bg-red-400/20 text-red-400'
-                        }`}
-                      >
-                        {event.status}
-                      </span>
-                    </div>
-                    {event.totalBUReceived !== undefined && (
-                      <div className="text-right">
-                        <p className="font-bold text-primary">
-                          Ƀ {formatBu(buFromNaira(event.totalBUReceived))}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Received</p>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              ))}
+            </div>
           </div>
+        )}
+
+        <div className="space-y-2">
+          {events.length === 0 ? (
+            <p className="text-sm text-neutral-500">No events yet.</p>
+          ) : null}
+          {events.map((event) => (
+            <div
+              key={event.id}
+              className="flex items-start justify-between gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <h4 className="truncate text-sm font-semibold text-neutral-950">{event.name}</h4>
+                <p className="mt-0.5 text-xs text-neutral-500">Celebrant: {event.celebrantName}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {event.eventDate}
+                  </span>
+                  {event.location ? (
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {event.location}
+                    </span>
+                  ) : null}
+                </div>
+                <span
+                  className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    event.status === 'active'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : event.status === 'completed'
+                        ? 'bg-neutral-200 text-neutral-600'
+                        : 'bg-rose-100 text-rose-700'
+                  }`}
+                >
+                  {event.status}
+                </span>
+              </div>
+              {event.totalBUReceived !== undefined ? (
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold tabular-nums text-neutral-950">
+                    Ƀ {formatBu(buFromNaira(event.totalBUReceived))}
+                  </p>
+                  <p className="text-[11px] text-neutral-500">Received</p>
+                </div>
+              ) : null}
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -318,59 +303,54 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
 
   // Guest mode - Event browser
   return (
-    <div className="space-y-6 pb-24 pt-4">
+    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
       <div className="px-4">
-        <h2 className="text-xl font-bold mb-4">Available Events</h2>
+        <h2 className="mb-4 text-lg font-semibold">Available events</h2>
 
-        {/* Search */}
         <div className="mb-4">
           <Input
             placeholder="Search events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-secondary text-foreground placeholder:text-muted-foreground"
+            className="rounded-2xl border-neutral-200 bg-neutral-50"
           />
         </div>
 
-        {/* Events List */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filteredEvents.length === 0 ? (
-            <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">No active events found</p>
-            </Card>
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-8 text-center text-sm text-neutral-500">
+              No active events found
+            </div>
           ) : (
             filteredEvents.map((event) => (
-              <Card
+              <button
+                type="button"
                 key={event.id}
-                onClick={() => onSelectEvent && onSelectEvent(event)}
-                className="border-primary/20 cursor-pointer bg-card p-4 transition hover:bg-card/80 hover:border-primary/40"
+                onClick={() => onSelectEvent?.(event)}
+                className="bu-press w-full rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-left"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-semibold">{event.name}</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Celebrant: {event.celebrantName}
-                    </p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold text-neutral-950">{event.name}</h4>
+                    <p className="mt-1 text-sm text-neutral-500">Celebrant: {event.celebrantName}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+                      <span className="inline-flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {event.eventDate}
                       </span>
-                      {event.location && (
-                        <span className="flex items-center gap-1">
+                      {event.location ? (
+                        <span className="inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
                           {event.location}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="rounded-full bg-primary/20 px-2 py-1 text-xs text-primary font-semibold">
-                      Active
-                    </span>
-                  </div>
+                  <span className="shrink-0 rounded-full bg-neutral-950 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    Active
+                  </span>
                 </div>
-              </Card>
+              </button>
             ))
           )}
         </div>
