@@ -15,6 +15,7 @@ import {
   ModeWalletHero,
 } from '@/components/mode-home-shell'
 import ModeSwitcher from '@/components/mode-switcher'
+import { SignedBu } from '@/components/signed-bu'
 
 interface Event {
   id: string
@@ -160,16 +161,16 @@ export default function CelebrantDashboard({
   const latest = recentTransfers[0]
 
   return (
-    <div className="space-y-6 bg-white pb-28 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 text-neutral-950">
       <ModeWalletHero
         title={greetingName ? `Celebrant · ${greetingName}` : 'Celebrant'}
-        balanceLabel={buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
+        balanceValue={buBalance}
         balanceVisible={balanceVisible}
         onToggleBalance={() => setBalanceVisible((value) => !value)}
         subtitle={
           nairaBalance == null
             ? '\u00a0'
-            : `≈ ₦${formatNairaPlain(nairaBalance)} · Events Ƀ ${formatBu(buFromNaira(totalBUReceived))}`
+            : `≈ ₦${formatNairaPlain(nairaBalance)} · Events Ƀ\u2009${formatBu(buFromNaira(totalBUReceived))}`
         }
         actions={
           <>
@@ -182,20 +183,21 @@ export default function CelebrantDashboard({
           <button
             type="button"
             onClick={() => onNavigate?.('history')}
-            className="bu-press flex w-full items-center gap-3 border-t border-white/10 bg-black px-5 py-3.5 text-left"
+            className="bu-press flex w-full items-center gap-3 border-t border-white/10 px-5 py-3.5 text-left"
+            style={{ background: 'rgba(7, 16, 31, 0.72)' }}
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 flex items-center gap-2">
               <p className="truncate text-sm font-medium text-white/90">
                 {latest ? latest.eventName : 'No transfers yet'}
               </p>
               {latest ? (
-                <p
-                  className={`mt-0.5 text-sm font-semibold tabular-nums ${
-                    latest.direction === 'credit' ? 'text-emerald-400' : 'text-rose-400'
+                <SignedBu
+                  amountBu={buFromNaira(latest.amount)}
+                  direction={latest.direction}
+                  className={`shrink-0 text-sm font-semibold ${
+                    latest.direction === 'credit' ? 'bu-credit' : 'bu-debit'
                   }`}
-                >
-                  {latest.direction === 'credit' ? '+' : '−'}Ƀ {formatBu(buFromNaira(latest.amount))}
-                </p>
+                />
               ) : null}
             </div>
             <span className="shrink-0 text-xs font-medium text-white/55">Transactions ›</span>
@@ -205,9 +207,9 @@ export default function CelebrantDashboard({
 
       <div className="bu-rise space-y-6 px-4" style={{ animationDelay: '80ms' }}>
         <ModeIconRow>
-          <ModeIconTile label="To Bank" Icon={Banknote} onClick={() => onNavigate?.('redemption')} />
-          <ModeIconTile label="My Events" Icon={CalendarDays} onClick={() => onNavigate?.('events')} />
-          <ModeIconTile label="Receive tip" Icon={Sparkles} onClick={() => onNavigate?.('receive-bu')} />
+          <ModeIconTile label="To Bank" Icon={Banknote} onClick={() => onNavigate?.('redemption')} tone="cyber" />
+          <ModeIconTile label="My Events" Icon={CalendarDays} onClick={() => onNavigate?.('events')} tone="purple" />
+          <ModeIconTile label="Receive tip" Icon={Sparkles} onClick={() => onNavigate?.('receive-bu')} tone="magenta" />
         </ModeIconRow>
 
         {onModeChange ? <ModeSwitcher currentMode={currentMode} onModeChange={onModeChange} /> : null}
@@ -223,7 +225,7 @@ export default function CelebrantDashboard({
                 key={event.id}
                 title={event.name}
                 detail={[event.date, event.vendorName].filter(Boolean).join(' · ')}
-                amount={`Ƀ ${formatBu(buFromNaira(event.totalBUReceived))}`}
+                amount={`Ƀ\u2009${formatBu(buFromNaira(event.totalBUReceived))}`}
                 onClick={() => onNavigate?.('events')}
               />
             ))}
@@ -241,7 +243,7 @@ export default function CelebrantDashboard({
                 key={transfer.id}
                 title={transfer.eventName}
                 detail={[transfer.fromGuest, transfer.timestamp].filter(Boolean).join(' · ')}
-                amount={`${transfer.direction === 'credit' ? '+' : '−'}Ƀ ${formatBu(buFromNaira(transfer.amount))}`}
+                amount={`${transfer.direction === 'credit' ? '+' : '−'}Ƀ\u2009${formatBu(buFromNaira(transfer.amount))}`}
                 amountTone={transfer.direction === 'credit' ? 'credit' : 'debit'}
                 onClick={() => onNavigate?.('history')}
               />

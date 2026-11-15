@@ -22,6 +22,8 @@ import { displayBuId } from '@/lib/phone'
 import { historyLabel, walletDirection } from '@/lib/wallet/direction'
 import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
+import { RollingBalance } from '@/components/rolling-balance'
+import { SignedBu } from '@/components/signed-bu'
 
 interface HomeMovement {
   id: string
@@ -79,11 +81,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [buId, setBuId] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [soonNotice, setSoonNotice] = useState<string | null>(null)
+  const [alertNeon, setAlertNeon] = useState(false)
+  const [neonKey, setNeonKey] = useState(0)
 
   function applyWalletPayload(transactions: Array<Record<string, unknown>>) {
-    setUnreadAlerts(countUnseenAlerts(transactions))
+    const nextUnread = countUnseenAlerts(transactions)
+    setUnreadAlerts((prev) => {
+      if (nextUnread > prev) {
+        setAlertNeon(true)
+        setNeonKey((key) => key + 1)
+      }
+      return nextUnread
+    })
     setMovements(transactions.slice(0, 1).map(movementFromWallet))
   }
+
+  useEffect(() => {
+    if (!alertNeon) return
+    const timer = window.setTimeout(() => setAlertNeon(false), 5000)
+    return () => window.clearTimeout(timer)
+  }, [alertNeon, neonKey])
 
   function showComingSoon(label: string) {
     setSoonNotice(`${label} is coming soon`)
@@ -133,15 +150,21 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const latest = movements[0] ?? null
 
   return (
-    <div className="space-y-6 bg-white pb-4 text-neutral-950">
-      <div className="sticky top-0 z-30 bg-white px-4 pb-3 pt-4">
-        <div className="bu-rise overflow-hidden rounded-[32px] bg-neutral-950 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
+    <div className="space-y-6 bg-transparent pb-4 text-neutral-950">
+      <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-4 backdrop-blur-xl">
+        <div className="relative">
+        {alertNeon ? (
+          <div key={neonKey} className="bu-wallet-neon-ring" aria-hidden>
+            <div className="bu-wallet-neon-spin" />
+          </div>
+        ) : null}
+        <div className="bu-wallet-hero relative z-[1] overflow-hidden rounded-[32px] text-white">
           <div className="px-5 pb-5 pt-5">
             <div className="flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => onNavigate('profile')}
-                className="bu-press flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white/15 text-sm font-semibold"
+                className="bu-press bu-glass-dark flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-sm font-semibold"
                 aria-label="Open profile"
               >
                 {avatarUrl ? (
@@ -154,12 +177,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <button
                 type="button"
                 onClick={() => onNavigate('notifications')}
-                className="bu-press relative flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
+                className="bu-press bu-glass-dark relative flex h-10 w-10 items-center justify-center rounded-full"
                 aria-label="Notifications"
               >
                 <Bell size={18} />
                 {unreadAlerts > 0 ? (
-                  <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-white px-1 text-center text-[10px] font-bold leading-[18px] text-neutral-950">
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full px-1 text-center text-[10px] font-bold leading-[18px] text-white"
+                    style={{ background: 'var(--bu-magenta)' }}
+                  >
                     {unreadAlerts > 9 ? '9+' : unreadAlerts}
                   </span>
                 ) : null}
@@ -167,11 +192,13 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             <div className="mt-6 flex flex-col items-center">
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium">ɃU</span>
+              <span className="bu-glass-dark rounded-full px-3 py-1 text-xs font-medium">ɃU</span>
               <div className="mt-3 flex items-center gap-2">
-                <p key={balanceVisible ? String(buBalance ?? '') : 'hidden'} className="bu-balance text-4xl font-semibold tracking-tight">
-                  {balanceVisible ? (buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`) : 'Ƀ ••••••'}
-                </p>
+                <RollingBalance
+                  value={buBalance}
+                  visible={balanceVisible}
+                  className="bu-balance text-4xl font-semibold tracking-tight text-white"
+                />
                 <button
                   type="button"
                   onClick={() => setBalanceVisible(!balanceVisible)}
@@ -191,7 +218,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             <div className="mt-6 flex items-center justify-center gap-3">
-              <div className="flex items-center rounded-full bg-white/10">
+              <div className="bu-glass-dark flex items-center rounded-full">
                 <button
                   type="button"
                   onClick={() => onNavigate('send-bu')}
@@ -212,77 +239,67 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <button
                 type="button"
                 onClick={() => onNavigate('buy-bu')}
-                className="bu-press flex h-12 w-12 items-center justify-center rounded-full bg-white/10"
+                className="bu-press flex h-12 w-12 items-center justify-center rounded-full"
+                style={{ background: 'linear-gradient(160deg, #4d8fff, var(--bu-cyber))' }}
                 aria-label="Fund wallet"
               >
                 <Plus className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-6">
               <p className="font-mono text-sm tracking-wide text-white/90">{showBuId(buId)}</p>
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-xs font-bold text-neutral-950">
-                  Ƀ
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('receive-bu')}
-                  className="bu-press flex h-8 w-8 items-center justify-center rounded-full border border-white/20"
-                  aria-label="Show receive QR"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => onNavigate('history')}
-            className="bu-press flex w-full items-center gap-3 border-t border-white/10 bg-black px-5 py-3.5 text-left"
+            className="bu-press flex w-full items-center gap-3 border-t border-white/10 px-5 py-3.5 text-left"
+            style={{ background: 'rgba(7, 16, 31, 0.72)' }}
             aria-label="Open transactions history"
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 flex items-center gap-2">
               <p className="truncate text-sm font-medium text-white/90">
                 {latest ? latest.label : 'No transfers yet'}
               </p>
               {latest ? (
-                <p
-                  className={`mt-0.5 text-sm font-semibold tabular-nums ${
-                    latest.credit ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {latest.credit ? '+' : '−'}Ƀ {formatBu(buFromNaira(latest.amount))}
-                </p>
+                <SignedBu
+                  amountBu={buFromNaira(latest.amount)}
+                  direction={latest.credit ? 'credit' : 'debit'}
+                  className={`shrink-0 text-sm font-semibold ${latest.credit ? 'bu-credit' : 'bu-debit'}`}
+                />
               ) : null}
             </div>
             <span className="shrink-0 text-xs font-medium text-white/55">Transactions ›</span>
           </button>
         </div>
+        </div>
       </div>
 
       <div className="bu-rise px-4" style={{ animationDelay: '80ms' }}>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {[
-            { label: 'To Ƀucks', action: 'send-bu', Icon: ArrowUp },
-            { label: 'Spray', action: 'spraying', Icon: Sparkles },
-            { label: 'To Bank', action: 'redemption', Icon: Banknote },
-          ].map(({ label, action, Icon }) => (
+            { label: 'To Ƀucks', action: 'send-bu', Icon: ArrowUp, well: 'bu-well-cyber' },
+            { label: 'Spray', action: 'spraying', Icon: Sparkles, well: 'bu-well-magenta' },
+            { label: 'To Bank', action: 'redemption', Icon: Banknote, well: 'bu-well-navy' },
+          ].map(({ label, action, Icon, well }) => (
             <button
               key={action}
               type="button"
               onClick={() => onNavigate(action)}
-              className="bu-press flex flex-col items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-4"
+              className="bu-press bu-glass-soft flex flex-col items-center gap-1 rounded-xl px-1.5 py-2.5 sm:gap-2 sm:rounded-2xl sm:px-3 sm:py-4"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-950 text-white">
-                <Icon className="h-5 w-5" />
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl ${well}`}
+              >
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
               </span>
-              <span className="text-xs font-semibold">{label}</span>
+              <span className="text-center text-[10px] font-semibold leading-tight sm:text-xs">{label}</span>
             </button>
           ))}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3">
           {[
             { label: 'Airtime', Icon: Smartphone },
             { label: 'Data', Icon: Wifi },
@@ -291,34 +308,36 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               key={label}
               type="button"
               onClick={() => showComingSoon(label)}
-              className="bu-press flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left"
+              className="bu-press bu-glass-soft flex items-center gap-2 rounded-xl px-2.5 py-2 text-left sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
-                <Icon className="h-4 w-4" />
+              <span className="bu-well-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 sm:rounded-xl">
+                <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </span>
-              <span>
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="text-[11px] text-neutral-500">Coming soon</span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold sm:text-sm">{label}</span>
+                <span className="text-[10px] text-neutral-500 sm:text-[11px]">Coming soon</span>
               </span>
             </button>
           ))}
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-3 sm:gap-3">
           {[
-            { label: 'My tickets', action: 'tickets', Icon: Ticket },
-            { label: 'Invites', action: 'invites', Icon: Mail },
-            { label: 'Events', action: 'events', Icon: CalendarDays },
-          ].map(({ label, action, Icon }) => (
+            { label: 'My tickets', action: 'tickets', Icon: Ticket, well: 'bu-well-purple' },
+            { label: 'Invites', action: 'invites', Icon: Mail, well: 'bu-well-cyber' },
+            { label: 'Events', action: 'events', Icon: CalendarDays, well: 'bu-well-purple' },
+          ].map(({ label, action, Icon, well }) => (
             <button
               key={`${action}-${label}`}
               type="button"
               onClick={() => onNavigate(action)}
-              className="bu-press flex flex-col items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-3 py-4"
+              className="bu-press bu-glass-soft flex flex-col items-center gap-1 rounded-xl px-1.5 py-2.5 sm:gap-2 sm:rounded-2xl sm:px-3 sm:py-4"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-800">
-                <Icon className="h-5 w-5" />
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl ${well}`}
+              >
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
               </span>
-              <span className="text-center text-[11px] font-semibold leading-tight">{label}</span>
+              <span className="text-center text-[10px] font-semibold leading-tight sm:text-[11px]">{label}</span>
             </button>
           ))}
         </div>
@@ -333,19 +352,21 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
       <div className="px-4">
         <h3 className="mb-4 text-lg font-bold">Campaign Updates</h3>
-        <div className="relative h-48 overflow-hidden rounded-xl bg-gradient-to-r from-primary to-primary/60 p-4">
-          <div className="absolute inset-0 flex items-center justify-center opacity-20">
-            <div className="text-6xl">🎉</div>
+        <div className="bu-campaign relative h-48 overflow-hidden rounded-[24px] p-5 text-white">
+          <div className="bu-glass-dark absolute right-4 top-4 flex h-14 w-14 items-center justify-center rounded-2xl">
+            <Sparkles className="h-7 w-7 text-white/90" strokeWidth={1.8} />
           </div>
-          <div className="relative space-y-2">
+          <div className="relative space-y-2 pr-16">
             <h4 className="text-xl font-bold">Celebrate Better</h4>
-            <p className="text-sm opacity-90">Send ɃU to events - Receive ceremonial notes for spraying</p>
+            <p className="text-sm text-white/75">Send ɃU to events — receive ceremonial notes for spraying</p>
             <div className="flex gap-2 pt-2">
-              <span className="rounded-full bg-primary-foreground/30 px-3 py-1 text-xs">
-                💚 Digital
+              <span className="bu-glass-dark inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
+                <Wifi className="h-3.5 w-3.5" />
+                Digital
               </span>
-              <span className="rounded-full bg-primary-foreground/30 px-3 py-1 text-xs">
-                📱 Mobile
+              <span className="bu-glass-dark inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
+                <Smartphone className="h-3.5 w-3.5" />
+                Mobile
               </span>
             </div>
           </div>

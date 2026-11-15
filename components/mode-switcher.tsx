@@ -16,7 +16,7 @@ const MODES: Array<{ id: 'user' | 'celebrant' | 'vendor'; label: string; Icon: L
 
 export default function ModeSwitcher({ currentMode, onModeChange }: ModeSwitcherProps) {
   return (
-    <div className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-1.5">
+    <div className="bu-glass rounded-[24px] p-1.5">
       <p className="px-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Mode</p>
       <div className="grid grid-cols-3 gap-1">
         {MODES.map(({ id, label, Icon }) => {
@@ -27,7 +27,7 @@ export default function ModeSwitcher({ currentMode, onModeChange }: ModeSwitcher
               type="button"
               onClick={() => onModeChange(id)}
               className={`bu-press flex flex-col items-center gap-1.5 rounded-[18px] px-2 py-3 transition ${
-                active ? 'bg-neutral-950 text-white shadow-sm' : 'text-neutral-600 hover:bg-white'
+                active ? 'bu-nav-active' : 'text-neutral-600 hover:bg-white/45'
               }`}
             >
               <Icon className="h-4 w-4" strokeWidth={active ? 2.4 : 2} />

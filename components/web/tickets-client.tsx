@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Ticket } from 'lucide-react'
 import { SiteHeader } from '@/components/web/site-chrome'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
@@ -99,7 +100,9 @@ export default function TicketsClient() {
         {message && upcoming.length === 0 && <p className="mt-4 text-sm text-muted-foreground">{message}</p>}
         {loaded && upcoming.length === 0 && (
           <div className="mt-10 rounded-3xl border border-white/10 bg-card p-10 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-2xl">🎫</div>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-950 text-white">
+              <Ticket className="h-7 w-7" strokeWidth={2} />
+            </div>
             <h2 className="text-xl font-bold">No upcoming tickets</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {history.length

@@ -141,10 +141,10 @@ export default function VendorDashboard({
   }, [userId])
 
   return (
-    <div className="space-y-6 bg-white pb-28 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 text-neutral-950">
       <ModeWalletHero
         title="Vendor"
-        balanceLabel={buBalance == null ? '\u00a0' : `Ƀ ${formatBu(buBalance)}`}
+        balanceValue={buBalance}
         balanceVisible={balanceVisible}
         onToggleBalance={() => setBalanceVisible((value) => !value)}
         subtitle={
@@ -163,12 +163,13 @@ export default function VendorDashboard({
           <button
             type="button"
             onClick={() => setCurrentView('sales')}
-            className="bu-press flex w-full items-center justify-between border-t border-white/10 bg-black px-5 py-3.5 text-left"
+            className="bu-press flex w-full items-center justify-between border-t border-white/10 px-5 py-3.5 text-left"
+            style={{ background: 'rgba(7, 16, 31, 0.72)' }}
           >
-            <div>
-              <p className="text-sm font-medium text-white/90">ɃU on events</p>
-              <p className="mt-0.5 text-sm font-semibold text-emerald-400">
-                {statsReady ? `Ƀ ${formatBu(buFromNaira(stats.todayEarnings))}` : '…'}
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              <p className="truncate text-sm font-medium text-white/90">ɃU on events</p>
+              <p className="shrink-0 text-sm font-semibold tabular-nums bu-credit">
+                {statsReady ? `Ƀ\u2009${formatBu(buFromNaira(stats.todayEarnings))}` : '…'}
               </p>
             </div>
             <span className="text-xs font-medium text-white/55">Sales ›</span>
@@ -178,9 +179,9 @@ export default function VendorDashboard({
 
       <div className="bu-rise space-y-6 px-4" style={{ animationDelay: '80ms' }}>
         <ModeIconRow columns={2}>
-          <ModeIconTile label="POS" Icon={ShoppingBag} onClick={() => onNavigate?.('wallet')} />
-          <ModeIconTile label="Events" Icon={CalendarDays} onClick={() => setCurrentView('events')} />
-          <ModeIconTile label="Sales" Icon={History} onClick={() => setCurrentView('sales')} tone="light" />
+          <ModeIconTile label="POS" Icon={ShoppingBag} onClick={() => onNavigate?.('wallet')} tone="cyber" />
+          <ModeIconTile label="Events" Icon={CalendarDays} onClick={() => setCurrentView('events')} tone="purple" />
+          <ModeIconTile label="Sales" Icon={History} onClick={() => setCurrentView('sales')} />
           <ModeIconTile label="Inventory" Icon={Package} onClick={() => setCurrentView('inventory')} tone="light" />
         </ModeIconRow>
 
@@ -202,12 +203,12 @@ export default function VendorDashboard({
             <ModeListRow
               title="Total ɃU received"
               detail="Across your events"
-              amount={statsReady ? `Ƀ ${formatBu(buFromNaira(stats.totalSales))}` : '…'}
+              amount={statsReady ? `Ƀ\u2009${formatBu(buFromNaira(stats.totalSales))}` : '…'}
             />
             <ModeListRow
               title="Wallet balance"
               detail="Live ɃU wallet"
-              amount={buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+              amount={buBalance == null ? '…' : `Ƀ\u2009${formatBu(buBalance)}`}
               amountTone="credit"
             />
             <ModeListRow
@@ -226,7 +227,7 @@ export default function VendorDashboard({
                 key={sale.id}
                 title={sale.eventName}
                 detail={sale.timestamp}
-                amount={`Ƀ ${formatBu(buFromNaira(sale.buAmount))}`}
+                amount={`Ƀ\u2009${formatBu(buFromNaira(sale.buAmount))}`}
               />
             ))}
           </div>
@@ -237,7 +238,7 @@ export default function VendorDashboard({
             <ModeListRow
               title="Wallet stock"
               detail="Available to use at events"
-              amount={buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+              amount={buBalance == null ? '…' : `Ƀ\u2009${formatBu(buBalance)}`}
             />
             <ModeListRow
               title="Estimated value"

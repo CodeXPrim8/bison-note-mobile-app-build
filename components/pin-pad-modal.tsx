@@ -67,7 +67,7 @@ export function PinPadModal({
           if (!busy) onClose()
         }}
       />
-      <div className="bu-pin-sheet relative z-10 w-full max-w-md rounded-t-[28px] bg-white px-5 pb-8 pt-4 text-neutral-950 shadow-[0_-20px_60px_rgba(0,0,0,0.25)] sm:rounded-[28px] sm:pb-6">
+      <div className="bu-pin-sheet bu-glass relative z-10 w-full max-w-md rounded-t-[28px] px-5 pb-8 pt-4 text-neutral-950 sm:rounded-[28px] sm:pb-6">
         <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-neutral-200 sm:hidden" />
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>

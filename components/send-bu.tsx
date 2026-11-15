@@ -524,7 +524,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
 
 
   return (
-    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       {step === 'tip-scan' && (
         <>
           <div className="px-4">

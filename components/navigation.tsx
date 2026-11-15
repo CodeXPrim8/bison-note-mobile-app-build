@@ -1,7 +1,7 @@
 'use client'
 
 import type { LucideIcon } from 'lucide-react'
-import { Home, Ticket, Sparkles, UserRound, LayoutDashboard, ShoppingBag, QrCode, WalletCards } from 'lucide-react'
+import { Home, Ticket, Sparkles, UserRound, LayoutDashboard, ShoppingBag, QrCode } from 'lucide-react'
 
 interface NavigationProps {
   currentPage: string
@@ -46,10 +46,9 @@ const celebrantTabs: NavTab[] = [
     id: 'dashboard',
     label: 'Home',
     Icon: Home,
-    matches: ['history', 'redemption', 'receive-bu', 'notifications'],
+    matches: ['history', 'redemption', 'receive-bu', 'notifications', 'wallet'],
   },
   { id: 'tickets', label: 'Tickets', Icon: Ticket, matches: ['events', 'event-info', 'invites'] },
-  { id: 'wallet', label: 'Wallet', Icon: WalletCards },
   { id: 'profile', label: 'Menu', Icon: UserRound },
 ]
 
@@ -72,7 +71,7 @@ export default function Navigation({ currentPage, onNavigate, mode = 'user' }: N
     <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <nav
         aria-label="Main"
-        className="pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[28px] border border-white/70 bg-white/90 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.14)] backdrop-blur-xl"
+        className="bu-glass pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[28px] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_18px_50px_rgba(11,23,51,0.14)]"
       >
         {tabs.map((tab) => {
           const active = isActiveTab(tab, currentPage)
@@ -86,8 +85,8 @@ export default function Navigation({ currentPage, onNavigate, mode = 'user' }: N
               aria-current={active ? 'page' : undefined}
               className={`bu-nav-btn group relative flex h-12 items-center justify-center overflow-hidden rounded-full transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                 active
-                  ? 'flex-[1.35] bg-neutral-950 text-white shadow-[0_8px_20px_rgba(0,0,0,0.22)]'
-                  : 'flex-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
+                  ? 'bu-nav-active flex-[1.35]'
+                  : 'flex-1 text-neutral-500 hover:bg-white/50 hover:text-[color:var(--bu-navy)]'
               }`}
             >
               <span

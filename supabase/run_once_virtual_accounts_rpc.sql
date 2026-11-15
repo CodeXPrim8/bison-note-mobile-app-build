@@ -14,7 +14,7 @@ begin
     return null;
   end if;
   select * into row from public.bu_virtual_accounts where user_id = p_user_id;
-  if not found then
+  if not found then 
     return null;
   end if;
   return to_jsonb(row);

@@ -252,6 +252,7 @@ function fromTx(row: Record<string, unknown>): WalletHistoryItem {
     type,
     description: rawDescription,
     metadata: row.metadata,
+    direction: typeof row.direction === 'string' ? row.direction : null,
     amount: Number(row.amount ?? 0),
   })
   const description = historyLabel({ type, description: rawDescription, direction })
@@ -275,9 +276,16 @@ function fromTx(row: Record<string, unknown>): WalletHistoryItem {
 
 function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
   const rawDescription = String(row.description ?? 'ɃU movement')
-  const direction: WalletDirection = row.direction === 'debit' ? 'debit' : 'credit'
-  const type = String(row.type ?? (direction === 'debit' ? 'spray' : 'spray_credit'))
   const meta = rowMeta(row)
+  const type = String(row.type ?? '')
+  const direction = walletDirection({
+    type: type || null,
+    description: rawDescription,
+    metadata: meta,
+    direction: typeof row.direction === 'string' ? row.direction : null,
+    amount: Number(row.naira ?? row.amount ?? 0),
+  })
+  const resolvedType = type || (direction === 'debit' ? 'spray' : 'spray_credit')
   const reference =
     typeof meta.move_id === 'string'
       ? String(meta.move_id)
@@ -286,14 +294,14 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
         : null
   return {
     id: String(row.id ?? ''),
-    type,
+    type: resolvedType,
     amount: Math.abs(Number(row.naira ?? row.amount ?? 0)),
-    description: historyLabel({ type, description: rawDescription, direction }),
+    description: historyLabel({ type: resolvedType, description: rawDescription, direction }),
     created_at: String(row.created_at ?? ''),
     status: 'completed',
     reference,
     direction,
-    bucket: historyBucket({ type, description: rawDescription }),
+    bucket: historyBucket({ type: resolvedType, description: rawDescription }),
     counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
     counterpartyUserId: partyUserIdOf(meta, direction),
     note: noteOf(meta),

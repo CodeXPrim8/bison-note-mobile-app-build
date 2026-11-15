@@ -66,7 +66,7 @@ export default function VendorPOS() {
     selectedEvent === 'all' ? pendingTransfers : pendingTransfers.filter((t) => t.eventId === selectedEvent)
 
   return (
-    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
         <WalletPageSummary
           kicker="Vendor"

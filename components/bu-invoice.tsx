@@ -53,34 +53,71 @@ function InvoiceCard({ invoice }: { invoice: BuInvoice }) {
   ]
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-neutral-900 to-neutral-950 text-white shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
+    <div
+      className="overflow-hidden rounded-[28px] text-white shadow-[0_20px_50px_rgba(11,23,51,0.45)]"
+      style={{
+        background:
+          'radial-gradient(120% 80% at 90% -10%, rgba(47,123,255,0.32) 0%, transparent 55%), radial-gradient(90% 60% at 0% 110%, rgba(34,224,255,0.16) 0%, transparent 50%), linear-gradient(165deg, #142a56 0%, #0b1733 48%, #07101f 100%)',
+        boxShadow: '0 20px 50px rgba(11,23,51,0.45), 0 0 0 1px rgba(47,123,255,0.28), inset 0 1px 0 rgba(255,255,255,0.1)',
+      }}
+    >
       <div className="border-b border-white/10 px-5 pb-5 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.28em] text-rose-400">Ƀucks</p>
+            <p className="text-[11px] font-semibold tracking-[0.28em]" style={{ color: 'var(--bu-cyan, #22e0ff)' }}>
+              Ƀucks
+            </p>
             <h3 className="mt-2 text-xl font-semibold tracking-tight">Transfer invoice</h3>
           </div>
-          <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-400">
+          <span
+            className="rounded-full px-3 py-1 text-xs font-semibold"
+            style={{
+              background: 'rgba(34, 224, 255, 0.14)',
+              color: '#7eecff',
+              boxShadow: 'inset 0 0 0 1px rgba(34,224,255,0.28)',
+            }}
+          >
             {invoice.status || 'Paid'}
           </span>
         </div>
-        <div className="mt-5 rounded-2xl bg-white/5 px-4 py-4">
-          <p className="text-xs text-white/50">Amount</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight">Ƀ {formatInvoiceBu(invoice.amountBu)}</p>
-          <p className="mt-1 text-sm text-white/55">₦{formatInvoiceNaira(invoice.amountNaira)}</p>
+        <div
+          className="mt-5 rounded-2xl px-4 py-4"
+          style={{
+            background: 'linear-gradient(165deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))',
+            border: '1px solid rgba(255,255,255,0.14)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)',
+          }}
+        >
+          <p className="text-xs text-white/55">Amount</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+            Ƀ&nbsp;{formatInvoiceBu(invoice.amountBu)}
+          </p>
+          <p className="mt-1 text-sm tabular-nums" style={{ color: 'rgba(126, 236, 255, 0.85)' }}>
+            ₦{formatInvoiceNaira(invoice.amountNaira)}
+          </p>
         </div>
       </div>
 
       <div className="space-y-3 px-5 py-5 text-sm">
         {metaRows.map(([label, value]) => (
-          <div key={label} className="flex items-start justify-between gap-4 border-b border-white/5 pb-3 last:border-b-0 last:pb-0">
+          <div
+            key={label}
+            className="flex items-start justify-between gap-4 border-b border-white/8 pb-3 last:border-b-0 last:pb-0"
+            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+          >
             <span className="text-white/45">{label}</span>
             <span className="max-w-[60%] text-right font-medium text-white/95">{value}</span>
           </div>
         ))}
         {invoice.note ? (
-          <div className="rounded-2xl bg-white/5 px-3 py-3">
-            <p className="text-xs text-white/45">Note</p>
+          <div
+            className="rounded-2xl px-3 py-3"
+            style={{
+              background: 'rgba(47,123,255,0.12)',
+              border: '1px solid rgba(47,123,255,0.22)',
+            }}
+          >
+            <p className="text-xs text-white/50">Note</p>
             <p className="mt-1 font-medium text-white/90">{invoice.note}</p>
           </div>
         ) : null}
@@ -115,7 +152,14 @@ export function BuInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto border-neutral-800 bg-neutral-950 text-white sm:max-w-md">
+      <DialogContent
+        className="max-h-[92vh] overflow-y-auto border sm:max-w-md"
+        style={{
+          background: 'linear-gradient(180deg, #0f1f42 0%, #07101f 100%)',
+          borderColor: 'rgba(47,123,255,0.28)',
+          color: '#fff',
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-white">Invoice {invoice.number}</DialogTitle>
           <DialogDescription className="text-white/55">
@@ -133,7 +177,15 @@ export function BuInvoiceDialog({
             <Share2 className="h-4 w-4" />
             Share
           </Button>
-          <Button type="button" onClick={() => downloadInvoice(invoice)} className="bg-rose-700 text-white hover:bg-rose-600">
+          <Button
+            type="button"
+            onClick={() => downloadInvoice(invoice)}
+            className="border-0 text-white hover:opacity-95"
+            style={{
+              background: 'linear-gradient(160deg, #4d8fff, #2f7bff)',
+              boxShadow: '0 10px 24px rgba(47,123,255,0.35)',
+            }}
+          >
             <Download className="h-4 w-4" />
             Download PDF
           </Button>
@@ -169,7 +221,9 @@ export function BuInvoiceActions({
 
   return (
     <div className="space-y-2">
-      <div className={`grid gap-2 ${compact ? (showView ? 'grid-cols-3' : 'grid-cols-2') : showView ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+      <div
+        className={`grid gap-2 ${compact ? (showView ? 'grid-cols-3' : 'grid-cols-2') : showView ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}
+      >
         {showView ? (
           <Button type="button" variant="outline" onClick={() => setOpen(true)} className={compact ? 'px-2' : undefined}>
             <Eye className="h-4 w-4" />
@@ -180,7 +234,12 @@ export function BuInvoiceActions({
           <Share2 className="h-4 w-4" />
           Share
         </Button>
-        <Button type="button" onClick={() => downloadInvoice(invoice)} className={compact ? 'px-2' : undefined}>
+        <Button
+          type="button"
+          onClick={() => downloadInvoice(invoice)}
+          className={`border-0 text-white hover:opacity-95 ${compact ? 'px-2' : ''}`}
+          style={{ background: 'linear-gradient(160deg, #4d8fff, #2f7bff)' }}
+        >
           <Download className="h-4 w-4" />
           Download
         </Button>

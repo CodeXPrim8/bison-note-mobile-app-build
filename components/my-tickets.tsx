@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import QRCode from 'qrcode'
 import { isCheckedInTicket, isEventUpcoming } from '@/lib/events/sale'
@@ -110,7 +111,9 @@ export default function MyTickets({
   if (upcoming.length === 0) {
     return (
       <div className="px-4 pb-24 pt-10 text-center">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 text-2xl">🎫</div>
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-950 text-white">
+          <Ticket className="h-7 w-7" strokeWidth={2} />
+        </div>
         <h2 className="text-2xl font-bold">No upcoming tickets</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {pastCount

@@ -1,6 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  CalendarDays,
+  History,
+  Lock,
+  Megaphone,
+  Nfc,
+  Palette,
+  Settings,
+  Ticket,
+} from 'lucide-react'
 import { displayBuId } from '@/lib/phone'
 import ThemeSelector from '@/components/theme-selector'
 import { useAccount } from '@/components/account-store'
@@ -98,49 +109,49 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
   }
 
   const items: Array<{
-    icon: string
+    Icon: LucideIcon
     title: string
     desc: string
     onClick: () => void
   }> = [
     {
-      icon: '🎫',
+      Icon: Ticket,
       title: 'My Tickets',
       desc: 'QR codes and check-in backups',
       onClick: () => onNavigate('tickets'),
     },
     {
-      icon: '🎊',
+      Icon: CalendarDays,
       title: 'Upcoming events',
       desc: 'Same events as the website',
       onClick: () => onNavigate('events'),
     },
     {
-      icon: '📋',
+      Icon: History,
       title: 'Transaction History',
       desc: 'View all your transactions',
       onClick: () => onNavigate('history'),
     },
     {
-      icon: '📱',
+      Icon: Nfc,
       title: 'Contactless Pay',
       desc: 'Setup your account for contactless pay',
       onClick: () => onNavigate('receive-bu'),
     },
     {
-      icon: '🎨',
+      Icon: Palette,
       title: 'Customization',
       desc: 'Theme, dashboard customization, e.t.c.',
       onClick: () => setView('appearance'),
     },
     {
-      icon: '⚙️',
+      Icon: Settings,
       title: 'Settings',
       desc: 'Email, PIN, account details',
       onClick: () => setView('settings'),
     },
     {
-      icon: '🔐',
+      Icon: Lock,
       title: 'Request PND',
       desc: 'Post no debit restriction',
       onClick: () => setView('pnd'),
@@ -182,16 +193,18 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
         <>
           <div className="px-4">
             <div className="grid grid-cols-2 gap-4">
-              {items.map((item) => (
+              {items.map(({ Icon, title, desc, onClick }) => (
                 <button
-                  key={item.title}
+                  key={title}
                   type="button"
-                  onClick={item.onClick}
-                  className="cursor-pointer rounded-xl bg-card p-4 text-left transition hover:bg-card/80 active:scale-[0.98]"
+                  onClick={onClick}
+                  className="bu-press bu-glass-soft cursor-pointer rounded-2xl p-4 text-left transition active:scale-[0.98]"
                 >
-                  <div className="mb-3 text-3xl">{item.icon}</div>
-                  <h3 className="font-bold">{item.title}</h3>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  <span className="bu-well-navy mb-3 flex h-11 w-11 items-center justify-center rounded-2xl">
+                    <Icon className="h-5 w-5" strokeWidth={2.2} />
+                  </span>
+                  <h3 className="font-bold text-neutral-950">{title}</h3>
+                  <p className="text-xs text-neutral-500">{desc}</p>
                 </button>
               ))}
             </div>
@@ -200,11 +213,13 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
           <div className="px-4">
             <a
               href="/organizer"
-              className="mb-3 block w-full cursor-pointer rounded-xl bg-card p-4 text-left transition hover:bg-card/80 active:scale-[0.98]"
+              className="bu-press bu-glass-soft mb-3 block w-full cursor-pointer rounded-2xl p-4 text-left transition active:scale-[0.98]"
             >
-              <div className="mb-3 text-3xl">📣</div>
-              <h3 className="font-bold">Organiser tools</h3>
-              <p className="text-xs text-muted-foreground">Create events, sales, and check-in — same as the website</p>
+              <span className="bu-well-magenta mb-3 flex h-11 w-11 items-center justify-center rounded-2xl">
+                <Megaphone className="h-5 w-5" strokeWidth={2.2} />
+              </span>
+              <h3 className="font-bold text-neutral-950">Organiser tools</h3>
+              <p className="text-xs text-neutral-500">Create events, sales, and check-in — same as the website</p>
             </a>
             <button
               type="button"

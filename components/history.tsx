@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { History as HistoryIcon, RefreshCw, Ticket } from 'lucide-react'
 import { isEventPast } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
-import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { buFromNaira, formatNairaPlain } from '@/lib/bu-rate'
+import { SignedBu } from '@/components/signed-bu'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 import { useAccount, useWalletPulse } from '@/components/account-store'
@@ -139,11 +140,8 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
 }
 
 function activityTitle(tx: Transaction) {
-  const party = tx.counterparty?.trim() || partyFromLabel(tx.description)
-  if (tx.bucket === 'bu_transfer' && party) {
-    return party
-  }
-  return tx.description
+  // Always prefer the direction-aware label so credit/debit text matches the sign.
+  return tx.description || partyFromLabel(tx.description) || 'ɃU movement'
 }
 
 function normalizeRows(rows: Transaction[]) {
@@ -324,24 +322,26 @@ export default function History() {
               filteredTransactions.map((tx, index) => {
                 const credit = tx.direction === 'credit'
                 const canOpenInvoice = tx.bucket === 'bu_transfer'
-                const rowClass = credit
-                  ? 'bg-neutral-100 text-neutral-950'
-                  : 'bg-neutral-950 text-white'
-                const amountClass = credit ? 'text-emerald-600' : 'text-rose-400'
-                const subClass = credit ? 'text-neutral-500' : 'text-white/50'
-                const badgeClass = credit ? 'bg-white text-neutral-950' : 'bg-white/15 text-white'
+                const amountClass = credit ? 'bu-credit' : 'bu-debit'
+                const badgeClass = credit
+                  ? 'bg-green-500/15 text-green-700'
+                  : 'bg-red-500/15 text-red-700'
                 const content = (
                   <>
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${badgeClass}`}>
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:h-9 sm:w-9 sm:text-xs ${badgeClass}`}
+                    >
                       {credit ? 'In' : 'Out'}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{activityTitle(tx)}</p>
-                      <p className={`text-xs ${subClass}`}>{tx.date}</p>
+                      <p className="truncate text-xs font-medium text-neutral-950 sm:text-sm">
+                        {activityTitle(tx)}
+                      </p>
+                      <p className="text-[10px] text-neutral-500 sm:text-xs">{tx.date}</p>
                     </div>
-                    <div className={`shrink-0 text-right text-sm font-semibold tabular-nums ${amountClass}`}>
-                      {credit ? '+' : '−'}Ƀ {formatBu(buFromNaira(tx.amount))}
-                      <p className={`text-xs font-normal ${subClass}`}>
+                    <div className={`shrink-0 text-right text-xs font-semibold sm:text-sm ${amountClass}`}>
+                      <SignedBu amountBu={buFromNaira(tx.amount)} direction={tx.direction} />
+                      <p className="text-[10px] font-normal text-neutral-500 sm:text-xs">
                         {credit ? '+' : '−'}₦{formatNairaPlain(tx.amount)}
                       </p>
                     </div>
@@ -352,14 +352,14 @@ export default function History() {
                     key={`${tx.id}-${tx.createdAt}-${index}`}
                     type="button"
                     onClick={() => setOpenInvoice(invoiceFromActivity(tx, displayName))}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition active:scale-[0.99] ${rowClass}`}
+                    className="bu-press bu-glass-soft flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition active:scale-[0.99] sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
                   >
                     {content}
                   </button>
                 ) : (
                   <div
                     key={`${tx.id}-${tx.createdAt}-${index}`}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 ${rowClass}`}
+                    className="bu-glass-soft flex w-full items-center gap-2 rounded-xl px-3 py-2.5 sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
                   >
                     {content}
                   </div>

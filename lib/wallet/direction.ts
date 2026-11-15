@@ -33,7 +33,7 @@ const DEBIT_TYPES = new Set([
   'wallet_debit',
 ])
 
-/** Incoming ɃU is a credit. Leaving ɃU is a debit. Amounts in the ledger are unsigned. */
+/** Incoming ɃU is a credit. Leaving ɃU is a debit. Ledger amounts are usually unsigned. */
 export function walletDirection(input: {
   type?: string | null
   description?: string | null
@@ -41,22 +41,46 @@ export function walletDirection(input: {
   direction?: string | null
   amount?: number | null
 }): WalletDirection {
-  if (input.direction === 'credit' || input.direction === 'debit') return input.direction
-  const meta = asMeta(input.metadata)
-  if (meta.direction === 'credit' || meta.direction === 'debit') return meta.direction
-  const amount = Number(input.amount)
-  if (Number.isFinite(amount) && amount < 0) return 'debit'
   const type = String(input.type ?? '').toLowerCase()
   const desc = String(input.description ?? '').toLowerCase()
-  if (/received|ticket sale|affiliate commission|wallet top-up|wallet top up|bank transfer top-up/.test(desc)) return 'credit'
-  if (/^sent Ƀu$|^sent bu$/.test(desc)) return 'debit'
-  if (meta.from && !meta.to) return 'credit'
-  if (meta.to && !meta.from) return 'debit'
-  if (/withdraw|purchase|bought ticket/.test(desc)) return 'debit'
-  if (type === 'bu_transfer' && /received/.test(desc)) return 'credit'
+  const meta = asMeta(input.metadata)
+
+  // Description is the source of truth when it clearly says in/out
+  if (
+    /bank transfer top-up|wallet top-?up|received Ƀu|received bu|bu received|tip received|ticket sale|affiliate commission/.test(
+      desc,
+    )
+  ) {
+    return 'credit'
+  }
+  if (/withdraw|send to bank|sent Ƀu|sent bu|^sent |purchase|bought ticket|tip to |tip sent/.test(desc)) {
+    return 'debit'
+  }
+
+  const explicit = String(input.direction ?? '').toLowerCase()
+  if (explicit === 'credit' || explicit === 'debit') return explicit
+
+  const metaDir = String(meta.direction ?? '').toLowerCase()
+  if (metaDir === 'credit' || metaDir === 'debit') return metaDir
+
+  const amount = Number(input.amount)
+  if (Number.isFinite(amount) && amount < -0.0001) return 'debit'
+
   if (CREDIT_TYPES.has(type)) return 'credit'
-  if (DEBIT_TYPES.has(type)) return 'debit'
-  if (/tip|bu transfer|spray/.test(desc)) return /received/.test(desc) ? 'credit' : 'debit'
+  if (meta.from && !meta.to) return 'credit'
+
+  if (DEBIT_TYPES.has(type) && type !== 'bu_transfer') return 'debit'
+  if (meta.to && !meta.from) return 'debit'
+
+  // Peer transfers without a clear label: treat as outgoing
+  if (type === 'bu_transfer') {
+    if (/received/.test(desc)) return 'credit'
+    return 'debit'
+  }
+
+  if (/^tip$|tip/.test(desc)) return /received/.test(desc) ? 'credit' : 'debit'
+  if (/spray/.test(desc) || type === 'spray') return /credit|received/.test(desc) ? 'credit' : 'debit'
+
   return 'credit'
 }
 
@@ -77,7 +101,7 @@ export function historyBucket(input: { type?: string | null; description?: strin
   ) {
     return 'bu_transfer'
   }
-  if (type === 'withdrawal' || /withdraw/.test(desc)) return 'withdrawal'
+  if (type === 'withdrawal' || /withdraw|send to bank/.test(desc)) return 'withdrawal'
   return 'topup'
 }
 
@@ -88,34 +112,53 @@ export function historyLabel(input: {
 }): string {
   const desc = String(input.description ?? '').trim()
   const lower = desc.toLowerCase()
+  const type = String(input.type ?? '').toLowerCase()
   const credit = input.direction === 'credit'
+
+  if (/bank transfer top-up|wallet top-?up/i.test(desc) || type === 'deposit') {
+    return 'Bank transfer top-up'
+  }
+  if (/^withdrawal to /i.test(desc)) return desc
+  if (type === 'withdrawal' || /send to bank/i.test(desc)) {
+    return desc && !/^send to bank$/i.test(desc) ? desc : 'Send to bank'
+  }
+
   if (/^bu transfer/i.test(desc) || /^sent Ƀu|^sent bu/i.test(desc)) {
-    const who = desc.replace(/^bu transfer(?: to)?\s*/i, '').replace(/^sent Ƀu(?: to)?\s*/i, '').replace(/^sent bu(?: to)?\s*/i, '').trim()
+    const who = desc
+      .replace(/^bu transfer(?: to)?\s*/i, '')
+      .replace(/^sent Ƀu(?: to)?\s*/i, '')
+      .replace(/^sent bu(?: to)?\s*/i, '')
+      .trim()
     if (credit) return who ? `Received ɃU from ${who}` : 'Received ɃU'
     return who && !/^bu transfer$/i.test(who) ? `Sent ɃU to ${who}` : 'Sent ɃU'
   }
   if (/^bu received|^received Ƀu|^received bu/i.test(desc)) {
-    const who = desc.replace(/^bu received(?: from)?\s*/i, '').replace(/^received Ƀu(?: from)?\s*/i, '').replace(/^received bu(?: from)?\s*/i, '').trim()
+    const who = desc
+      .replace(/^bu received(?: from)?\s*/i, '')
+      .replace(/^received Ƀu(?: from)?\s*/i, '')
+      .replace(/^received bu(?: from)?\s*/i, '')
+      .trim()
     return who ? `Received ɃU from ${who}` : 'Received ɃU'
   }
   if (/^tip received/i.test(desc)) return desc.replace(/^tip received/i, 'Tip received')
-  if (/^tip to /i.test(desc) || /^tip$/i.test(desc)) return credit ? 'Tip received' : desc.replace(/^tip to /i, 'Tip sent to ') || 'Tip sent'
+  if (/^tip to /i.test(desc) || /^tip$/i.test(desc)) {
+    return credit ? 'Tip received' : desc.replace(/^tip to /i, 'Tip sent to ') || 'Tip sent'
+  }
   if (!desc) {
-    const type = String(input.type ?? '').toLowerCase()
     if (type === 'deposit') return 'Bank transfer top-up'
-    if (type === 'withdrawal') return 'Withdrawal'
+    if (type === 'withdrawal') return 'Send to bank'
     if (type === 'spray') return credit ? 'Received ɃU' : 'Sent ɃU'
     if (type === 'spray_credit') return 'Received ɃU'
-    return 'ɃU movement'
+    return credit ? 'Received ɃU' : 'Sent ɃU'
   }
   if (lower === 'bu movement') return credit ? 'Received ɃU' : 'Sent ɃU'
   return desc
 }
 
 export function amountTone(direction: WalletDirection) {
-  return direction === 'credit' ? 'text-green-500' : 'text-red-500'
+  return direction === 'credit' ? 'bu-credit' : 'bu-debit'
 }
 
 export function amountIconTone(direction: WalletDirection) {
-  return direction === 'credit' ? 'bg-green-500/20' : 'bg-red-500/20'
+  return direction === 'credit' ? 'bg-green-500/15 text-green-600' : 'bg-red-500/15 text-red-600'
 }

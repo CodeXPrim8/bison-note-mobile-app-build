@@ -267,26 +267,281 @@
 }
 
 .bu-user-shell {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.2 0 0);
-  --card: oklch(0.985 0 0);
-  --card-foreground: oklch(0.2 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0 0);
-  --primary: oklch(0.2 0 0);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.48 0 0);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.2 0 0);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.2 0 0);
-  background: #fff;
-  color: oklch(0.2 0 0);
+  /* Brand: Midnight Navy · Cyber Blue · Cyan · Purple · Magenta */
+  --bu-navy: #0b1733;
+  --bu-navy-deep: #07101f;
+  --bu-navy-mid: #142a56;
+  --bu-cyber: #2f7bff;
+  --bu-cyan: #22e0ff;
+  --bu-purple: #8b5cf6;
+  --bu-magenta: #ff2d95;
+  --bu-credit: #22c55e;
+  --bu-debit: #ef4444;
+  --bu-gloss-white: linear-gradient(
+    165deg,
+    #ffffff 0%,
+    rgba(255, 255, 255, 0.97) 42%,
+    rgba(248, 250, 253, 0.95) 100%
+  );
+  --bu-gloss-panel: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(252, 253, 255, 0.82) 100%
+  );
+  --bu-gloss-border: rgba(255, 255, 255, 0.85);
+  --bu-gloss-inset: inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(11, 23, 51, 0.03);
+  --background: #ffffff;
+  --foreground: oklch(0.22 0.02 260);
+  --card: rgba(255, 255, 255, 0.86);
+  --card-foreground: oklch(0.22 0.02 260);
+  --popover: rgba(255, 255, 255, 0.92);
+  --popover-foreground: oklch(0.22 0.02 260);
+  --primary: var(--bu-navy);
+  --primary-foreground: #f8fbff;
+  --secondary: oklch(0.97 0.008 250);
+  --secondary-foreground: oklch(0.22 0.02 260);
+  --muted: oklch(0.97 0.008 250);
+  --muted-foreground: oklch(0.48 0.02 250);
+  --accent: color-mix(in oklab, var(--bu-cyber) 10%, white);
+  --accent-foreground: var(--bu-navy);
+  --border: color-mix(in oklab, var(--bu-cyber) 8%, #e8edf5);
+  --input: color-mix(in oklab, var(--bu-cyber) 8%, #e8edf5);
+  --ring: var(--bu-cyber);
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120% 70% at 50% -12%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 58%),
+    radial-gradient(80% 45% at 100% 8%, rgba(47, 123, 255, 0.05) 0%, transparent 55%),
+    radial-gradient(70% 40% at 0% 30%, rgba(34, 224, 255, 0.035) 0%, transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 42%, #f3f6fb 100%);
+  background-attachment: fixed;
+  color: oklch(0.22 0.02 260);
   scroll-behavior: smooth;
+}
+
+.bu-wallet-hero {
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(47, 123, 255, 0.35) 0%, transparent 55%),
+    radial-gradient(90% 60% at 10% 110%, rgba(34, 224, 255, 0.18) 0%, transparent 50%),
+    linear-gradient(165deg, var(--bu-navy-mid) 0%, var(--bu-navy) 46%, var(--bu-navy-deep) 100%);
+  box-shadow:
+    0 18px 44px rgba(11, 23, 51, 0.34),
+    0 0 0 1px rgba(47, 123, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Alert neon chase — edge-only overlay; card DOM never remounts or resizes */
+.bu-wallet-neon-ring {
+  pointer-events: none;
+  position: absolute;
+  inset: -3px;
+  z-index: 2;
+  border-radius: 35px;
+  padding: 2.5px;
+  overflow: hidden;
+  opacity: 1;
+  animation: bu-neon-fade 4.8s linear forwards;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  box-shadow:
+    0 0 14px rgba(34, 224, 255, 0.25),
+    0 0 28px rgba(47, 123, 255, 0.18);
+}
+
+.bu-wallet-neon-ring > .bu-wallet-neon-spin {
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 200deg,
+    var(--bu-cyan) 240deg,
+    var(--bu-cyber) 280deg,
+    var(--bu-purple) 315deg,
+    var(--bu-magenta) 345deg,
+    transparent 360deg
+  );
+  animation: bu-neon-spin 1.15s linear infinite;
+}
+
+@keyframes bu-neon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bu-neon-fade {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bu-wallet-neon-ring,
+  .bu-wallet-neon-ring > .bu-wallet-neon-spin {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
+.bu-well-navy {
+  background: linear-gradient(160deg, var(--bu-navy-mid), var(--bu-navy));
+  color: white;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.bu-well-cyber {
+  background: linear-gradient(160deg, #4d8fff, var(--bu-cyber));
+  color: white;
+  box-shadow: 0 8px 18px rgba(47, 123, 255, 0.28);
+}
+
+.bu-well-purple {
+  background: linear-gradient(160deg, #a78bfa, var(--bu-purple));
+  color: white;
+  box-shadow: 0 8px 18px rgba(139, 92, 246, 0.28);
+}
+
+.bu-well-magenta {
+  background: linear-gradient(160deg, #ff5fb0, var(--bu-magenta));
+  color: white;
+  box-shadow: 0 8px 18px rgba(255, 45, 149, 0.28);
+}
+
+.bu-credit {
+  color: var(--bu-credit) !important;
+}
+
+.bu-debit {
+  color: var(--bu-debit) !important;
+}
+
+.bu-nav-active {
+  background: linear-gradient(160deg, var(--bu-navy-mid), var(--bu-navy));
+  color: white;
+  box-shadow:
+    0 8px 20px rgba(11, 23, 51, 0.28),
+    0 0 0 1px rgba(47, 123, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.bu-campaign {
+  background:
+    radial-gradient(90% 80% at 100% 0%, rgba(255, 45, 149, 0.35) 0%, transparent 50%),
+    radial-gradient(80% 70% at 0% 100%, rgba(139, 92, 246, 0.4) 0%, transparent 55%),
+    linear-gradient(155deg, var(--bu-navy-mid) 0%, var(--bu-navy) 55%, #1a0b2e 100%);
+  box-shadow: 0 16px 40px rgba(11, 23, 51, 0.28);
+}
+
+.bu-glass-dark {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.bu-user-shell::before {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.35) 28%,
+      rgba(255, 255, 255, 0) 48%,
+      rgba(255, 255, 255, 0.55) 72%,
+      rgba(255, 255, 255, 0.15) 100%
+    );
+  opacity: 1;
+}
+
+.bu-user-shell::after {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, transparent 18%, transparent 82%, rgba(243, 246, 251, 0.45) 100%);
+}
+
+.bu-user-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Page shells stay clear so the glossy canvas shows through */
+.bu-user-shell .bg-transparent {
+  background-color: transparent !important;
+}
+
+/* Opaque page wrappers → glossy translucent so shell sheen remains */
+.bu-user-shell .bg-white {
+  background-color: rgba(255, 255, 255, 0.55) !important;
+  background-image: var(--bu-gloss-white);
+  border-color: color-mix(in oklab, var(--bu-gloss-border), rgba(11, 23, 51, 0.06));
+  box-shadow: var(--bu-gloss-inset);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.bu-user-shell .bg-neutral-50,
+.bu-user-shell .bg-neutral-100 {
+  background-color: rgba(255, 255, 255, 0.48) !important;
+  background-image: var(--bu-gloss-panel);
+  box-shadow: var(--bu-gloss-inset);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+.bu-user-shell .sticky.top-0 {
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
+}
+
+.bu-gloss {
+  background-color: rgba(255, 255, 255, 0.62);
+  background-image: var(--bu-gloss-white);
+  border: 1px solid color-mix(in oklab, white 78%, rgba(11, 23, 51, 0.1));
+  box-shadow: var(--bu-gloss-inset), 0 10px 30px rgba(11, 23, 51, 0.04);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.bu-glass-soft {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 10px 28px rgba(11, 23, 51, 0.05);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.bu-glass {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58));
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 14px 40px rgba(11, 23, 51, 0.07);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
 }
 
 @keyframes bu-rise {
@@ -311,12 +566,34 @@
   }
 }
 
+@keyframes bu-roll-in {
+  from {
+    transform: translateY(var(--bu-roll-from, -115%));
+    opacity: 0.35;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bu-roll-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(var(--bu-roll-to, 115%));
+    opacity: 0;
+  }
+}
+
 .bu-rise {
   animation: bu-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .bu-balance {
-  animation: bu-balance 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Keep class for layout hooks; no blink remount animation */
 }
 
 .bu-press {

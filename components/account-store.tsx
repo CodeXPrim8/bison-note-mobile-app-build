@@ -204,8 +204,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           Number.isFinite(nextNaira) &&
           Math.abs(nextNaira - prevNaira) >= 0.01
         ) {
-          window.dispatchEvent(new Event(WALLET_PULSE_EVENT))
-          window.setTimeout(() => window.dispatchEvent(new Event(WALLET_PULSE_EVENT)), 450)
+          // One pulse only — a second event remounted the balance UI and looked like a double credit.
+          window.dispatchEvent(
+            new CustomEvent(WALLET_PULSE_EVENT, {
+              detail: { prevNaira, nextNaira, delta: nextNaira - prevNaira },
+            }),
+          )
         }
       } catch {
         // The next tick retries.

@@ -3,6 +3,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { Eye, EyeOff } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { RollingBalance } from '@/components/rolling-balance'
 
 export function ModeIconTile({
   label,
@@ -13,22 +14,31 @@ export function ModeIconTile({
   label: string
   Icon: LucideIcon
   onClick: () => void
-  tone?: 'dark' | 'light'
+  tone?: 'dark' | 'light' | 'cyber' | 'purple' | 'magenta'
 }) {
+  const well =
+    tone === 'cyber'
+      ? 'bu-well-cyber'
+      : tone === 'purple'
+        ? 'bu-well-purple'
+        : tone === 'magenta'
+          ? 'bu-well-magenta'
+          : tone === 'light'
+            ? 'bg-white/70 text-[color:var(--bu-navy)]'
+            : 'bu-well-navy'
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="bu-press flex flex-col items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-4"
+      className="bu-press bu-glass-soft flex flex-col items-center gap-1 rounded-xl px-1.5 py-2.5 sm:gap-2 sm:rounded-2xl sm:px-3 sm:py-4"
     >
-      <span
-        className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
-          tone === 'dark' ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-800'
-        }`}
-      >
-        <Icon className="h-5 w-5" />
+      <span className={`flex h-9 w-9 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl ${well}`}>
+        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
       </span>
-      <span className="text-xs font-semibold text-neutral-950">{label}</span>
+      <span className="text-center text-[10px] font-semibold leading-tight text-neutral-950 sm:text-xs">
+        {label}
+      </span>
     </button>
   )
 }
@@ -40,12 +50,17 @@ export function ModeIconRow({
   columns?: 2 | 3
   children: ReactNode
 }) {
-  return <div className={`grid gap-3 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>{children}</div>
+  return (
+    <div className={`grid gap-2 sm:gap-3 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      {children}
+    </div>
+  )
 }
 
 export function ModeWalletHero({
   title,
   balanceLabel,
+  balanceValue,
   balanceVisible,
   onToggleBalance,
   subtitle,
@@ -54,7 +69,8 @@ export function ModeWalletHero({
   children,
 }: {
   title: string
-  balanceLabel: string
+  balanceLabel?: string
+  balanceValue?: number | null
   balanceVisible: boolean
   onToggleBalance: () => void
   subtitle?: string
@@ -63,16 +79,24 @@ export function ModeWalletHero({
   children?: ReactNode
 }) {
   return (
-    <div className="sticky top-0 z-30 bg-white px-4 pb-3 pt-4">
-      <div className="bu-rise overflow-hidden rounded-[32px] bg-neutral-950 text-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
+    <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-4 backdrop-blur-xl">
+      <div className="bu-rise bu-wallet-hero overflow-hidden rounded-[32px] text-white">
         <div className="px-5 pb-5 pt-5">
           <p className="text-center text-sm font-medium text-white/80">{title}</p>
           <div className="mt-6 flex flex-col items-center">
-            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium">ɃU</span>
+            <span className="bu-glass-dark rounded-full px-3 py-1 text-xs font-medium">ɃU</span>
             <div className="mt-3 flex items-center gap-2">
-              <p className="bu-balance text-4xl font-semibold tracking-tight">
-                {balanceVisible ? balanceLabel : 'Ƀ ••••••'}
-              </p>
+              {balanceValue !== undefined ? (
+                <RollingBalance
+                  value={balanceValue}
+                  visible={balanceVisible}
+                  className="bu-balance text-4xl font-semibold tracking-tight text-white"
+                />
+              ) : (
+                <p className="bu-balance text-4xl font-semibold tracking-tight">
+                  {balanceVisible ? balanceLabel : 'Ƀ ••••••'}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={onToggleBalance}
@@ -108,7 +132,7 @@ export function ModeHeroAction({
     <button
       type="button"
       onClick={onClick}
-      className="bu-press flex h-12 w-12 items-center justify-center rounded-full bg-white/10"
+      className="bu-press bu-glass-dark flex h-12 w-12 items-center justify-center rounded-full"
       aria-label={label}
     >
       <Icon className="h-5 w-5" />
@@ -130,13 +154,13 @@ export function ModeListRow({
   onClick?: () => void
 }) {
   const tone =
-    amountTone === 'credit' ? 'text-emerald-600' : amountTone === 'debit' ? 'text-rose-600' : 'text-neutral-950'
+    amountTone === 'credit' ? 'bu-credit' : amountTone === 'debit' ? 'bu-debit' : 'text-neutral-950'
   const Comp = onClick ? 'button' : 'div'
   return (
     <Comp
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`flex w-full items-start justify-between gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left ${
+      className={`flex w-full items-start justify-between gap-3 rounded-2xl px-4 py-3 text-left bu-glass-soft ${
         onClick ? 'bu-press' : ''
       }`}
     >
@@ -159,7 +183,7 @@ export function ModeSegmented({
   onChange: (id: string) => void
 }) {
   return (
-    <div className="flex gap-1 rounded-[20px] border border-neutral-200 bg-neutral-100 p-1">
+    <div className="bu-glass flex gap-1 rounded-[20px] p-1">
       {options.map((option) => {
         const active = option.id === value
         return (
@@ -168,7 +192,7 @@ export function ModeSegmented({
             type="button"
             onClick={() => onChange(option.id)}
             className={`bu-press flex-1 rounded-[16px] px-3 py-2.5 text-xs font-semibold transition ${
-              active ? 'bg-neutral-950 text-white shadow-sm' : 'text-neutral-600'
+              active ? 'bu-nav-active' : 'text-neutral-600 hover:bg-white/40'
             }`}
           >
             {option.label}

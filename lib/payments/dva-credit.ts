@@ -123,23 +123,58 @@ async function creditDedicatedNubanRow(
   }
 
   const db = createDataClient()
+  const ledgerMeta = {
+    ...meta,
+    reference,
+    move_id: reference,
+    kind: 'deposit',
+    channel: 'dedicated_nuban',
+    account_number: resolved.accountNumber || null,
+    customer_code: resolved.customerCode || null,
+    paystack_amount_kobo: amountKobo,
+    paystack_fees: charge.fees ?? data.fees ?? null,
+    direction: 'credit',
+    requested_type: 'deposit',
+    description: 'Bank transfer top-up',
+  }
+
+  // Claim the Paystack reference in the ledger first so concurrent sync/webhook
+  // calls cannot credit the same transfer twice (unique user_id+reference).
+  const claim = await db
+    .from('bu_wallet_ledger')
+    .insert({
+      user_id: userId,
+      direction: 'credit',
+      type: 'deposit',
+      naira: creditNaira,
+      description: 'Bank transfer top-up',
+      reference,
+      metadata: ledgerMeta,
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (claim.error) {
+    if (/unique|duplicate/i.test(claim.error.message)) {
+      return { already_credited: true, userId, amount: creditNaira, reference }
+    }
+    if (!/schema cache|does not exist|could not find the table/i.test(claim.error.message)) {
+      throw new ApiError(500, 'LEDGER_CLAIM_FAILED', claim.error.message)
+    }
+  } else if (!claim.data) {
+    // ignoreDuplicates / empty return — treat as already claimed
+    if (await walletHasReference(userId, reference)) {
+      return { already_credited: true, userId, amount: creditNaira, reference }
+    }
+  }
+
   await moveLiveWallet(db, {
     userId,
     naira: creditNaira,
     direction: 'credit',
     type: 'deposit',
     description: 'Bank transfer top-up',
-    metadata: {
-      ...meta,
-      reference,
-      move_id: reference,
-      kind: 'deposit',
-      channel: 'dedicated_nuban',
-      account_number: resolved.accountNumber || null,
-      customer_code: resolved.customerCode || null,
-      paystack_amount_kobo: amountKobo,
-      paystack_fees: charge.fees ?? data.fees ?? null,
-    },
+    metadata: ledgerMeta,
   })
 
   return { already_credited: false, userId, amount: creditNaira, reference }

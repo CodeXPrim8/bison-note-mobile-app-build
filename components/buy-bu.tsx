@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowRight, Check, Copy, Share2 } from 'lucide-react'
 import { WalletPageSummary } from '@/components/wallet-summary'
-import { useAccount, WALLET_PULSE_EVENT } from '@/components/account-store'
+import { useAccount } from '@/components/account-store'
 import {
   BU_BUY_PRESETS,
   BU_MIN_PURCHASE,
@@ -124,7 +124,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
           const total = credited.reduce((sum, row) => sum + Number(row.amount || 0), 0)
           setSyncNote(`+₦${total.toLocaleString('en-NG')} credited to your wallet`)
           await refreshWallet()
-          window.dispatchEvent(new Event(WALLET_PULSE_EVENT))
+          // Account store pulse already fires once when the balance changes — don't double-dispatch.
         }
       } catch {
         // Keep polling; Paystack can lag a few seconds after OPay shows success.
@@ -223,7 +223,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
 
   if (fundMode === 'bank') {
     return (
-      <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+      <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
         <div className="px-4">
           <WalletPageSummary
             kicker="Fund"
@@ -307,7 +307,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
 
   if (step === 'conversion') {
     return (
-      <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+      <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
         <div className="px-4">
           <WalletPageSummary
             kicker="Fund"
@@ -436,7 +436,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   }
 
   return (
-    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
         <WalletPageSummary kicker="Fund" title="Checkout" detail="Paystack uses the email saved on this account." />
         <div className="mb-4 mt-6">

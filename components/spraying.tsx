@@ -29,7 +29,7 @@ export default function Spraying({ onNavigate }: SprayingProps) {
   }
 
   return (
-    <div className="space-y-4 bg-white px-4 pb-28 pt-4 text-neutral-950">
+    <div className="space-y-4 bg-transparent px-4 pb-28 pt-4 text-neutral-950">
       <div>
         <h2 className="text-xl font-bold">Spray & Tips</h2>
         <p className="mt-1 text-sm text-neutral-500">

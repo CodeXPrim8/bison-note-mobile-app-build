@@ -10,6 +10,7 @@ import { useAccount, useWalletPulse } from '@/components/account-store'
 import { AdSlot } from '@/components/web/ad-slot'
 import { WalletPageSummary } from '@/components/wallet-summary'
 import { amountIconTone, amountTone, historyLabel, walletDirection, type WalletDirection } from '@/lib/wallet/direction'
+import { SignedBu } from '@/components/signed-bu'
 import {
   BU_BUY_PRESETS,
   BU_MIN_PURCHASE,
@@ -138,7 +139,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
   }
 
   return (
-    <div className="space-y-6 bg-white px-4 pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent px-4 pb-28 pt-4 text-neutral-950">
       <WalletPageSummary
         kicker="Your Wallet"
         title={buBalance == null ? 'ɃU' : `Ƀ ${formatBu(buBalance)}`}
@@ -246,9 +247,9 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
               <div className="flex items-center gap-3">
                 <div className={`rounded-full p-2 ${amountIconTone(tx.direction)}`}>
                   {credit ? (
-                    <ArrowDown className="h-4 w-4 text-green-500" />
+                    <ArrowDown className="h-4 w-4 bu-credit" />
                   ) : (
-                    <ArrowUp className="h-4 w-4 text-red-500" />
+                    <ArrowUp className="h-4 w-4 bu-debit" />
                   )}
                 </div>
                 <div>
@@ -257,9 +258,9 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                 </div>
               </div>
               <span className={`font-semibold ${amountTone(tx.direction)}`}>
-                {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(tx.amount))}
+                <SignedBu amountBu={buFromNaira(tx.amount)} direction={tx.direction} />
                 <span className="block text-xs font-normal text-muted-foreground">
-                  {credit ? '+' : '-'}₦{formatNairaPlain(tx.amount)}
+                  {credit ? '+' : '−'}₦{formatNairaPlain(tx.amount)}
                 </span>
               </span>
             </Card>

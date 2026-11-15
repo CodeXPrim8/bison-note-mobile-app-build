@@ -12,7 +12,6 @@ import VendorPOS from '@/components/vendor-pos'
 import QRScanner from '@/components/qr-scanner'
 import Navigation from '@/components/navigation'
 import ModeSwitcher from '@/components/mode-switcher'
-import ThemeSelector from '@/components/theme-selector'
 import CelebrantDashboard from '@/components/celebrant-dashboard'
 import BuyBU from '@/components/buy-bu'
 import History from '@/components/history'
@@ -165,10 +164,8 @@ function MobileAppShell() {
     <div className={guestChrome ? 'bu-user-shell min-h-screen' : `${theme} min-h-screen bg-background text-foreground`}>
       <div className="mx-auto max-w-md">
         {!hideTopBar && (
-        <div className="sticky top-0 z-40 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 backdrop-blur">
-          <span className="w-8" aria-hidden />
+        <div className="sticky top-0 z-40 flex items-center justify-center border-b border-white/70 bg-white/55 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,1)] backdrop-blur-2xl">
           <h1 className="text-lg font-bold capitalize text-neutral-950">{title}</h1>
-          <ThemeSelector theme={theme} onThemeChange={setTheme} />
         </div>
         )}
 

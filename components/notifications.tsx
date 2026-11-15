@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Bell } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { formatEventDateTime } from '@/lib/datetime'
-import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { buFromNaira, formatNairaPlain } from '@/lib/bu-rate'
+import { SignedBu } from '@/components/signed-bu'
 import { useAccount, useWalletPulse } from '@/components/account-store'
 import {
   amountIconTone,
@@ -121,9 +122,9 @@ export default function Notifications() {
                       </div>
                     </div>
                     <span className={`shrink-0 text-right font-semibold ${amountTone(alert.direction)}`}>
-                      {credit ? '+' : '-'}Ƀ {formatBu(buFromNaira(alert.amount))}
+                      <SignedBu amountBu={buFromNaira(alert.amount)} direction={alert.direction} />
                       <span className="block text-xs font-normal text-muted-foreground">
-                        {credit ? '+' : '-'}₦{formatNairaPlain(alert.amount)}
+                        {credit ? '+' : '−'}₦{formatNairaPlain(alert.amount)}
                       </span>
                     </span>
                   </div>

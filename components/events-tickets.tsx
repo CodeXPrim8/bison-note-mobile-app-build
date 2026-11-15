@@ -59,7 +59,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   })
 
   return (
-    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
         <h2 className="mb-4 text-lg font-semibold">Upcoming events</h2>
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">

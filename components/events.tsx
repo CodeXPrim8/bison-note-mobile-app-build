@@ -148,7 +148,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
 
   if (mode === 'vendor') {
     return (
-      <div className="space-y-4 bg-white pb-4 text-neutral-950">
+      <div className="space-y-4 bg-transparent pb-4 text-neutral-950">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-neutral-950">Manage events</h2>
           <button
@@ -303,7 +303,7 @@ export default function Events({ mode, onSelectEvent, onCreateEvent }: EventsPro
 
   // Guest mode - Event browser
   return (
-    <div className="space-y-6 bg-white pb-28 pt-4 text-neutral-950">
+    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
         <h2 className="mb-4 text-lg font-semibold">Available events</h2>
 
