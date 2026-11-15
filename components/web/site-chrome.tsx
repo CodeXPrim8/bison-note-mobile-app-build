@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { AffiliateCapture } from '@/components/web/affiliate-capture'
 import { AdSlot } from '@/components/web/ad-slot'
+import { IconBuMark } from '@/components/web/bu-icons'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 interface MeResponse {
@@ -41,51 +41,52 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/80 bg-background/90 backdrop-blur">
+    <header className="bu-site-header">
       <AffiliateCapture />
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            B
+        <Link href="/" className="flex items-center gap-2.5 text-white">
+          <span className="bu-site-mark">
+            <IconBuMark className="h-5 w-5" />
           </span>
-          <span className="text-lg font-bold tracking-tight">Ƀucks</span>
+          <span className="bu-site-display text-lg font-bold tracking-tight">Ƀucks</span>
         </Link>
-        <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
-          <Link href="/events" className="hover:text-foreground">
+        <nav className="hidden items-center gap-6 text-sm text-white/65 md:flex">
+          <Link href="/events" className="transition-colors hover:text-white">
             Events
           </Link>
-          <Link href="/organizer" className="hover:text-foreground">
+          <Link href="/organizer" className="transition-colors hover:text-white">
             Organisers
           </Link>
-          <Link href="/affiliate" className="hover:text-foreground">
+          <Link href="/affiliate" className="transition-colors hover:text-white">
             {isAffiliate ? 'Affiliate desk' : 'Affiliate'}
           </Link>
-          <Link href="/gateway" className="hover:text-foreground">
+          <Link href="/gateway" className="transition-colors hover:text-white">
             Gateway
-          </Link>
-          <Link href="/gateway/docs" className="hover:text-foreground">
-            Docs
           </Link>
         </nav>
         <div className="flex items-center gap-2">
           {signedIn ? (
             <>
-              <span className="hidden max-w-[10rem] truncate text-sm text-muted-foreground sm:inline">{name}</span>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/app">Open Ƀucks</Link>
-              </Button>
-              <Button size="sm" variant="outline" onClick={logout}>
+              <span className="hidden max-w-[10rem] truncate text-sm text-white/55 sm:inline">{name}</span>
+              <Link href="/app" className="bu-site-btn bu-site-btn-primary !px-3.5 !py-2 text-sm">
+                Open Ƀucks
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="bu-site-btn bu-site-btn-ghost !px-3.5 !py-2 text-sm"
+              >
                 Log out
-              </Button>
+              </button>
             </>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/login?next=/app">Open Ƀucks</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href="/login">Sign in</Link>
-              </Button>
+              <Link href="/login" className="hidden text-sm font-semibold text-white/70 sm:inline hover:text-white">
+                Sign in
+              </Link>
+              <Link href="/login?next=/app" className="bu-site-btn bu-site-btn-primary !px-3.5 !py-2 text-sm">
+                Open Ƀucks
+              </Link>
             </>
           )}
         </div>
@@ -99,18 +100,30 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/80 py-10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 md:flex-row md:items-center md:justify-between">
+    <footer className="bu-site-footer">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="font-bold">Ƀucks</p>
-          <p className="text-sm text-muted-foreground">Create events. Sell tickets. Celebrate with Ƀucks.</p>
+          <p className="bu-site-display text-2xl font-bold tracking-tight text-white">Ƀucks</p>
+          <p className="mt-2 max-w-sm text-sm text-white/55">
+            The digital voucher for African nights — celebrate, send ɃU, redeem. Coming to App Store and Google Play.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <Link href="/events">Discover events</Link>
-          <Link href="/organizer/events/create">Create event</Link>
-          <Link href="/affiliate">Affiliate</Link>
-          <Link href="/gateway">Gateway</Link>
-          <Link href="/app">Mobile app</Link>
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-white/55">
+          <Link href="/events" className="hover:text-white">
+            Events
+          </Link>
+          <Link href="/organizer/events/create" className="hover:text-white">
+            Create event
+          </Link>
+          <Link href="/affiliate" className="hover:text-white">
+            Affiliate
+          </Link>
+          <Link href="/gateway" className="hover:text-white">
+            Gateway
+          </Link>
+          <Link href="/app" className="hover:text-white">
+            App
+          </Link>
         </div>
       </div>
     </footer>

@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { DM_Sans, Geist_Mono, Syne } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { BU_SITE_DESCRIPTION, BU_SITE_NAME, BU_SITE_TITLE } from '@/lib/brand'
+import {
+  BU_BRAND_NAVY_DEEP,
+  BU_SITE_DESCRIPTION,
+  BU_SITE_NAME,
+  BU_SITE_TITLE,
+} from '@/lib/brand'
 import { getAppUrl } from '@/lib/env'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'] })
+const syne = Syne({ subsets: ['latin'], variable: '--font-bu-display', display: 'swap' })
+const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-bu-body', display: 'swap' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 function siteUrl() {
@@ -48,10 +54,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: light)', color: BU_BRAND_NAVY_DEEP },
+    { media: '(prefers-color-scheme: dark)', color: BU_BRAND_NAVY_DEEP },
   ],
-  colorScheme: 'light',
+  colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -63,10 +69,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="theme-pink" style={{ backgroundColor: '#ffffff' }}>
+    <html
+      lang="en"
+      className={`${syne.variable} ${dmSans.variable}`}
+      style={{ backgroundColor: BU_BRAND_NAVY_DEEP }}
+    >
       <body
-        className={`${geist.className} ${geistMono.variable} font-sans antialiased`}
-        style={{ backgroundColor: '#ffffff' }}
+        className={`${dmSans.className} ${geistMono.variable} font-sans antialiased`}
+        style={{ backgroundColor: BU_BRAND_NAVY_DEEP }}
       >
         {children}
         <Analytics />
