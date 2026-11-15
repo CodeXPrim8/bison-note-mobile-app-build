@@ -79,9 +79,9 @@ export function ModeWalletHero({
   children?: ReactNode
 }) {
   return (
-    <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-4 backdrop-blur-xl">
-      <div className="bu-rise bu-wallet-hero overflow-hidden rounded-[32px] text-white">
-        <div className="px-5 pb-5 pt-5">
+    <div className="sticky top-0 z-30 bg-transparent pb-3 backdrop-blur-xl">
+      <div className="bu-rise bu-wallet-hero bu-wallet-hero-bleed overflow-hidden text-white">
+        <div className="px-5 pb-5 pt-3 sm:pt-5">
           <p className="text-center text-sm font-medium text-white/80">{title}</p>
           <div className="mt-6 flex flex-col items-center">
             <span className="bu-glass-dark rounded-full px-3 py-1 text-xs font-medium">ɃU</span>

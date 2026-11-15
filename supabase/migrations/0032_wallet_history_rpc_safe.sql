@@ -229,7 +229,7 @@ begin
           'type', 'withdrawal',
           'amount', w.naira,
           'naira', w.naira,
-          'description', 'Sent to ' || coalesce(w.bank_name, 'bank'),
+          'description', 'Sent to ' || coalesce(nullif(w.bank_name, ''), 'bank'),
           'created_at', coalesce(w.created_at, w.reviewed_at),
           'reference', coalesce(w.id::text, w.paystack_reference),
           'metadata', jsonb_build_object(
@@ -237,8 +237,10 @@ begin
             'status', w.status,
             'kind', 'bank_send',
             'requested_type', 'withdrawal',
-            'move_id', w.id::text
+            'move_id', w.id::text,
+            'to_name', coalesce(nullif(w.bank_name, ''), 'bank')
           ),
+          'counterparty', coalesce(nullif(w.bank_name, ''), 'bank'),
           'direction', 'debit',
           'status', w.status
         ) as entry

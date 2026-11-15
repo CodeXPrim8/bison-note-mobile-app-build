@@ -22,6 +22,7 @@ import ReceiveBU from '@/components/receive-bu'
 import EventInfo from '@/components/event-info'
 import MyTickets from '@/components/my-tickets'
 import { AccountProvider } from '@/components/account-store'
+import { NotchAlert } from '@/components/notch-alert'
 
 function ticketIdFromPageData(pageData: unknown) {
   if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
@@ -162,9 +163,13 @@ function MobileAppShell() {
 
   return (
     <div className={guestChrome ? 'bu-user-shell min-h-screen' : `${theme} min-h-screen bg-background text-foreground`}>
+      <NotchAlert />
       <div className="mx-auto max-w-md">
         {!hideTopBar && (
-        <div className="sticky top-0 z-40 flex items-center justify-center border-b border-white/70 bg-white/55 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,1)] backdrop-blur-2xl">
+        <div
+          className="sticky top-0 z-40 flex items-center justify-center border-b border-white/70 bg-white/55 px-4 pb-3 shadow-[inset_0_1px_0_rgba(255,255,255,1)] backdrop-blur-2xl"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+        >
           <h1 className="text-lg font-bold capitalize text-neutral-950">{title}</h1>
         </div>
         )}

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BU_SITE_DESCRIPTION, BU_SITE_NAME, BU_SITE_TITLE } from '@/lib/brand'
@@ -12,11 +12,26 @@ function siteUrl() {
   return getAppUrl()
 }
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#142a56' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1733' },
+  ],
+}
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: BU_SITE_TITLE,
   description: BU_SITE_DESCRIPTION,
   applicationName: BU_SITE_NAME,
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: BU_SITE_NAME,
+  },
   icons: {
     icon: [
       { url: '/apple-icon.png', type: 'image/png', sizes: '180x180' },
@@ -48,7 +63,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="theme-pink">
-      <body className={`${geist.className} ${geistMono.variable} font-sans antialiased`}>
+      <body className={`${geist.className} ${geistMono.variable} min-h-dvh overflow-x-hidden bg-white font-sans antialiased`}>
         {children}
         <Analytics />
       </body>

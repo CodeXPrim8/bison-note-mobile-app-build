@@ -51,15 +51,15 @@ export async function transferBu(input: {
       ? `Tip to ${toName}`
       : 'Tip'
     : toName
-      ? `BU transfer to ${toName}`
-      : 'BU transfer'
+      ? `Sent ɃU to ${toName}`
+      : 'Sent ɃU'
   const creditDescription = input.isTip
     ? fromName
       ? `Tip received from ${fromName}`
       : 'Tip received'
     : fromName
-      ? `BU received from ${fromName}`
-      : 'BU received'
+      ? `Received ɃU from ${fromName}`
+      : 'Received ɃU'
   const moveId = crypto.randomUUID()
   const sharedMeta = { ...meta, move_id: moveId }
   await moveLiveWallet(db, {

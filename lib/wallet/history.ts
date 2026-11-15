@@ -177,9 +177,17 @@ function saleDescription(row: Record<string, unknown>) {
   const kind = kindOf(row)
   const meta = rowMeta(row)
   if (typeof meta.description === 'string' && meta.description.trim()) return meta.description.trim()
-  if (kind === 'wallet_debit') return typeof meta.to_name === 'string' && meta.to_name ? `BU transfer to ${meta.to_name}` : 'BU transfer'
+  if (kind === 'wallet_debit') {
+    if (meta.kind === 'bank_send') {
+      const bank = typeof meta.bank_name === 'string' && meta.bank_name.trim() ? meta.bank_name.trim() : 'bank'
+      return `Sent to ${bank}`
+    }
+    return typeof meta.to_name === 'string' && meta.to_name ? `Sent ɃU to ${meta.to_name}` : 'Sent ɃU'
+  }
   if (kind === 'wallet_credit') {
-    return typeof meta.from_name === 'string' && meta.from_name ? `BU received from ${meta.from_name}` : 'BU received'
+    return typeof meta.from_name === 'string' && meta.from_name
+      ? `Received ɃU from ${meta.from_name}`
+      : 'Received ɃU'
   }
   if (row.description && kind !== 'wallet_debit' && kind !== 'wallet_credit') return String(row.description)
   if (kind === 'affiliate_commission') return 'Affiliate commission'
@@ -229,7 +237,7 @@ function fromSale(row: Record<string, unknown>): WalletHistoryItem {
     status: 'completed',
     reference: typeof rowMeta(row).move_id === 'string' ? String(rowMeta(row).move_id) : reference,
     direction,
-    bucket: historyBucket({ type, description: rawDescription }),
+    bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
     counterparty: partyOf(rowMeta(row), direction) || partyFromDescription(rawDescription, direction),
     counterpartyUserId: partyUserIdOf(rowMeta(row), direction),
     note: noteOf(rowMeta(row)),
@@ -265,7 +273,7 @@ function fromTx(row: Record<string, unknown>): WalletHistoryItem {
     status: String(row.status ?? 'completed'),
     reference: typeof meta.move_id === 'string' ? String(meta.move_id) : reference,
     direction,
-    bucket: historyBucket({ type, description: rawDescription }),
+    bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
     counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
     counterpartyUserId:
       partyUserIdOf(meta, direction) ||
@@ -301,7 +309,7 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
     status: 'completed',
     reference,
     direction,
-    bucket: historyBucket({ type: resolvedType, description: rawDescription }),
+    bucket: historyBucket({ type: resolvedType, description: rawDescription, metadata: meta }),
     counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
     counterpartyUserId: partyUserIdOf(meta, direction),
     note: noteOf(meta),
@@ -309,9 +317,9 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
 }
 
 function fromWithdrawal(row: Record<string, unknown>): WalletHistoryItem {
-  const bank = String(row.bank_name ?? 'bank')
+  const bank = String(row.bank_name ?? 'bank').trim() || 'bank'
   const statusRaw = String(row.status ?? 'completed')
-  const description = `Withdrawal to ${bank}`
+  const description = `Sent to ${bank}`
   const status =
     statusRaw === 'paid' || statusRaw === 'completed'
       ? 'completed'
@@ -325,9 +333,16 @@ function fromWithdrawal(row: Record<string, unknown>): WalletHistoryItem {
     description,
     created_at: String(row.created_at ?? row.reviewed_at ?? ''),
     status,
-    reference: typeof row.paystack_reference === 'string' ? row.paystack_reference : null,
+    reference:
+      typeof row.paystack_reference === 'string'
+        ? row.paystack_reference
+        : typeof row.id === 'string'
+          ? row.id
+          : null,
     direction: 'debit',
     bucket: 'withdrawal',
+    counterparty: bank,
+    note: null,
   }
 }
 
@@ -415,7 +430,7 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
     status: String(row.status ?? 'completed'),
     reference,
     direction,
-    bucket: historyBucket({ type, description: rawDescription }),
+    bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
     counterparty,
     counterpartyUserId:
       partyUserIdOf(meta, direction) ||
@@ -428,61 +443,42 @@ export async function listWalletHistory(userId: string, limit = 200): Promise<Wa
   if (!userId) return []
   const db = tryCreateAdminClient() ?? createDataClient()
 
+  // Prefer the RPC, but always merge table sources so BU→BU and bank sends
+  // still appear when the RPC is partial or outdated.
   const rpc = await db.rpc('bu_list_user_wallet_history', { p_user_id: userId, p_limit: limit })
-  if (!rpc.error) {
-    const rows = asRows(rpc.data).map(fromRpcRow)
-    if (rows.length) {
-      const merged = mergeHistory(rows).slice(0, limit)
-      return enrichCounterparties(db, merged)
-    }
-  }
+  const rpcRows = !rpc.error ? asRows(rpc.data).map(fromRpcRow) : []
 
-  const saleTable = await db
-    .from('bu_sale_credits')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  const [saleTable, txs, ledger, withdrawals, pays] = await Promise.all([
+    db.from('bu_sale_credits').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+    db.from('bu_transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+    db.from('bu_wallet_ledger').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+    db.from('bu_withdrawals').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+    db.from('payments').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+  ])
+
   let sales = !saleTable.error ? ((saleTable.data ?? []) as Array<Record<string, unknown>>).map(fromSale) : []
   if (!sales.length) {
-    const rpc = await db.rpc('bu_list_wallet_history', { p_user_id: userId, p_limit: limit })
-    sales = !rpc.error ? asRows(rpc.data).map(fromSale) : []
+    const saleRpc = await db.rpc('bu_list_wallet_history', { p_user_id: userId, p_limit: limit })
+    sales = !saleRpc.error ? asRows(saleRpc.data).map(fromSale) : []
     if (!sales.length) {
       sales = (await listSaleCredits(userId, limit)).map(fromSale)
     }
   }
-  const txs = await db
-    .from('bu_transactions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
+
   const extra = txs.error ? [] : ((txs.data ?? []) as Array<Record<string, unknown>>).map(fromTx)
-  const ledger = await db
-    .from('bu_wallet_ledger')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
   const ledgers = ledger.error ? [] : ((ledger.data ?? []) as Array<Record<string, unknown>>).map(fromLedger)
-  const withdrawals = await db
-    .from('bu_withdrawals')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
   const withdrawn = withdrawals.error
     ? []
     : ((withdrawals.data ?? []) as Array<Record<string, unknown>>).map(fromWithdrawal)
-  const pays = await db
-    .from('payments')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
   const funded = pays.error
     ? []
-    : ((pays.data ?? []) as Array<Record<string, unknown>>).map(fromPayment).filter((row): row is WalletHistoryItem => Boolean(row))
-  const merged = mergeHistory([...sales, ...extra, ...ledgers, ...withdrawn, ...funded]).slice(0, limit)
+    : ((pays.data ?? []) as Array<Record<string, unknown>>)
+        .map(fromPayment)
+        .filter((row): row is WalletHistoryItem => Boolean(row))
+
+  const merged = mergeHistory([...rpcRows, ...sales, ...extra, ...ledgers, ...withdrawn, ...funded]).slice(
+    0,
+    limit,
+  )
   return enrichCounterparties(db, merged)
 }

@@ -84,24 +84,51 @@ export function walletDirection(input: {
   return 'credit'
 }
 
-export function historyBucket(input: { type?: string | null; description?: string | null }): HistoryBucket {
+export function historyBucket(input: {
+  type?: string | null
+  description?: string | null
+  metadata?: unknown
+}): HistoryBucket {
   const type = String(input.type ?? '').toLowerCase()
   const desc = String(input.description ?? '').toLowerCase()
+  const meta = asMeta(input.metadata)
+  const metaKind = String(meta.kind ?? meta.requested_type ?? '').toLowerCase()
+
   if (type === 'purchase' || type === 'ticket_purchase' || /ticket purchase|bought ticket/.test(desc)) {
     return 'purchase'
   }
   if (/event spray credit/.test(desc)) return 'topup'
+
+  // Bank sends first — "Sent to GTBank" must not be treated as a peer ɃU transfer
+  if (
+    type === 'withdrawal' ||
+    metaKind === 'bank_send' ||
+    metaKind === 'withdrawal' ||
+    /withdraw|send to bank|^sent to\s+|^withdrawal to\s+/.test(desc)
+  ) {
+    // Peer transfer descriptions that were stored with type=withdrawal still count as transfers
+    if (/bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b/.test(desc)) {
+      return 'bu_transfer'
+    }
+    return 'withdrawal'
+  }
+
   if (
     type === 'spray' ||
     type === 'spray_credit' ||
     type === 'bu_transfer' ||
     type === 'wallet_debit' ||
     type === 'wallet_credit' ||
-    /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|tip/.test(desc)
+    metaKind === 'transfer' ||
+    metaKind === 'tip' ||
+    metaKind === 'spray' ||
+    /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b|tip to |tip received|tip sent/.test(
+      desc,
+    )
   ) {
     return 'bu_transfer'
   }
-  if (type === 'withdrawal' || /withdraw|send to bank/.test(desc)) return 'withdrawal'
+
   return 'topup'
 }
 
@@ -115,12 +142,16 @@ export function historyLabel(input: {
   const type = String(input.type ?? '').toLowerCase()
   const credit = input.direction === 'credit'
 
-  if (/bank transfer top-up|wallet top-?up/i.test(desc) || type === 'deposit') {
+  if (/bank transfer top-up|wallet top-?up/i.test(desc) || (type === 'deposit' && !/sent|received|transfer|tip/i.test(desc))) {
     return 'Bank transfer top-up'
   }
-  if (/^withdrawal to /i.test(desc)) return desc
+  if (/^withdrawal to /i.test(desc)) {
+    const bank = desc.replace(/^withdrawal to\s+/i, '').trim()
+    return bank ? `Sent to ${bank}` : 'Send to bank'
+  }
+  if (/^sent to /i.test(desc)) return desc
   if (type === 'withdrawal' || /send to bank/i.test(desc)) {
-    return desc && !/^send to bank$/i.test(desc) ? desc : 'Send to bank'
+    return desc && !/^send to bank$/i.test(desc) && !/^withdrawal$/i.test(desc) ? desc : 'Send to bank'
   }
 
   if (/^bu transfer/i.test(desc) || /^sent Ƀu|^sent bu/i.test(desc)) {

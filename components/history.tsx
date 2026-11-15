@@ -112,7 +112,9 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
     description: labeled,
     status: statusRaw,
     direction,
-    bucket: (tx.bucket as HistoryBucket | undefined) || historyBucket({ type, description: rawDescription }),
+    bucket:
+      (tx.bucket as HistoryBucket | undefined) ||
+      historyBucket({ type, description: rawDescription, metadata: tx.metadata }),
     reference: typeof tx.reference === 'string' ? tx.reference : null,
     counterparty,
     note: typeof tx.note === 'string' ? tx.note : typeof meta.note === 'string' ? meta.note : null,
@@ -140,17 +142,28 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
 }
 
 function activityTitle(tx: Transaction) {
-  // Always prefer the direction-aware label so credit/debit text matches the sign.
-  return tx.description || partyFromLabel(tx.description) || 'ɃU movement'
+  if (tx.bucket === 'withdrawal') {
+    return tx.description || (tx.counterparty ? `Sent to ${tx.counterparty}` : 'Send to bank')
+  }
+  if (tx.counterparty) {
+    if (tx.direction === 'credit') {
+      if (/^received Ƀu|^tip received/i.test(tx.description)) return tx.description
+      return `Received ɃU from ${tx.counterparty}`
+    }
+    if (/^sent Ƀu|^tip (sent )?to/i.test(tx.description)) return tx.description
+    return `Sent ɃU to ${tx.counterparty}`
+  }
+  return tx.description || 'ɃU movement'
 }
 
 function normalizeRows(rows: Transaction[]) {
   return rows.map((row) => {
     const direction = row.direction ?? walletDirection(row)
+    const bucket = row.bucket ?? historyBucket(row)
     return {
       ...row,
       direction,
-      bucket: row.bucket ?? historyBucket(row),
+      bucket,
       description: historyLabel({ ...row, direction }),
     }
   })
