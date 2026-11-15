@@ -80,7 +80,7 @@ export default function ReceiveBU({ initialIntent }: { initialIntent?: 'tip' | '
         setQrImage(image)
       })
       .catch(() => undefined)
-    fetch('/api/wallet', { credentials: 'include' })
+    fetch('/api/wallet?history=1&limit=20', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {

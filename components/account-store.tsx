@@ -6,7 +6,7 @@ import { bindAccountSnapshots, clearAccountSnapshots } from '@/lib/session-snaps
 
 const CACHE_KEY = 'bu_account_snapshot_v2'
 export const WALLET_PULSE_EVENT = 'bu-wallet-changed'
-const PULSE_MS = 700
+const PULSE_MS = 3500
 
 type AccountSnapshot = {
   userId: string
@@ -69,7 +69,7 @@ function writeCache(snapshot: AccountSnapshot) {
 }
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
-  const [snapshot, setSnapshot] = useState<AccountSnapshot>(emptySnapshot)
+  const [snapshot, setSnapshot] = useState<AccountSnapshot>(() => readCache() ?? emptySnapshot)
 
   const ingestWallet = useCallback((wallet: { bu_balance?: unknown; naira_available?: unknown }) => {
     const naira = Number(wallet.naira_available)
@@ -87,7 +87,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const refreshWallet = useCallback(async () => {
     spendHoldUntil.current = 0
     try {
-      const res = await fetch('/api/wallet', { credentials: 'include' })
+      // Balance only — skip history so refreshes stay fast.
+      const res = await fetch('/api/wallet?history=0', { credentials: 'include', cache: 'no-store' })
       const json = await res.json()
       if (!json.status || !json.data?.wallet) return
       ingestWallet(json.data.wallet)
@@ -242,7 +243,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
     }
     void syncBankTopUps()
-    const syncTimer = window.setInterval(() => void syncBankTopUps(), 1500)
+    const syncTimer = window.setInterval(() => void syncBankTopUps(), 12000)
 
     return () => {
       stopped = true

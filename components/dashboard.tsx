@@ -24,7 +24,6 @@ import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 import { RollingBalance } from '@/components/rolling-balance'
 import { SignedBu } from '@/components/signed-bu'
-import { fireAlertNeon } from '@/components/notch-alert'
 
 interface HomeMovement {
   id: string
@@ -77,7 +76,7 @@ function movementFromWallet(tx: Record<string, unknown>, index: number): HomeMov
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [unreadAlerts, setUnreadAlerts] = useState(0)
-  const { greetingName, buBalance, nairaBalance, userId, refreshWallet } = useAccount()
+  const { greetingName, buBalance, nairaBalance, userId } = useAccount()
   const [movements, setMovements] = useState<HomeMovement[]>([])
   const [buId, setBuId] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -91,7 +90,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       if (nextUnread > prev) {
         setAlertNeon(true)
         setNeonKey((key) => key + 1)
-        fireAlertNeon()
       }
       return nextUnread
     })
@@ -111,7 +109,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   useWalletPulse(() => {
     if (!userId) return
-    fetch('/api/wallet', { credentials: 'include', cache: 'no-store' })
+    fetch('/api/wallet?history=1&limit=8', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
@@ -136,7 +134,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         setAvatarUrl(String(profile?.avatar_url || ''))
       })
       .catch(() => undefined)
-    fetch('/api/wallet', { credentials: 'include' })
+    fetch('/api/wallet?history=1&limit=8', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {
@@ -146,22 +144,22 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         applyWalletPayload((json.data?.transactions ?? []) as Array<Record<string, unknown>>)
       })
       .catch(() => setUnreadAlerts(0))
-  }, [userId, refreshWallet])
+  }, [userId])
 
   const initial = (greetingName || 'B').slice(0, 1).toUpperCase()
   const latest = movements[0] ?? null
 
   return (
     <div className="space-y-6 bg-transparent pb-4 text-neutral-950">
-      <div className="sticky top-0 z-30 bg-transparent pb-3 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-3 backdrop-blur-xl">
         <div className="relative">
         {alertNeon ? (
-          <div key={neonKey} className="bu-wallet-neon-ring bu-wallet-neon-ring--bleed" aria-hidden>
+          <div key={neonKey} className="bu-wallet-neon-ring" aria-hidden>
             <div className="bu-wallet-neon-spin" />
           </div>
         ) : null}
-        <div className="bu-wallet-hero bu-wallet-hero-bleed relative z-[1] overflow-hidden text-white">
-          <div className="px-5 pb-5 pt-3 sm:pt-5">
+        <div className="bu-wallet-hero relative z-[1] text-white">
+          <div className="px-5 pb-5 pt-5">
             <div className="flex items-center justify-between">
               <button
                 type="button"

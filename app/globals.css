@@ -4,24 +4,25 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.12 0 0);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.18 0 0);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(0.95 0 0);
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: oklch(0.22 0.02 260);
+  --card: rgba(255, 255, 255, 0.92);
+  --card-foreground: oklch(0.22 0.02 260);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.22 0.02 260);
   --primary: oklch(0.45 0.22 14);
-  --primary-foreground: oklch(0.95 0 0);
-  --secondary: oklch(0.3 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.3 0 0);
-  --muted-foreground: oklch(0.65 0 0);
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.97 0.008 250);
+  --secondary-foreground: oklch(0.22 0.02 260);
+  --muted: oklch(0.97 0.008 250);
+  --muted-foreground: oklch(0.48 0.02 250);
   --accent: oklch(0.45 0.22 14);
-  --accent-foreground: oklch(0.95 0 0);
+  --accent-foreground: #ffffff;
   --destructive: oklch(0.45 0.22 14);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.25 0 0);
-  --input: oklch(0.25 0 0);
+  --destructive-foreground: #ffffff;
+  --border: oklch(0.9 0.01 250);
+  --input: oklch(0.9 0.01 250);
   --ring: oklch(0.45 0.22 14);
   --chart-1: oklch(0.45 0.22 14);
   --chart-2: oklch(0.45 0.22 14);
@@ -211,8 +212,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background-color: #ffffff;
+  }
   body {
     @apply bg-background text-foreground;
+    background-color: #ffffff;
+    min-height: 100dvh;
   }
 }
 
@@ -268,7 +274,6 @@
 
 .bu-user-shell {
   /* Brand: Midnight Navy · Cyber Blue · Cyan · Purple · Magenta */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   --bu-navy: #0b1733;
   --bu-navy-deep: #07101f;
   --bu-navy-mid: #142a56;
@@ -312,7 +317,9 @@
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
-  background:
+  padding-top: env(safe-area-inset-top, 0px);
+  background-color: #ffffff;
+  background-image:
     radial-gradient(120% 70% at 50% -12%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 58%),
     radial-gradient(80% 45% at 100% 8%, rgba(47, 123, 255, 0.05) 0%, transparent 55%),
     radial-gradient(70% 40% at 0% 30%, rgba(34, 224, 255, 0.035) 0%, transparent 50%),
@@ -324,6 +331,9 @@
 
 .bu-wallet-hero {
   position: relative;
+  overflow: hidden;
+  /* Soft continuous curve on all corners — top must not read as a flat edge */
+  border-radius: 2.75rem;
   background:
     radial-gradient(120% 80% at 80% -10%, rgba(47, 123, 255, 0.35) 0%, transparent 55%),
     radial-gradient(90% 60% at 10% 110%, rgba(34, 224, 255, 0.18) 0%, transparent 50%),
@@ -334,103 +344,9 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* Full-bleed wallet under status bar / notch */
-.bu-wallet-hero-bleed {
-  margin-left: 0;
-  margin-right: 0;
-  border-radius: 0 0 28px 28px;
-  padding-top: env(safe-area-inset-top, 0px);
-}
-
-@media (min-width: 448px) {
-  .bu-wallet-hero-bleed {
-    border-radius: 0 0 32px 32px;
-  }
-}
-
-/* Tiny notch / Dynamic Island neon — alert only */
-.bu-notch-neon {
-  pointer-events: none;
-  position: fixed;
-  top: max(6px, calc(env(safe-area-inset-top, 12px) * 0.35));
-  left: 50%;
-  z-index: 80;
-  width: 126px;
-  height: 34px;
-  transform: translateX(-50%);
-  animation: bu-notch-fade 4.2s ease forwards;
-}
-
-.bu-notch-neon__pill {
-  position: absolute;
-  inset: 8px 18px;
-  border-radius: 999px;
-  background: rgba(7, 16, 31, 0.88);
-  box-shadow:
-    0 0 0 1px rgba(34, 224, 255, 0.35),
-    0 0 10px rgba(34, 224, 255, 0.55),
-    0 0 22px rgba(47, 123, 255, 0.35),
-    0 0 36px rgba(255, 45, 149, 0.18);
-}
-
-.bu-notch-neon__glow {
-  position: absolute;
-  inset: -6px -10px;
-  border-radius: 999px;
-  background: radial-gradient(
-    60% 80% at 50% 50%,
-    rgba(34, 224, 255, 0.55) 0%,
-    rgba(47, 123, 255, 0.28) 42%,
-    rgba(255, 45, 149, 0.12) 68%,
-    transparent 78%
-  );
-  filter: blur(6px);
-  opacity: 0.9;
-  animation: bu-notch-breathe 1.4s ease-in-out infinite;
-}
-
-@keyframes bu-notch-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scale(0.96);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes bu-notch-fade {
-  0% {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-4px) scale(0.92);
-  }
-  12% {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-  72% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-2px) scale(0.98);
-  }
-}
-
-/* Desktop / wide: no notch theatre */
-@media (min-width: 768px) {
-  .bu-notch-neon {
-    display: none !important;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bu-notch-neon,
-  .bu-notch-neon__glow {
-    animation: none !important;
-    opacity: 0 !important;
+@media (max-width: 380px) {
+  .bu-wallet-hero {
+    border-radius: 2.25rem;
   }
 }
 
@@ -440,7 +356,7 @@
   position: absolute;
   inset: -3px;
   z-index: 2;
-  border-radius: 35px;
+  border-radius: calc(2.75rem + 3px);
   padding: 2.5px;
   overflow: hidden;
   opacity: 1;
@@ -456,11 +372,6 @@
   box-shadow:
     0 0 14px rgba(34, 224, 255, 0.25),
     0 0 28px rgba(47, 123, 255, 0.18);
-}
-
-.bu-wallet-neon-ring--bleed {
-  inset: 0 0 -3px;
-  border-radius: 0 0 31px 31px;
 }
 
 .bu-wallet-neon-ring > .bu-wallet-neon-spin {

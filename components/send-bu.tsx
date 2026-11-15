@@ -112,6 +112,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
   const [lookingUp, setLookingUp] = useState(false)
   const lookupSeq = useRef(0)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lookupAbort = useRef<AbortController | null>(null)
 
   const [transferForm, setTransferForm] = useState({
     amount: '',
@@ -128,7 +129,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
       setTransfers([])
       return
     }
-    fetch('/api/wallet', { credentials: 'include' })
+    fetch('/api/wallet?history=1&limit=40', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {
@@ -191,6 +192,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
   useEffect(() => {
     return () => {
       if (lookupTimer.current) window.clearTimeout(lookupTimer.current)
+      lookupAbort.current?.abort()
     }
   }, [])
 
@@ -257,6 +259,10 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
     setSearchQuery(query)
     const digits = query.replace(/[^\d]/g, '')
     if (lookupTimer.current) window.clearTimeout(lookupTimer.current)
+    if (lookupAbort.current) {
+      lookupAbort.current.abort()
+      lookupAbort.current = null
+    }
     if (digits.length < 10) {
       lookupSeq.current += 1
       setLookingUp(false)
@@ -268,12 +274,16 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
     setLookingUp(true)
     lookupTimer.current = setTimeout(() => {
       void (async () => {
+        const controller = new AbortController()
+        lookupAbort.current = controller
         try {
           const res = await fetch('/api/users/lookup', {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bu_id: query.trim() }),
+            signal: controller.signal,
+            cache: 'no-store',
           })
           const json = await res.json()
           if (seq !== lookupSeq.current) return
@@ -303,14 +313,15 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
             setMessage(null)
             setSearchResults([])
           }
-        } catch {
+        } catch (error) {
+          if (controller.signal.aborted) return
           if (seq !== lookupSeq.current) return
           setLookingUp(false)
           setSearchResults([])
           setMessage('Could not look up that ɃU ID')
         }
       })()
-    }, 280)
+    }, 220)
   }
 
   function isSelfAccount(candidateId: string) {

@@ -19,7 +19,8 @@ export async function POST(request: Request) {
     const buId = normalizePhone(body.bu_id)
     if (!buId) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID (phone number)')
 
-    const found = await resolveSendBuRecipient(body.bu_id.trim())
+    // Fast read-only lookup — sync/ensure runs on send, not every keystroke.
+    const found = await resolveSendBuRecipient(body.bu_id.trim(), { sync: false })
     if (!found) {
       return successResponse({ exists: false, bu_id: buId })
     }

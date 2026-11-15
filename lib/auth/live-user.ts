@@ -56,29 +56,30 @@ function asProfileHit(data: Record<string, unknown> | null | undefined): Profile
   }
 }
 
-async function selectProfile(eqColumn: 'phone_e164' | 'phone', variant: string): Promise<ProfileHit | null> {
-  const db = tryCreateAdminClient() ?? createDataClient()
-  for (const columns of [PROFILE_COLUMNS, PROFILE_COLUMNS_LEAN]) {
-    const { data, error } = await db.from('profiles').select(columns).eq(eqColumn, variant).maybeSingle()
-    if (error) {
-      if (/pin_hash|column|schema cache|does not exist/i.test(error.message)) continue
-      return null
-    }
-    const hit = asProfileHit(data as Record<string, unknown> | null)
-    if (hit) return hit
-  }
-  return null
-}
-
 /** Find a website profile that owns this ɃU ID / phone. */
 export async function findProfileByBuId(phone: string): Promise<ProfileHit | null> {
   const db = tryCreateAdminClient() ?? createDataClient()
   const variants = phoneLookupVariants(phone)
-  for (const variant of variants) {
-    const byE164 = await selectProfile('phone_e164', variant)
-    if (byE164) return byE164
-    const byPhone = await selectProfile('phone', variant)
-    if (byPhone) return byPhone
+  if (variants.length) {
+    for (const columns of [PROFILE_COLUMNS, PROFILE_COLUMNS_LEAN]) {
+      const { data, error } = await db
+        .from('profiles')
+        .select(columns)
+        .or(
+          [
+            ...variants.map((v) => `phone_e164.eq.${v}`),
+            ...variants.map((v) => `phone.eq.${v}`),
+          ].join(','),
+        )
+        .limit(5)
+      if (error) {
+        if (/pin_hash|column|schema cache|does not exist/i.test(error.message)) continue
+        break
+      }
+      const hit = asProfileHit(((data as Record<string, unknown>[] | null) ?? [])[0])
+      if (hit) return hit
+      break
+    }
   }
 
   const needle = phone.replace(/[^\d]/g, '').slice(-10)
@@ -261,19 +262,63 @@ async function backfillFromAuth(buId: string) {
   }
 }
 
+/** Ensure a recipient UUID exists in live `users` before debiting (used on send, not lookup). */
+export async function ensureLiveRecipientById(userId: string) {
+  if (!userId) return null
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const existing = await db.from('users').select('id').eq('id', userId).maybeSingle()
+  if (existing.data && typeof (existing.data as { id?: string }).id === 'string') {
+    return String((existing.data as { id: string }).id)
+  }
+
+  for (const columns of [PROFILE_COLUMNS, PROFILE_COLUMNS_LEAN]) {
+    const { data, error } = await db.from('profiles').select(columns).eq('id', userId).maybeSingle()
+    if (error) {
+      if (/pin_hash|column|schema cache|does not exist/i.test(error.message)) continue
+      break
+    }
+    const profile = asProfileHit(data as Record<string, unknown> | null)
+    if (!profile) break
+    const phone = profile.phone_e164 || profile.phone
+    if (!phone) break
+    const synced = await ensureLiveBuUser({
+      id: profile.id,
+      displayName: profile.display_name || 'Ƀucks member',
+      phone,
+      email: profile.email,
+      pinHash: profile.pin_hash,
+      role: profile.role,
+    })
+    if (synced.ok === true) return synced.userId
+    break
+  }
+  return userId
+}
+
 /**
- * Send-ɃU recipient lookup: live users first, then sync website profiles / auth into live users.
+ * Send-ɃU recipient lookup.
+ * Fast path (default): live users + profile read only — no bcrypt / ensure / auth backfill.
+ * Pass `{ sync: true }` when actually sending so missing live rows can be created.
  */
-export async function resolveSendBuRecipient(buId: string) {
+export async function resolveSendBuRecipient(buId: string, opts?: { sync?: boolean }) {
   const found = await lookupLiveUser(buId)
   if (found?.id) return found
 
   const profile = await findProfileByBuId(buId)
   if (profile?.id) {
     const phone = profile.phone_e164 || profile.phone || buId
+    const display = profile.display_name || 'Ƀucks member'
+    if (!opts?.sync) {
+      return {
+        id: profile.id,
+        display_name: display,
+        phone: normalizePhone(phone),
+        email: profile.email,
+      }
+    }
     const synced = await ensureLiveBuUser({
       id: profile.id,
-      displayName: profile.display_name || 'Ƀucks member',
+      displayName: display,
       phone,
       email: profile.email,
       pinHash: profile.pin_hash,
@@ -283,13 +328,15 @@ export async function resolveSendBuRecipient(buId: string) {
       return (
         (await lookupLiveUser(phone)) ?? {
           id: synced.userId,
-          display_name: profile.display_name || 'Ƀucks member',
+          display_name: display,
           phone: normalizePhone(phone),
           email: profile.email,
         }
       )
     }
   }
+
+  if (!opts?.sync) return null
 
   const backfilled = await backfillFromAuth(buId)
   if (backfilled?.id) {

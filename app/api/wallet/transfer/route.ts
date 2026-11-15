@@ -5,9 +5,9 @@ import { readBuSession } from '@/lib/auth/bu-session'
 import { BU_MIN_SPRAY, BU_MIN_TRANSFER, nairaFromBu } from '@/lib/bu-rate'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { transferBu } from '@/lib/wallet'
-import { getPlatformSettings } from '@/lib/admin/platform'
 import { pinSchema } from '@/lib/auth/pin'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { ensureLiveRecipientById } from '@/lib/auth/live-user'
 
 const schema = z.object({
   to_user_id: z.string().uuid(),
@@ -24,7 +24,6 @@ export async function POST(request: Request) {
     const [body, session] = await Promise.all([
       request.json().then((json) => schema.parse(json)),
       readBuSession(),
-      getPlatformSettings(),
     ])
     const fromUserId =
       (await resolveLiveCelebrantId({
@@ -33,6 +32,11 @@ export async function POST(request: Request) {
         phone: session?.phone_e164 || session?.phone || null,
       })) || user.id
     if (fromUserId === body.to_user_id) {
+      throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
+    }
+    // Ensure recipient exists in live users (heavy sync only happens here, not on lookup).
+    const toUserId = (await ensureLiveRecipientById(body.to_user_id)) || body.to_user_id
+    if (fromUserId === toUserId) {
       throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
     }
     const phone = session?.phone_e164 || session?.phone
@@ -60,7 +64,7 @@ export async function POST(request: Request) {
     const naira = nairaFromBu(body.amount)
     const moved = await transferBu({
       fromUserId,
-      toUserId: body.to_user_id,
+      toUserId,
       amount: naira,
       eventId: body.event_id,
       isTip: body.is_tip,

@@ -1003,16 +1003,29 @@ export async function lookupLiveUser(phone: string) {
   const columns = 'id, email, phone_number, first_name, last_name, account_name, role'
   const admin = tryCreateAdminClient()
   const db = admin ?? createDataClient()
+  const variants = phoneLookupVariants(phone)
+  const normalized = normalizePhone(phone)
 
-  if (admin) {
-    for (const variant of phoneLookupVariants(phone)) {
-      const { data } = await admin.from('users').select(columns).eq('phone_number', variant).maybeSingle()
-      const mapped = mapLiveLookupUser(data as Record<string, unknown> | null)
+  // Prefer one RPC round-trip before scanning variants.
+  const rpcAttempts = [...new Set([normalized ?? '', phone.trim(), needle].filter(Boolean))]
+  for (const attempt of rpcAttempts) {
+    const { data, error } = await db.rpc('bu_login_row', { p_phone: attempt })
+    if (error) continue
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
+    const mapped = mapLiveLookupUser(row)
+    if (mapped) return mapped
+  }
+
+  if (admin && variants.length) {
+    const { data } = await admin.from('users').select(columns).in('phone_number', variants).limit(5)
+    const rows = (data as Record<string, unknown>[] | null) ?? []
+    for (const row of rows) {
+      const mapped = mapLiveLookupUser(row)
       if (mapped) return mapped
     }
     if (needle.length === 10) {
-      const { data } = await admin.from('users').select(columns).ilike('phone_number', `%${needle}%`).limit(8)
-      const match = ((data as Record<string, unknown>[] | null) ?? []).find(
+      const loose = await admin.from('users').select(columns).ilike('phone_number', `%${needle}%`).limit(8)
+      const match = ((loose.data as Record<string, unknown>[] | null) ?? []).find(
         (row) => last10Digits(asString(row.phone_number)) === needle,
       )
       const mapped = mapLiveLookupUser(match)
@@ -1020,14 +1033,6 @@ export async function lookupLiveUser(phone: string) {
     }
   }
 
-  const attempts = [...new Set([phone.trim(), normalizePhone(phone) ?? '', needle].filter(Boolean))]
-  for (const attempt of attempts) {
-    const { data, error } = await db.rpc('bu_login_row', { p_phone: attempt })
-    if (error) continue
-    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
-    const mapped = mapLiveLookupUser(row)
-    if (mapped) return mapped
-  }
   return null
 }
 

@@ -56,7 +56,7 @@ export default function Notifications() {
     let cancelled = false
     async function load() {
       try {
-        const res = await fetch('/api/wallet', { credentials: 'include' })
+        const res = await fetch('/api/wallet?history=1&limit=30', { credentials: 'include', cache: 'no-store' })
         const json = await res.json()
         if (cancelled) return
         if (!json.status) {

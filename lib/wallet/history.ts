@@ -439,14 +439,22 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
   }
 }
 
-export async function listWalletHistory(userId: string, limit = 200): Promise<WalletHistoryItem[]> {
+export async function listWalletHistory(
+  userId: string,
+  limit = 200,
+  opts?: { full?: boolean },
+): Promise<WalletHistoryItem[]> {
   if (!userId) return []
   const db = tryCreateAdminClient() ?? createDataClient()
+  const full = Boolean(opts?.full)
 
-  // Prefer the RPC, but always merge table sources so BU→BU and bank sends
-  // still appear when the RPC is partial or outdated.
   const rpc = await db.rpc('bu_list_user_wallet_history', { p_user_id: userId, p_limit: limit })
   const rpcRows = !rpc.error ? asRows(rpc.data).map(fromRpcRow) : []
+
+  // Fast path for dashboards / beneficiaries: trust the RPC when it returns rows.
+  if (!full && rpcRows.length) {
+    return enrichCounterparties(db, mergeHistory(rpcRows).slice(0, limit))
+  }
 
   const [saleTable, txs, ledger, withdrawals, pays] = await Promise.all([
     db.from('bu_sale_credits').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
@@ -457,7 +465,7 @@ export async function listWalletHistory(userId: string, limit = 200): Promise<Wa
   ])
 
   let sales = !saleTable.error ? ((saleTable.data ?? []) as Array<Record<string, unknown>>).map(fromSale) : []
-  if (!sales.length) {
+  if (!sales.length && full) {
     const saleRpc = await db.rpc('bu_list_wallet_history', { p_user_id: userId, p_limit: limit })
     sales = !saleRpc.error ? asRows(saleRpc.data).map(fromSale) : []
     if (!sales.length) {

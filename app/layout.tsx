@@ -12,16 +12,6 @@ function siteUrl() {
   return getAppUrl()
 }
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  viewportFit: 'cover',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#142a56' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1733' },
-  ],
-}
-
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: BU_SITE_TITLE,
@@ -29,8 +19,8 @@ export const metadata: Metadata = {
   applicationName: BU_SITE_NAME,
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
     title: BU_SITE_NAME,
+    statusBarStyle: 'default',
   },
   icons: {
     icon: [
@@ -56,14 +46,28 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#ffffff' },
+  ],
+  colorScheme: 'light',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="theme-pink">
-      <body className={`${geist.className} ${geistMono.variable} min-h-dvh overflow-x-hidden bg-white font-sans antialiased`}>
+    <html lang="en" className="theme-pink" style={{ backgroundColor: '#ffffff' }}>
+      <body
+        className={`${geist.className} ${geistMono.variable} font-sans antialiased`}
+        style={{ backgroundColor: '#ffffff' }}
+      >
         {children}
         <Analytics />
       </body>

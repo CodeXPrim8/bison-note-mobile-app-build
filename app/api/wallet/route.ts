@@ -6,13 +6,17 @@ import { fetchLiveWallet, resolveLiveCelebrantId } from '@/lib/events/live'
 import { publicBuRates } from '@/lib/bu-rate'
 import { contactEmail } from '@/lib/auth/pin'
 import { readBuSession } from '@/lib/auth/bu-session'
-import { getPlatformSettings } from '@/lib/admin/platform'
 import { listWalletHistory } from '@/lib/wallet/history'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireUser()
-    await getPlatformSettings()
+    const url = new URL(request.url)
+    const includeHistory = url.searchParams.get('history') !== '0'
+    const rawLimit = Number(url.searchParams.get('limit') || (includeHistory ? 40 : 0))
+    const limit = Math.min(200, Math.max(0, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 40))
+    const fullHistory = url.searchParams.get('full') === '1' || limit >= 100
+
     const session = await readBuSession()
     const liveId =
       (await resolveLiveCelebrantId({
@@ -20,8 +24,14 @@ export async function GET() {
         email: user.email,
         phone: session?.phone_e164 || session?.phone || null,
       })) || user.id
-    const wallet = await fetchLiveWallet(liveId)
-    const transactions = await listWalletHistory(liveId, 200)
+
+    const [wallet, transactions] = await Promise.all([
+      fetchLiveWallet(liveId),
+      includeHistory && limit > 0
+        ? listWalletHistory(liveId, limit, { full: fullHistory })
+        : Promise.resolve([]),
+    ])
+
     return successResponse({
       user_id: liveId,
       wallet,

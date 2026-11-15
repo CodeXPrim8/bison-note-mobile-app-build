@@ -197,7 +197,7 @@ export default function History() {
 
     try {
       const [walletRes, ticketsRes] = await Promise.all([
-        fetch('/api/wallet', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/wallet?history=1&limit=100&full=1', { credentials: 'include', cache: 'no-store' }),
         fetch('/api/tickets/mine', { credentials: 'include', cache: 'no-store' }),
       ])
       const walletJson = await walletRes.json()

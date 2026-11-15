@@ -1,7 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getServiceRoleKey, getSupabasePublicConfig, isServiceRoleConfigured, isSupabaseConfigured } from '@/lib/env'
 
-/** Service-role client. Never import this into Client Components. */
+let adminSingleton: SupabaseClient | null | undefined
+
+/** Service-role client. Never import this into Client Components. Reuses one client per process. */
 export function createAdminClient() {
   const { url } = getSupabasePublicConfig()
   return createClient(url, getServiceRoleKey(), {
@@ -14,5 +16,12 @@ export function createAdminClient() {
 
 export function tryCreateAdminClient() {
   if (!isSupabaseConfigured() || !isServiceRoleConfigured()) return null
-  return createAdminClient()
+  if (adminSingleton === undefined) {
+    try {
+      adminSingleton = createAdminClient()
+    } catch {
+      adminSingleton = null
+    }
+  }
+  return adminSingleton
 }
