@@ -1,15 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { SiteHeader } from '@/components/web/site-chrome'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import Link from 'next/link'
+import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, Phone, User } from 'lucide-react'
 import { safeNextPath } from '@/lib/auth/paths'
 import { loadDraft, saveDraft } from '@/lib/forms/draft'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 const LOGIN_DRAFT_KEY = 'bu-login-draft'
+
+type Mode = 'login' | 'signup' | 'forgot' | 'reset'
 
 export default function LoginPage() {
   const [phone, setPhone] = useState('')
@@ -17,15 +17,23 @@ export default function LoginPage() {
   const [confirmPin, setConfirmPin] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [otp, setOtp] = useState('')
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [emailHint, setEmailHint] = useState<string | null>(null)
+  const [mode, setMode] = useState<Mode>('login')
   const [message, setMessage] = useState<string | null>(null)
+  const [messageOk, setMessageOk] = useState(false)
   const [nextPath, setNextPath] = useState('/app')
   const [busy, setBusy] = useState(false)
   const [draftReady, setDraftReady] = useState(false)
+  const [showPin, setShowPin] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   useEffect(() => {
-    const next = safeNextPath(new URLSearchParams(window.location.search).get('next'))
+    const params = new URLSearchParams(window.location.search)
+    const next = safeNextPath(params.get('next'))
     setNextPath(next)
+    if (params.get('forgot') === '1') setMode('forgot')
     const draft = loadDraft<{ phone?: string; name?: string; email?: string }>(LOGIN_DRAFT_KEY)
     if (draft?.phone) setPhone(draft.phone)
     if (draft?.name) setName(draft.name)
@@ -38,7 +46,32 @@ export default function LoginPage() {
     saveDraft(LOGIN_DRAFT_KEY, { phone, name, email })
   }, [draftReady, phone, name, email, mode])
 
-  async function submit() {
+  function switchMode(next: Mode) {
+    setMode(next)
+    setMessage(null)
+    setMessageOk(false)
+    setPin('')
+    setConfirmPin('')
+    setOtp('')
+    setShowPin(false)
+    setShowConfirm(false)
+    if (next !== 'reset') {
+      setChallenge(null)
+      setEmailHint(null)
+    }
+  }
+
+  function showError(text: string) {
+    setMessageOk(false)
+    setMessage(text)
+  }
+
+  function showInfo(text: string) {
+    setMessageOk(true)
+    setMessage(text)
+  }
+
+  async function submitLoginOrSignup() {
     if (mode === 'signup') {
       if (!name.trim()) {
         setMessage('Enter your name.')
@@ -89,7 +122,7 @@ export default function LoginPage() {
         return
       }
       if (json.code === 'BU_ID_TAKEN' || /already registered/i.test(json.message || '')) {
-        setMode('login')
+        switchMode('login')
         setMessage('This ɃU ID is already registered. Log in with your PIN.')
         return
       }
@@ -104,102 +137,341 @@ export default function LoginPage() {
     }
   }
 
+  async function submitForgot() {
+    if (!phone.trim()) {
+      setMessage('Enter your phone number (ɃU ID).')
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/auth/forgot-pin', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      })
+      const json = (await res.json()) as {
+        status: boolean
+        message: string
+        data?: {
+          challenge?: string | null
+          email_hint?: string | null
+          message?: string
+        }
+      }
+      setBusy(false)
+      if (!json.status) {
+        showError(json.message || 'Could not start PIN reset')
+        return
+      }
+      const nextChallenge = json.data?.challenge || null
+      setChallenge(nextChallenge)
+      setEmailHint(json.data?.email_hint || null)
+      setOtp('')
+      showInfo(json.data?.message || json.message || 'Check your email for a reset code.')
+      if (nextChallenge) setMode('reset')
+    } catch {
+      setBusy(false)
+      showError('Could not reach ɃU. Try again in a moment.')
+    }
+  }
+
+  async function submitReset() {
+    if (!challenge) {
+      showError('Request a new reset code first.')
+      switchMode('forgot')
+      return
+    }
+    if (!/^\d{6}$/.test(otp)) {
+      showError('Enter the 6-digit code from your email.')
+      return
+    }
+    if (!/^\d{4,6}$/.test(pin)) {
+      showError('New PIN must be 4–6 digits.')
+      return
+    }
+    if (pin !== confirmPin) {
+      showError('New PINs do not match.')
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    setMessageOk(false)
+    try {
+      const res = await fetch('/api/auth/reset-pin', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challenge,
+          otp,
+          new_pin: pin,
+          confirm_pin: confirmPin,
+        }),
+      })
+      const json = (await res.json()) as { status: boolean; message: string; data?: { phone?: string } }
+      setBusy(false)
+      if (!json.status) {
+        showError(json.message || 'Could not reset PIN')
+        return
+      }
+      if (json.data?.phone) setPhone(json.data.phone)
+      setChallenge(null)
+      setEmailHint(null)
+      setOtp('')
+      setPin('')
+      setConfirmPin('')
+      setMode('login')
+      showInfo(json.message || 'PIN updated. Log in with your new PIN.')
+    } catch {
+      setBusy(false)
+      showError('Could not reach ɃU. Try again in a moment.')
+    }
+  }
+
+  async function submit() {
+    if (mode === 'forgot') return submitForgot()
+    if (mode === 'reset') return submitReset()
+    return submitLoginOrSignup()
+  }
+
+  const headline =
+    mode === 'login'
+      ? 'Welcome back'
+      : mode === 'signup'
+        ? 'Create account'
+        : mode === 'forgot'
+          ? 'Forgot PIN'
+          : 'Set new PIN'
+
+  const subtitle =
+    mode === 'login'
+      ? 'Sign in with your ɃU ID and PIN'
+      : mode === 'signup'
+        ? 'One wallet. Digital vouchers for celebration.'
+        : mode === 'forgot'
+          ? 'We will email a code to the address on your account'
+          : emailHint
+            ? `Code sent to ${emailHint}`
+            : 'Enter the email code and choose a new PIN'
+
+  const cta =
+    busy
+      ? 'Please wait…'
+      : mode === 'login'
+        ? 'Login'
+        : mode === 'signup'
+          ? 'Create account'
+          : mode === 'forgot'
+            ? 'Send reset code'
+            : 'Update PIN'
+
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
-      <SiteHeader />
-      <main className="mx-auto flex max-w-md flex-col justify-center px-4 py-16">
-        <Card className="space-y-4 p-6">
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submit()
-            }}
-          >
-            <h1 className="text-center text-2xl font-bold">{mode === 'login' ? 'Login' : 'Register'}</h1>
-            <p className="text-center text-sm text-muted-foreground">
-              {mode === 'login'
-                ? 'Use the phone number and PIN from the account you already created. You do not register again.'
-                : 'Create one account with your own email. That email is used for Paystack and receipts. Sign-in stays your phone and PIN.'}
-            </p>
-            {mode === 'signup' && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Full name *</p>
-                <Input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-            )}
-            {mode === 'signup' && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Email *</p>
-                <Input
-                  type="email"
-                  placeholder="you@email.com"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  One email per account. This is the address Paystack and receipts will use.
-                </p>
-              </div>
-            )}
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Phone Number *</p>
-              <Input
-                placeholder="08123456789 or +2348123456789"
-                inputMode="tel"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+    <div className="bu-auth-screen">
+      <span className="bu-auth-watermark bu-auth-float" style={{ left: '6%', top: '12%', fontSize: '7.5rem' }}>
+        Ƀ
+      </span>
+      <span
+        className="bu-auth-watermark bu-auth-float-delay"
+        style={{ right: '4%', bottom: '18%', fontSize: '5.5rem', transform: 'rotate(18deg)' }}
+      >
+        Ƀ
+      </span>
+      <span className="bu-auth-watermark" style={{ left: '42%', top: '58%', fontSize: '3.2rem', opacity: 0.7 }}>
+        1:1
+      </span>
+      <div className="bu-auth-voucher bu-auth-float" style={{ width: 160, height: 96, left: '-2%', top: '62%' }} />
+      <div
+        className="bu-auth-voucher bu-auth-float-delay"
+        style={{ width: 120, height: 72, right: '-1%', top: '28%', transform: 'rotate(16deg)' }}
+      />
+
+      <div className="relative z-[1] mx-auto flex min-h-dvh max-w-lg flex-col px-4 pb-10 pt-6">
+        <div className="mb-6 flex items-center justify-between">
+          <Link href="/" className="text-sm font-bold tracking-tight text-[#07101f]">
+            Ƀucks
+          </Link>
+          <span className="rounded-full bg-[#0b1733]/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#0b1733]/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+            Digital voucher
+          </span>
+        </div>
+
+        <div className="flex flex-1 flex-col justify-center">
+          <div className="bu-auth-panel">
+            <div className="bu-auth-logo-well mb-5">
+              <span className="bu-auth-mark-3d" aria-hidden>
+                Ƀ
+              </span>
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">{mode === 'signup' ? 'Transaction PIN *' : 'PIN *'}</p>
-              <Input
-                placeholder={mode === 'signup' ? 'Create a 4–6 digit transaction PIN' : 'Enter your PIN'}
-                type="password"
-                inputMode="numeric"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              />
+
+            <div className="mb-6 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#1f5fd6]">
+                Ƀucks
+              </p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#07101f]">{headline}</h1>
+              <p className="mt-2 text-sm font-medium text-[#0b1733]/75">{subtitle}</p>
+            </div>
+
+            <form
+              className="space-y-3.5"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void submit()
+              }}
+            >
               {mode === 'signup' && (
-                <p className="text-xs text-muted-foreground">
-                  This PIN signs you in and must be entered every time you send ɃU.
+                <label className="bu-auth-field">
+                  <User className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    placeholder="Full name"
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </label>
+              )}
+
+              {mode === 'signup' && (
+                <label className="bu-auth-field">
+                  <Mail className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    type="email"
+                    placeholder="Email for Paystack & receipts"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </label>
+              )}
+
+              {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (
+                <label className="bu-auth-field">
+                  <Phone className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    placeholder="Phone / ɃU ID"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </label>
+              )}
+
+              {mode === 'reset' && (
+                <label className="bu-auth-field">
+                  <KeyRound className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    placeholder="6-digit email code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
+                </label>
+              )}
+
+              {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
+                <label className="bu-auth-field">
+                  <Lock className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    placeholder={
+                      mode === 'signup' ? 'Create 4–6 digit PIN' : mode === 'reset' ? 'New 4–6 digit PIN' : 'PIN'
+                    }
+                    type={showPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    maxLength={6}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-full p-1 text-[#0b1733]/70"
+                    aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+                    onClick={() => setShowPin((v) => !v)}
+                  >
+                    {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </label>
+              )}
+
+              {(mode === 'signup' || mode === 'reset') && (
+                <label className="bu-auth-field">
+                  <Lock className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <input
+                    placeholder={mode === 'reset' ? 'Confirm new PIN' : 'Confirm PIN'}
+                    type={showConfirm ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-full p-1 text-[#0b1733]/70"
+                    aria-label={showConfirm ? 'Hide confirm PIN' : 'Show confirm PIN'}
+                    onClick={() => setShowConfirm((v) => !v)}
+                  >
+                    {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </label>
+              )}
+
+              {mode === 'login' && (
+                <div className="flex items-center justify-end px-1">
+                  <button
+                    type="button"
+                    className="text-sm font-bold text-[#1f5fd6]"
+                    onClick={() => switchMode('forgot')}
+                  >
+                    Forgot PIN?
+                  </button>
+                </div>
+              )}
+
+              {message ? (
+                <p className={`px-1 text-sm font-semibold ${messageOk ? 'text-[#0b1733]/75' : 'text-red-700'}`}>
+                  {message}
                 </p>
+              ) : null}
+
+              <button type="submit" className="bu-auth-cta" disabled={busy}>
+                <span>{cta}</span>
+                <span className="bu-auth-cta-arrow" aria-hidden>
+                  <ArrowRight className="h-4 w-4" />
+                </span>
+              </button>
+            </form>
+
+            <div className="mt-5 space-y-2 text-center">
+              {(mode === 'forgot' || mode === 'reset') && (
+                <button
+                  type="button"
+                  className="text-sm font-bold text-[#0b1733]/80"
+                  onClick={() => switchMode('login')}
+                >
+                  Back to login
+                </button>
+              )}
+              {(mode === 'login' || mode === 'signup') && (
+                <button
+                  type="button"
+                  className="text-sm font-bold text-[#0b1733]/80"
+                  onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
+                >
+                  {mode === 'login' ? "Don't have an account? Create one" : 'Have an account? Login'}
+                </button>
               )}
             </div>
-            {mode === 'signup' && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Confirm transaction PIN *</p>
-                <Input
-                  placeholder="Confirm transaction PIN"
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                />
-              </div>
-            )}
-            {message && <p className="text-sm text-destructive">{message}</p>}
-            <Button className="w-full" disabled={busy} type="submit">
-              {busy ? 'Please wait…' : mode === 'login' ? 'Login' : 'Register'}
-            </Button>
-          </form>
-          <button
-            type="button"
-            className="w-full text-center text-sm font-medium text-primary"
-            onClick={() => {
-              setMode(mode === 'login' ? 'signup' : 'login')
-              setMessage(null)
-            }}
-          >
-            {mode === 'login' ? "Don't have an account? Register" : 'Have an account? Login'}
-          </button>
-        </Card>
-      </main>
+          </div>
+
+          <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-[#0b1733]/55">
+            Celebrate · Send ɃU · Redeem
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

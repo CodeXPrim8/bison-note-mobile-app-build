@@ -29,8 +29,19 @@ export function getAppUrl(): string {
   return 'http://localhost:3000'
 }
 
-function isJwtSecret(value: string | undefined): boolean {
+function isLegacyServiceRoleJwt(value: string | undefined): boolean {
   return Boolean(value && value.startsWith('eyJ') && value.split('.').length >= 3 && value.length > 80)
+}
+
+/** New Supabase secret keys (`sb_secret_…`) or legacy `service_role` JWTs. */
+function isServiceRoleSecret(value: string | undefined): boolean {
+  if (!value) return false
+  if (value.startsWith('sb_secret_') && value.length > 20) return true
+  return isLegacyServiceRoleJwt(value)
+}
+
+function resolveServiceRoleKey(): string | undefined {
+  return optional('SUPABASE_SERVICE_ROLE_KEY') ?? optional('SUPABASE_SECRET_KEY')
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -45,13 +56,15 @@ export function getSupabasePublicConfig() {
 }
 
 export function isServiceRoleConfigured(): boolean {
-  return isJwtSecret(optional('SUPABASE_SERVICE_ROLE_KEY'))
+  return isServiceRoleSecret(resolveServiceRoleKey())
 }
 
 export function getServiceRoleKey(): string {
-  const key = optional('SUPABASE_SERVICE_ROLE_KEY')
-  if (!key || !isJwtSecret(key)) {
-    throw new MissingEnvError('SUPABASE_SERVICE_ROLE_KEY is missing or not a service_role JWT')
+  const key = resolveServiceRoleKey()
+  if (!key || !isServiceRoleSecret(key)) {
+    throw new MissingEnvError(
+      'SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) is missing — use a sb_secret_… key or legacy service_role JWT',
+    )
   }
   return key
 }
@@ -102,8 +115,8 @@ export function isResendConfigured(): boolean {
 
 export function getResendConfig() {
   return {
-    apiKey: optional('RESEND_API_KEY'),
-    from: optional('RESEND_FROM') ?? 'ɃU <beth.t@example.com>',
+    apiKey: optional('RESEND_API_KEY')?.trim(),
+    from: optional('RESEND_FROM')?.trim() || 'Bucks <onboarding@resend.dev>',
   }
 }
 

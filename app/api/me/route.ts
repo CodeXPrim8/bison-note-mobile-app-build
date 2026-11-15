@@ -17,8 +17,9 @@ export async function GET() {
     const user = await getSessionUser()
     if (!user) return successResponse({ user: null, profile: null, roles: null })
     const profile = await getProfile(user.id)
-    const email = profile?.email ?? contactEmail(user.email)
     const session = await readBuSession()
+    const email =
+      contactEmail(profile?.email) ?? contactEmail(user.email) ?? contactEmail(session?.email)
     let rolesPayload = null
     try {
       const liveId = await resolveLiveCelebrantId({
@@ -31,9 +32,11 @@ export async function GET() {
     } catch {
       rolesPayload = null
     }
+    const profileOut = profile ? { ...profile, email } : null
     return successResponse({
       user: { id: user.id, email },
-      profile,
+      profile: profileOut,
+      email_required: !email,
       roles: rolesPayload,
     })
   } catch (error) {
@@ -44,7 +47,8 @@ export async function GET() {
 const patchSchema = z.object({
   display_name: z.string().min(2).max(80).optional(),
   phone: z.string().min(7).max(32).optional(),
-  email: z.union([z.string().email(), z.literal(''), z.null()]).optional(),
+  /** Contact email is required for every ɃU account — empty/null is rejected. */
+  email: z.string().email().optional(),
   current_pin: pinSchema.optional(),
   new_pin: pinSchema.optional(),
 })
@@ -84,13 +88,13 @@ export async function PATCH(request: Request) {
       updates.phone_e164 = phoneE164
     }
 
-    let nextEmail: string | null | undefined
+    let nextEmail: string | undefined
     if (body.email !== undefined) {
-      nextEmail = body.email ? contactEmail(body.email) : null
-      if (body.email && !nextEmail) {
-        throw new ApiError(400, 'INVALID_EMAIL', 'Enter a real email address')
+      nextEmail = contactEmail(body.email) ?? undefined
+      if (!nextEmail) {
+        throw new ApiError(400, 'INVALID_EMAIL', 'Enter a real email address. Every ɃU account must have one.')
       }
-      if (nextEmail && db) {
+      if (db) {
         const { data: takenProfile } = await db
           .from('profiles')
           .select('id')
@@ -107,7 +111,7 @@ export async function PATCH(request: Request) {
           throw new ApiError(409, 'EMAIL_TAKEN', 'This email is already on another ɃU account')
         }
       }
-      updates.email = nextEmail ?? null
+      updates.email = nextEmail
     }
 
     if (body.new_pin) {
@@ -161,8 +165,10 @@ export async function PATCH(request: Request) {
     if (profileErrorMessage && !profile && !session) {
       throw new ApiError(500, 'UPDATE_FAILED', 'Could not update profile')
     }
+    const savedEmail =
+      nextEmail ?? contactEmail(profile?.email) ?? contactEmail(session?.email) ?? null
     const saved: Profile = profile
-      ? { ...profile, email: nextEmail !== undefined ? nextEmail : contactEmail(profile.email) }
+      ? { ...profile, email: savedEmail }
       : {
           id: user.id,
           role: 'guest',
@@ -170,18 +176,18 @@ export async function PATCH(request: Request) {
           username: null,
           phone: session?.phone ?? null,
           phone_e164: session?.phone_e164 ?? null,
-          email: nextEmail !== undefined ? nextEmail : null,
+          email: savedEmail,
           avatar_url: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
 
-    const message = nextEmail === null ? 'Email removed' : nextEmail ? 'Email saved' : 'Saved'
-    const response = successResponse({ profile: saved }, message)
+    const message = nextEmail ? 'Email saved' : 'Saved'
+    const response = successResponse({ profile: saved, email_required: !savedEmail }, message)
     if (session && session.id === user.id) {
       return attachBuSession(response, {
         id: session.id,
-        email: nextEmail !== undefined ? nextEmail : session.email,
+        email: nextEmail ?? contactEmail(session.email) ?? savedEmail,
         display_name: body.display_name ?? session.display_name,
         phone: body.phone ?? session.phone,
         phone_e164: updates.phone_e164 ?? session.phone_e164,

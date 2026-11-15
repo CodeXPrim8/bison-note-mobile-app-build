@@ -65,7 +65,13 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
       .catch(() => undefined)
   }, [])
 
-  async function patchEmail(next: string | null) {
+  async function saveEmail() {
+    const value = emailDraft.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setSettingsError(true)
+      setSettingsMessage('Every ɃU account needs a real email. Enter yours to continue.')
+      return
+    }
     setSettingsBusy(true)
     setSettingsMessage(null)
     setSettingsError(false)
@@ -74,7 +80,7 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: next ?? '' }),
+        body: JSON.stringify({ email: value }),
       })
       const json = await res.json()
       setSettingsBusy(false)
@@ -83,29 +89,15 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
         setSettingsMessage(json.message ?? 'Could not update email')
         return
       }
-      const saved = (json.data?.profile?.email as string | null | undefined) ?? next
+      const saved = (json.data?.profile?.email as string | null | undefined) ?? value
       setEmail(saved || null)
       setEmailDraft(saved || '')
-      setSettingsMessage(json.message ?? 'Saved')
+      setSettingsMessage(json.message ?? 'Email saved')
     } catch {
       setSettingsBusy(false)
       setSettingsError(true)
       setSettingsMessage('Could not reach ɃU.')
     }
-  }
-
-  async function saveEmail() {
-    const value = emailDraft.trim()
-    if (!value) {
-      setSettingsError(true)
-      setSettingsMessage('Enter an email, or tap Remove email.')
-      return
-    }
-    await patchEmail(value)
-  }
-
-  async function removeEmail() {
-    await patchEmail(null)
   }
 
   const items: Array<{
@@ -276,12 +268,9 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
                 type="email"
                 value={emailDraft}
                 onChange={(e) => setEmailDraft(e.target.value)}
-                placeholder="Your email for Paystack and receipts"
+                placeholder="Email"
                 className="mt-1 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                One email per account. Paystack, receipts, and every email step use this address. Sign-in stays your phone and PIN.
-              </p>
             </div>
             {settingsMessage && (
               <p className={`text-sm ${settingsError ? 'text-destructive' : 'text-muted-foreground'}`}>
@@ -297,16 +286,6 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
               >
                 {settingsBusy ? 'Saving…' : email ? 'Save email' : 'Add email'}
               </button>
-              {email && (
-                <button
-                  type="button"
-                  disabled={settingsBusy}
-                  onClick={() => void removeEmail()}
-                  className="w-full cursor-pointer rounded-lg border border-border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-                >
-                  Remove email
-                </button>
-              )}
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
 import { lookupLiveUser } from '@/lib/events/live'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
+import { contactEmail } from '@/lib/auth/pin'
 
 function splitName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
@@ -178,12 +179,15 @@ export async function ensureLiveBuUser(input: {
       ? input.role
       : 'guest'
 
+  // Never persist synthetic auth emails (bu…@bu.app) as the member contact email.
+  const ticketEmail = contactEmail(input.email)
+
   const viaRpc = await ensureViaRpc({
     id: input.id,
     phone,
     first_name: names.first_name,
     last_name: names.last_name,
-    email: input.email,
+    email: ticketEmail,
     pin_hash,
     role,
   })
@@ -199,7 +203,7 @@ export async function ensureLiveBuUser(input: {
       first_name: names.first_name,
       last_name: names.last_name,
       account_name: names.account_name,
-      email: input.email?.trim().toLowerCase() || null,
+      email: ticketEmail,
       role,
       pin_hash,
     },
@@ -209,7 +213,7 @@ export async function ensureLiveBuUser(input: {
       first_name: names.first_name,
       last_name: names.last_name,
       account_name: names.account_name,
-      email: input.email?.trim().toLowerCase() || null,
+      email: ticketEmail,
       pin_hash,
     },
     {

@@ -22,6 +22,7 @@ import ReceiveBU from '@/components/receive-bu'
 import EventInfo from '@/components/event-info'
 import MyTickets from '@/components/my-tickets'
 import { AccountProvider } from '@/components/account-store'
+import RequireEmailGate from '@/components/require-email-gate'
 
 function ticketIdFromPageData(pageData: unknown) {
   if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
@@ -45,7 +46,9 @@ function intentFromPageData(pageData: unknown): 'tip' | undefined {
 export default function MobileApp() {
   return (
     <AccountProvider>
-      <MobileAppShell />
+      <RequireEmailGate>
+        <MobileAppShell />
+      </RequireEmailGate>
     </AccountProvider>
   )
 }

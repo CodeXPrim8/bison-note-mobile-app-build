@@ -239,6 +239,14 @@ export async function listDedicatedVirtualAccounts(customer: string | number): P
   return data ? [data] : []
 }
 
+/** Unassign a dedicated virtual account so a fresh one can be created (e.g. after trading-name change). */
+export async function deactivateDedicatedVirtualAccount(dedicatedAccountId: number): Promise<void> {
+  if (!Number.isFinite(dedicatedAccountId) || dedicatedAccountId <= 0) {
+    throw new Error('Missing dedicated account id')
+  }
+  await paystackRequest(`/dedicated_account/${dedicatedAccountId}`, { method: 'DELETE' })
+}
+
 const requeryCooldown = new Map<string, number>()
 
 /** Ask Paystack to pull pending bank transfers into charge.success (max once / 10 min per account). */

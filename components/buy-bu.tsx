@@ -34,6 +34,7 @@ type VirtualAccount = {
   account_name: string | null
   currency: string
   active: boolean
+  needs_brand_refresh?: boolean
 }
 
 function formatNuban(accountNumber: string) {

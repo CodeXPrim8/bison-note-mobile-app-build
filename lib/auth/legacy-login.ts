@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import type { BuSession } from '@/lib/auth/bu-session-token'
+import { contactEmail } from '@/lib/auth/pin'
 
 export interface LegacyUserRow {
   id: string
@@ -17,14 +18,15 @@ export interface LegacyUserRow {
 }
 
 function toSession(row: LegacyUserRow): Omit<BuSession, 'exp'> {
+  const email = contactEmail(row.email)
   const display =
     [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||
     row.account_name ||
-    row.email ||
+    email ||
     'ɃU member'
   return {
     id: row.id,
-    email: row.email,
+    email,
     display_name: display,
     phone: row.phone_number,
     phone_e164: row.phone_number ? normalizePhone(row.phone_number) : null,

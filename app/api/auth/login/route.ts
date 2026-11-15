@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { normalizePhone } from '@/lib/phone'
-import { authEmailsFromBuId, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { authEmailsFromBuId, contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
 import { clientIp, rateLimit } from '@/lib/api/rate-limit'
 import { isSupabaseConfigured } from '@/lib/env'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
@@ -145,12 +145,33 @@ export async function POST(request: Request) {
           body.phone ||
           null
         let userId = data.user.id
+        let resolvedEmail =
+          contactEmail((data.user.user_metadata?.ticket_email as string | undefined) ?? null) ||
+          contactEmail((data.user.user_metadata?.email as string | undefined) ?? null) ||
+          contactEmail(body.email) ||
+          null
+        if (admin && !resolvedEmail) {
+          const { data: profileRow } = await admin
+            .from('profiles')
+            .select('email')
+            .eq('id', data.user.id)
+            .maybeSingle()
+          resolvedEmail = contactEmail((profileRow?.email as string | null) ?? null)
+          if (!resolvedEmail) {
+            const { data: liveRow } = await admin
+              .from('users')
+              .select('email')
+              .eq('id', data.user.id)
+              .maybeSingle()
+            resolvedEmail = contactEmail((liveRow?.email as string | null) ?? null)
+          }
+        }
         if (phone) {
           const live = await ensureLiveBuUser({
             id: data.user.id,
             displayName,
             phone,
-            email: data.user.email ?? null,
+            email: resolvedEmail,
             pin: body.pin,
             pinHash,
             role: (data.user.user_metadata?.role as string | undefined) || 'guest',
@@ -159,7 +180,7 @@ export async function POST(request: Request) {
         }
         const session = {
           id: userId,
-          email: data.user.email ?? null,
+          email: resolvedEmail,
           display_name: displayName,
           phone: (data.user.user_metadata?.phone as string | undefined) ?? body.phone ?? null,
           phone_e164:

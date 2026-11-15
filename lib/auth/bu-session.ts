@@ -8,6 +8,7 @@ import {
   encodeBuSession,
   type BuSession,
 } from '@/lib/auth/bu-session-token'
+import { contactEmail } from '@/lib/auth/pin'
 
 export { BU_SESSION_COOKIE, decodeBuSession, type BuSession }
 
@@ -16,8 +17,12 @@ export async function readBuSession(): Promise<BuSession | null> {
   return decodeBuSession(jar.get(BU_SESSION_COOKIE)?.value)
 }
 
+function withContactEmail(session: Omit<BuSession, 'exp'>): Omit<BuSession, 'exp'> {
+  return { ...session, email: contactEmail(session.email) }
+}
+
 export async function writeBuSession(session: Omit<BuSession, 'exp'>) {
-  const token = await encodeBuSession(session)
+  const token = await encodeBuSession(withContactEmail(session))
   try {
     const jar = await cookies()
     jar.set(BU_SESSION_COOKIE, token, BU_SESSION_COOKIE_OPTIONS)
@@ -28,7 +33,7 @@ export async function writeBuSession(session: Omit<BuSession, 'exp'>) {
 }
 
 export async function attachBuSession<T>(response: NextResponse<T>, session: Omit<BuSession, 'exp'>): Promise<NextResponse<T>> {
-  const token = await writeBuSession(session)
+  const token = await writeBuSession(withContactEmail(session))
   response.cookies.set(BU_SESSION_COOKIE, token, BU_SESSION_COOKIE_OPTIONS)
   return response
 }
@@ -64,7 +69,7 @@ export function profileFromBuSession(session: BuSession): Profile {
     username: null,
     phone: session.phone,
     phone_e164: session.phone_e164,
-    email: session.email,
+    email: contactEmail(session.email),
     avatar_url: null,
     created_at: now,
     updated_at: now,

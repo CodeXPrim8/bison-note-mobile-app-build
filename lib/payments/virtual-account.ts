@@ -4,6 +4,7 @@ import { isPaystackConfigured } from '@/lib/env'
 import {
   createDedicatedVirtualAccount,
   createPaystackCustomer,
+  deactivateDedicatedVirtualAccount,
   fetchPaystackCustomer,
   listDedicatedVirtualAccounts,
   type PaystackDedicatedAccount,
@@ -169,28 +170,19 @@ export async function getStoredVirtualAccount(userId: string): Promise<VirtualAc
   return null
 }
 
-export async function getOrCreateVirtualAccount(input: {
+export function virtualAccountNeedsBrandRefresh(accountName: string | null | undefined) {
+  const name = (accountName || '').trim()
+  if (!name) return false
+  // Old trading name, or Ƀ stripped by banks from "Ƀucks" → "UCKS/..."
+  return /protectorng/i.test(name) || /^ucks\s*\//i.test(name)
+}
+
+async function resolvePaystackCustomerForUser(input: {
   userId: string
   email?: string | null
   phone?: string | null
   displayName?: string | null
-}): Promise<VirtualAccountRecord> {
-  if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
-  }
-
-  const stored = await getStoredVirtualAccount(input.userId)
-  if (stored) return stored
-
-  const existingProbe = await createDataClient().rpc('bu_get_virtual_account', { p_user_id: input.userId })
-  if (existingProbe.error && rpcMissing(existingProbe.error.message)) {
-    throw new ApiError(
-      503,
-      'VIRTUAL_ACCOUNT_RPC_MISSING',
-      'Bank transfer funding needs a Supabase update. Run supabase/run_once_virtual_accounts_rpc.sql in the SQL editor.',
-    )
-  }
-
+}) {
   const email = contactEmail(input.email)
   if (!email) {
     throw new ApiError(
@@ -230,6 +222,44 @@ export async function getOrCreateVirtualAccount(input: {
     }
   }
 
+  return { customer, email, phone, firstName, lastName }
+}
+
+export async function getOrCreateVirtualAccount(input: {
+  userId: string
+  email?: string | null
+  phone?: string | null
+  displayName?: string | null
+}): Promise<VirtualAccountRecord> {
+  if (!isPaystackConfigured()) {
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+  }
+
+  const stored = await getStoredVirtualAccount(input.userId)
+  if (stored) {
+    // One-shot upgrade off the old PROTECTORNG prefix. "UCKS/..." means Paystack
+    // stripped Ƀ from "Ƀucks" — fix trading name to ASCII "BUCKS" in Paystack first.
+    if (/protectorng/i.test(stored.account_name || '')) {
+      try {
+        return await recreateVirtualAccount(input)
+      } catch (error) {
+        console.error('dva brand refresh failed', error instanceof Error ? error.message : error)
+        return stored
+      }
+    }
+    return stored
+  }
+
+  const existingProbe = await createDataClient().rpc('bu_get_virtual_account', { p_user_id: input.userId })
+  if (existingProbe.error && rpcMissing(existingProbe.error.message)) {
+    throw new ApiError(
+      503,
+      'VIRTUAL_ACCOUNT_RPC_MISSING',
+      'Bank transfer funding needs a Supabase update. Run supabase/run_once_virtual_accounts_rpc.sql in the SQL editor.',
+    )
+  }
+
+  const { customer, phone, firstName, lastName } = await resolvePaystackCustomerForUser(input)
   const customerCode = customer.customer_code
   const customerId = customer.id != null ? Number(customer.id) : null
 
@@ -248,5 +278,53 @@ export async function getOrCreateVirtualAccount(input: {
   if (!created?.account_number) {
     throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Paystack did not return a dedicated account number')
   }
+  return persistVirtualAccount(fromPaystackAccount(input.userId, created, customerCode, customerId), created)
+}
+
+/**
+ * Deactivate the current Paystack DVA and issue a new one so the account name
+ * picks up the latest trading name (e.g. BUCKS instead of PROTECTORNG).
+ */
+export async function recreateVirtualAccount(input: {
+  userId: string
+  email?: string | null
+  phone?: string | null
+  displayName?: string | null
+}): Promise<VirtualAccountRecord> {
+  if (!isPaystackConfigured()) {
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+  }
+
+  const { customer, phone, firstName, lastName } = await resolvePaystackCustomerForUser(input)
+  const customerCode = customer.customer_code
+  const customerId = customer.id != null ? Number(customer.id) : null
+  const stored = await getStoredVirtualAccount(input.userId)
+
+  const listed = await listDedicatedVirtualAccounts(customerCode).catch(() => [] as PaystackDedicatedAccount[])
+  const toDeactivate = listed.filter((row) => {
+    if (!row.id) return false
+    if (row.active === false || row.assigned === false) return false
+    if (stored?.account_number && String(row.account_number) === stored.account_number) return true
+    return Boolean(row.account_number)
+  })
+
+  for (const row of toDeactivate) {
+    try {
+      await deactivateDedicatedVirtualAccount(Number(row.id))
+    } catch (error) {
+      console.error('dva deactivate failed', row.id, error instanceof Error ? error.message : error)
+    }
+  }
+
+  const created = await createDedicatedVirtualAccount({
+    customer: customerCode,
+    firstName,
+    lastName,
+    phone,
+  })
+  if (!created?.account_number) {
+    throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Paystack did not return a new dedicated account number')
+  }
+
   return persistVirtualAccount(fromPaystackAccount(input.userId, created, customerCode, customerId), created)
 }
