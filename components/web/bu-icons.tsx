@@ -125,3 +125,31 @@ export function IconEvents({ className, title }: IconProps) {
     ),
   })
 }
+
+export function IconGift({ className, title }: IconProps) {
+  return frame({
+    className,
+    title,
+    children: (
+      <>
+        <path d="M8 22h32v18a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V22z" stroke="currentColor" strokeWidth="2.2" />
+        <path d="M6 22h36v-4a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v4z" stroke="currentColor" strokeWidth="2.2" />
+        <path d="M24 15v29M24 15c-4-6-10-6-10-2s4 5 10 5c6 0 10-1 10-5s-6-4-10 2z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
+      </>
+    ),
+  })
+}
+
+export function IconGateway({ className, title }: IconProps) {
+  return frame({
+    className,
+    title,
+    children: (
+      <>
+        <rect x="8" y="12" width="32" height="24" rx="4" stroke="currentColor" strokeWidth="2.2" />
+        <path d="M14 24h8M14 29h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M30 20l6 4-6 4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
+  })
+}

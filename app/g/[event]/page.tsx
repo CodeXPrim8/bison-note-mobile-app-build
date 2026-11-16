@@ -126,7 +126,7 @@ export default function GatewayHostedCheckout({ params }: { params: Promise<{ ev
   const ended = event ? eventDateHasPassed({ start_time: event.date }) : false
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-xl px-4 py-12">
         <h1 className="text-3xl font-bold">Pay with ɃU</h1>

@@ -182,7 +182,7 @@ async function creditDedicatedNubanRow(
 
 export async function fulfillDedicatedNubanCharge(data: PaystackChargeData) {
   if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
   }
   const result = await creditDedicatedNubanRow(null, data, { verify: true })
   return {
@@ -206,7 +206,7 @@ export async function syncUserDedicatedNubanCredits(
   options?: { requery?: boolean },
 ) {
   if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
   }
   const account = await getStoredVirtualAccount(userId)
   if (!account) {

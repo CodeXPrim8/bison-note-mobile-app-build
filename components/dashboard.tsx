@@ -76,11 +76,10 @@ function movementFromWallet(tx: Record<string, unknown>, index: number): HomeMov
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [unreadAlerts, setUnreadAlerts] = useState(0)
-  const { greetingName, buBalance, nairaBalance, userId } = useAccount()
+  const { greetingName, buBalance, nairaBalance, userId, balanceMotion } = useAccount()
   const [movements, setMovements] = useState<HomeMovement[]>([])
   const [buId, setBuId] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
-  const [soonNotice, setSoonNotice] = useState<string | null>(null)
   const [alertNeon, setAlertNeon] = useState(false)
   const [neonKey, setNeonKey] = useState(0)
 
@@ -102,10 +101,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     return () => window.clearTimeout(timer)
   }, [alertNeon, neonKey])
 
-  function showComingSoon(label: string) {
-    setSoonNotice(`${label} is coming soon`)
-    window.setTimeout(() => setSoonNotice(null), 2200)
-  }
 
   useWalletPulse(() => {
     if (!userId) return
@@ -196,6 +191,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <div className="mt-3 flex items-center gap-2">
                 <RollingBalance
                   value={buBalance}
+                  motionKey={balanceMotion}
                   visible={balanceVisible}
                   className="bu-balance text-4xl font-semibold tracking-tight text-white"
                 />
@@ -301,24 +297,35 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3">
           {[
-            { label: 'Airtime', Icon: Smartphone },
-            { label: 'Data', Icon: Wifi },
-          ].map(({ label, Icon }) => (
+            { label: 'Airtime', page: 'airtime', Icon: Smartphone },
+            { label: 'Data', page: 'data', Icon: Wifi },
+          ].map(({ label, page, Icon }) => {
+            const vtuOpen = process.env.NEXT_PUBLIC_VTU_ENABLED === 'true' || process.env.NEXT_PUBLIC_VTU_ENABLED === '1'
+            return (
             <button
               key={label}
               type="button"
-              onClick={() => showComingSoon(label)}
-              className="bu-press bu-glass-soft flex items-center gap-2 rounded-xl px-2.5 py-2 text-left sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
+              disabled={!vtuOpen}
+              onClick={() => {
+                if (!vtuOpen) return
+                onNavigate(page)
+              }}
+              className={`bu-glass-soft flex items-center gap-2 rounded-xl px-2.5 py-2 text-left sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3 ${
+                vtuOpen ? 'bu-press' : 'cursor-default opacity-80'
+              }`}
             >
               <span className="bu-well-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 sm:rounded-xl">
                 <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </span>
               <span className="min-w-0">
                 <span className="block text-xs font-semibold sm:text-sm">{label}</span>
-                <span className="text-[10px] text-neutral-500 sm:text-[11px]">Coming soon</span>
+                <span className="text-[10px] text-neutral-500 sm:text-[11px]">
+                  {vtuOpen ? 'Buy with ɃU' : 'Coming soon'}
+                </span>
               </span>
             </button>
-          ))}
+            )
+          })}
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-3 sm:gap-3">
           {[
@@ -341,9 +348,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </button>
           ))}
         </div>
-        {soonNotice ? (
-          <p className="mt-2 text-center text-xs font-medium text-neutral-500">{soonNotice}</p>
-        ) : null}
       </div>
 
       <div className="px-4">

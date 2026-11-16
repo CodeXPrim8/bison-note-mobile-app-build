@@ -121,7 +121,7 @@ export default function MyTickets({
             : "You don't have any event tickets yet."}
         </p>
         {!pastCount && (
-          <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to find your next night out.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to find your next celebration.</p>
         )}
         {message && !pastCount && <p className="mt-3 text-xs text-muted-foreground">{message}</p>}
         <Button className="mt-6" onClick={() => onNavigate?.(pastCount ? 'history' : 'events')}>

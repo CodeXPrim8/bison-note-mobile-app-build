@@ -8,7 +8,7 @@ import { isPaystackConfigured } from '@/lib/env'
 export async function POST(request: Request) {
   try {
     if (!isPaystackConfigured()) {
-      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding sync is not available right now.')
     }
     const user = await requireUser()
     const session = await readBuSession()

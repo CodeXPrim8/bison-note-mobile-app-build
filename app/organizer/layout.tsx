@@ -2,7 +2,7 @@ import { OrganizerNav } from '@/components/web/organizer-nav'
 
 export default function OrganizerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <div className="flex min-h-screen flex-col md:flex-row">
         <OrganizerNav />
         <div className="min-w-0 flex-1">

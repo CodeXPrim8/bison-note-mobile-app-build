@@ -14,6 +14,7 @@ import Navigation from '@/components/navigation'
 import ModeSwitcher from '@/components/mode-switcher'
 import CelebrantDashboard from '@/components/celebrant-dashboard'
 import BuyBU from '@/components/buy-bu'
+import BuyAirtimeData from '@/components/buy-airtime-data'
 import History from '@/components/history'
 import Invites from '@/components/invites'
 import EventsTickets from '@/components/events-tickets'
@@ -170,6 +171,10 @@ function MobileAppShell() {
             ? 'Tickets'
             : currentPage === 'buy-bu'
               ? 'Buy ɃU'
+              : currentPage === 'airtime'
+                ? 'Airtime'
+                : currentPage === 'data'
+                  ? 'Data'
               : currentPage === 'send-bu'
                 ? 'Send ɃU'
               : currentPage === 'receive-bu'
@@ -211,6 +216,12 @@ function MobileAppShell() {
               )}
               {currentPage === 'notifications' && <Notifications />}
               {currentPage === 'buy-bu' && <BuyBU />}
+              {currentPage === 'airtime' && (
+                <BuyAirtimeData kind="airtime" onBack={() => handleNavigate('dashboard')} />
+              )}
+              {currentPage === 'data' && (
+                <BuyAirtimeData kind="data" onBack={() => handleNavigate('dashboard')} />
+              )}
               {currentPage === 'history' && <History />}
               {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
               {currentPage === 'tickets' && (

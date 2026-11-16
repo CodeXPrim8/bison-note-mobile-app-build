@@ -44,7 +44,7 @@ export default function RequireEmailGate({ children }: { children: React.ReactNo
     const value = email.trim().toLowerCase()
     if (!EMAIL_RE.test(value)) {
       setError(true)
-      setMessage('Enter a real email. Every ɃU account needs one for Paystack, receipts, and PIN reset.')
+      setMessage('Enter a real email. Every ɃU account needs one for receipts and PIN reset.')
       return
     }
     setBusy(true)
@@ -84,7 +84,7 @@ export default function RequireEmailGate({ children }: { children: React.ReactNo
         </div>
         <h2 className="text-xl font-bold tracking-tight text-[#07101f]">Add your email</h2>
         <p className="mt-2 text-sm font-medium text-[#0b1733]/75">
-          Every ɃU account needs a real email for Paystack, receipts, and Forgot PIN. You cannot remove it later.
+          Every ɃU account needs a real email for receipts and Forgot PIN. You cannot remove it later.
         </p>
         <label className="mt-4 flex items-center gap-2 rounded-2xl border border-[#0b1733]/12 bg-[#f4f7fb] px-3 py-3">
           <Mail className="h-4 w-4 shrink-0 text-[#1f5fd6]" />

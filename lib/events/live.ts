@@ -200,7 +200,7 @@ function parseQrMeta(raw: unknown) {
   }
 }
 
-/** Tickets minted by this website after Paystack (`type: bu_ticket` / `BU_LIVE_` pay ref). */
+/** Tickets minted by this website after checkout (`type: bu_ticket` / `BU_LIVE_` pay ref). */
 export function isWebsiteIssuedLiveTicket(row: Record<string, unknown>) {
   const meta = parseQrMeta(row.qr_code_data)
   return meta.type === 'bu_ticket' || Boolean(meta.pay_ref?.startsWith('BU_LIVE_'))

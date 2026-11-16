@@ -9,15 +9,19 @@ export function RollingBalance({
   prefix = 'Ƀ',
   className = '',
   size = 'lg',
+  /** Only animate when this increases (set on spend/credit). Remount / wallet refresh stay static. */
+  motionKey = 0,
 }: {
   value: number | null
   visible?: boolean
   prefix?: string
   className?: string
   size?: 'lg' | 'md'
+  motionKey?: number
 }) {
   const prev = useRef<number | null>(null)
   const prevText = useRef('')
+  const lastMotion = useRef(0)
   const [direction, setDirection] = useState<'up' | 'down'>('up')
   const [display, setDisplay] = useState(value)
   const [tick, setTick] = useState(0)
@@ -32,15 +36,21 @@ export function RollingBalance({
     }
     const before = prev.current
     const nextText = formatBu(value)
-    if (before != null && Math.abs(value - before) >= 0.005) {
+    const motionIncreased = motionKey > lastMotion.current
+    const shouldRoll =
+      motionIncreased && before != null && Math.abs(value - before) >= 0.005
+
+    if (shouldRoll) {
       setDirection(value > before ? 'up' : 'down')
       setOutgoing(prevText.current || formatBu(before))
       setTick((n) => n + 1)
     }
+
+    lastMotion.current = motionKey
     setDisplay(value)
     prev.current = value
     prevText.current = nextText
-  }, [value])
+  }, [value, motionKey])
 
   if (!visible) {
     return (
@@ -81,7 +91,6 @@ export function RollingBalance({
           }
 
           if (!/\d/.test(ch)) {
-            // commas / decimals sit on the same center line as digits
             return (
               <span
                 key={`s-${i}-${ch}`}

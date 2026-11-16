@@ -437,7 +437,7 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
     throw new ApiError(
       503,
       'PAYSTACK_REQUIRED',
-      'Paystack is not configured. Add PAYSTACK_SECRET_KEY from the live ɃU project, then try again.',
+      'Checkout is not available right now. Try again later.',
     )
   }
 

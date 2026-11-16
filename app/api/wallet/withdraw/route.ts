@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     if (accountNumber && bankCode) {
       const parsed = resolveSchema.parse({ account_number: accountNumber, bank_code: bankCode })
       if (!isPaystackConfigured()) {
-        throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+        throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Bank payouts are not available right now.')
       }
       try {
         const resolved = await resolveNuban(parsed.account_number, parsed.bank_code)
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
       throw new ApiError(
         503,
         'PAYSTACK_REQUIRED',
-        'Bank payouts are not configured yet. Super Admin must add the live Paystack secret and enable Transfers.',
+        'Bank payouts are not configured yet. Contact support or try again later.',
       )
     }
 

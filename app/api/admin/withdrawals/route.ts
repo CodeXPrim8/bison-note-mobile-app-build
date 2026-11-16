@@ -114,14 +114,14 @@ export async function PATCH(request: Request) {
     if (status === 'paid') throw new ApiError(400, 'ALREADY_PAID', 'This withdrawal is already paid')
     if (!canPayout(status, row)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal is already handled')
     if (!isPaystackConfigured()) {
-      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Add the live Paystack secret and enable Transfers, then retry.')
+      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Bank payouts are not available right now. Try again later.')
     }
     try {
       const payout = await sendWithdrawalPayout(row, db)
       await writeAdminAudit(liveId, `withdrawals.${body.action}`, body.id, { ...body, reference: payout.reference })
       return successResponse(
         { ok: true, status: payout.status, reference: payout.reference },
-        payout.status === 'paid' ? 'Naira sent to the guest bank' : 'Paystack transfer started',
+        payout.status === 'paid' ? 'Naira sent to the guest bank' : 'Bank transfer started',
       )
     } catch (error) {
       const message = paystackPayoutMessage(error)

@@ -61,7 +61,7 @@ export default function CelebrantDashboard({
   onModeChange?: (mode: 'user' | 'celebrant' | 'vendor') => void
   currentMode?: 'user' | 'celebrant' | 'vendor'
 } = {}) {
-  const { greetingName, userId, buBalance, nairaBalance } = useAccount()
+  const { greetingName, userId, buBalance, nairaBalance, balanceMotion } = useAccount()
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [events, setEvents] = useState<Event[]>([])
   const [recentTransfers, setRecentTransfers] = useState<BUTransfer[]>([])
@@ -165,6 +165,7 @@ export default function CelebrantDashboard({
       <ModeWalletHero
         title={greetingName ? `Celebrant · ${greetingName}` : 'Celebrant'}
         balanceValue={buBalance}
+        balanceMotion={balanceMotion}
         balanceVisible={balanceVisible}
         onToggleBalance={() => setBalanceVisible((value) => !value)}
         subtitle={

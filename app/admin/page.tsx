@@ -78,7 +78,7 @@ export default function SuperAdminPage() {
   const kpis = [
     { label: 'Money in circulation', value: formatNaira(data.totals.circulation), hint: `${Math.round(data.totals.circulation_bu).toLocaleString()} ɃU`, icon: Wallet },
     {
-      label: 'Paystack balance',
+      label: 'Settlement balance',
       value: data.paystack?.naira == null ? '—' : formatNaira(data.paystack.naira),
       hint: data.paystack?.error ?? 'Live Transfers wallet',
       icon: Banknote,

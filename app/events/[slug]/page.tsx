@@ -48,7 +48,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
   const { slug } = await params
   if (!isSupabaseConfigured()) {
     return (
-      <div className="theme-pink min-h-screen bg-background p-8 text-foreground">
+      <div className="bu-site min-h-screen p-8">
         <p>Configure Supabase to load this event.</p>
       </div>
     )
@@ -63,7 +63,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
   const ticketTiers = record.ticket_tiers
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <div
         className="h-64 bg-gradient-to-br from-primary via-primary/40 to-background bg-cover bg-center"

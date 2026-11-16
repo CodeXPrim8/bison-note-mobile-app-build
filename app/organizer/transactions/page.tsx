@@ -87,7 +87,7 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      <h2 className="mt-8 text-xl font-semibold">Paystack charges</h2>
+      <h2 className="mt-8 text-xl font-semibold">Charges</h2>
       <Input className="mt-4" placeholder="Search reference, email, status" value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="mt-4 space-y-2">
         {filtered.map((payment) => (
@@ -109,7 +109,7 @@ export default function TransactionsPage() {
           </Card>
         ))}
         {filtered.length === 0 && !error && (
-          <p className="text-sm text-muted-foreground">No Paystack charges yet.</p>
+          <p className="text-sm text-muted-foreground">No charges yet.</p>
         )}
       </div>
     </div>

@@ -1,30 +1,28 @@
 import Link from 'next/link'
 import { SiteFooter, SiteHeader } from '@/components/web/site-chrome'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 export default function GatewayPage() {
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-16">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Ƀucks Gateway</p>
-        <h1 className="mt-3 text-4xl font-bold">Keep your website. Take ticket money through Ƀucks.</h1>
-        <p className="mt-4 max-w-2xl text-muted-foreground">
-          Built like Paystack. Your other site stores a Ƀucks secret key, starts a payment, redirects the guest, then
-          verifies. Paystack stays inside Ƀucks. Tickets land in Ƀucks Access.
+        <p className="bu-site-kicker">Ƀucks Gateway</p>
+        <h1 className="bu-site-h2 mt-3">Keep your website. Take ticket money through Ƀucks.</h1>
+        <p className="bu-site-copy mt-4 max-w-2xl">
+          Your other site stores a Ƀucks secret key, starts a payment, redirects the guest, then verifies. Tickets land in Ƀucks Access.
         </p>
-        <div className="mt-8 flex gap-3">
-          <Button asChild>
-            <Link href="/gateway/dashboard">Get API keys</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/gateway/docs">API docs</Link>
-          </Button>
+        <div className="bu-site-cta-row mt-8">
+          <Link href="/gateway/dashboard" className="bu-site-btn bu-site-btn-primary">
+            Get API keys
+          </Link>
+          <Link href="/gateway/docs" className="bu-site-btn bu-site-btn-ghost">
+            API docs
+          </Link>
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           {[
-            ['Secret key', 'sk_live_ on your server. POST initialize. Same pattern as Paystack.'],
+            ['Secret key', 'sk_live_ on your server. POST initialize to start a payment.'],
             ['Public key', 'pk_live_ in a widget or hosted checkout. Never charges by itself.'],
             ['Verify + webhooks', 'GET verify/:reference. ticket.purchased signed with X-BU-Signature.'],
           ].map(([title, body]) => (

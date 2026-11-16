@@ -53,7 +53,11 @@ export function walletDirection(input: {
   ) {
     return 'credit'
   }
-  if (/withdraw|send to bank|sent Ƀu|sent bu|^sent |purchase|bought ticket|tip to |tip sent/.test(desc)) {
+  if (
+    /withdraw|send to bank|sent Ƀu|sent bu|^sent |purchase|bought ticket|tip to |tip sent|^airtime |^data /.test(
+      desc,
+    )
+  ) {
     return 'debit'
   }
 
@@ -94,7 +98,11 @@ export function historyBucket(input: {
   const meta = asMeta(input.metadata)
   const metaKind = String(meta.kind ?? meta.requested_type ?? '').toLowerCase()
 
-  if (type === 'purchase' || type === 'ticket_purchase' || /ticket purchase|bought ticket/.test(desc)) {
+  if (
+    type === 'purchase' ||
+    type === 'ticket_purchase' ||
+    /ticket purchase|bought ticket|^airtime |^data /.test(desc)
+  ) {
     return 'purchase'
   }
   if (/event spray credit/.test(desc)) return 'topup'
@@ -142,6 +150,9 @@ export function historyLabel(input: {
   const type = String(input.type ?? '').toLowerCase()
   const credit = input.direction === 'credit'
 
+  if (/^auto reverse/i.test(desc)) return desc.replace(/^auto reverse\s*·\s*/i, 'Refund · ') || 'Refund'
+  if (/^airtime /i.test(desc)) return desc
+  if (/^data /i.test(desc)) return desc
   if (/bank transfer top-up|wallet top-?up/i.test(desc) || (type === 'deposit' && !/sent|received|transfer|tip/i.test(desc))) {
     return 'Bank transfer top-up'
   }

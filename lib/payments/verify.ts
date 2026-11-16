@@ -11,7 +11,7 @@ import type { Payment } from '@/lib/types/database'
 
 export async function fulfillDepositReference(reference: string) {
   if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Checkout is not available right now.')
   }
   const verified = await verifyTransaction(reference)
   if (verified.status !== 'success') {

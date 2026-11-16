@@ -1,7 +1,7 @@
 /**
  * Wallet FX. Live `wallets.balance` stays naira.
  * Spray / send / withdraw: 1 ɃU = ₦1 (display ɃU = ledger naira).
- * Card Fund Wallet: 5% buy spread so Paystack collection (~1.5% + ₦100)
+ * Card Fund Wallet: 5% buy spread so collection fees (~1.5% + ₦100)
  * and Paystack Transfers (₦10–₦50 + ₦50 stamp duty from ₦10,000) stay covered.
  * Ticket prices and the 5% ticket service fee stay naira and are separate.
  */

@@ -28,14 +28,14 @@ export default function GatewayDocs() {
 </script>`
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Ƀucks Gateway</p>
-        <h1 className="mt-2 text-4xl font-bold">API reference</h1>
-        <p className="mt-3 text-muted-foreground">
-          Same shape as Paystack: secret key on your server, public key in the browser, initialize, redirect, verify,
-          webhook. Base URL <code className="text-foreground">{app}/api/v1/gateway</code>
+        <p className="bu-site-kicker">Ƀucks Gateway</p>
+        <h1 className="bu-site-h2 mt-2">API reference</h1>
+        <p className="bu-site-copy mt-3">
+          Secret key on your server, public key in the browser, initialize, redirect, verify, webhook. Base URL{' '}
+          <code className="text-white">{app}/api/v1/gateway</code>
         </p>
 
         <h2 className="mt-10 text-2xl font-bold">API keys</h2>
@@ -56,7 +56,7 @@ export default function GatewayDocs() {
         <h2 className="mt-10 text-2xl font-bold">1. Initialize (secret key)</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Your website&apos;s server starts the payment. ɃU returns <code>authorization_url</code>. Redirect the guest
-          there. They pay on Paystack. ɃU mints the ticket.
+          there. They complete payment. ɃU mints the ticket.
         </p>
         <pre className="mt-4 overflow-x-auto rounded-xl bg-card p-4 text-xs">{initExample}</pre>
         <Card className="mt-4 space-y-2 p-6 text-sm text-muted-foreground">
@@ -116,7 +116,7 @@ export default function GatewayDocs() {
 
         <h2 className="mt-10 text-2xl font-bold">Inline button (public key)</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Like Paystack Inline. Paste on your page. The secret key stays on your server; this only uses{' '}
+          Paste on your page. The secret key stays on your server; this only uses{' '}
           <code>pk_live_</code>.
         </p>
         <pre className="mt-4 overflow-x-auto rounded-xl bg-card p-4 text-xs">{widgetExample}</pre>

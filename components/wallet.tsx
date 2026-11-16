@@ -106,7 +106,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       return
     }
     if (!email) {
-      setMessage('This account has no email yet. Add your own email in Settings. It is the address Paystack uses.')
+      setMessage('This account has no email yet. Add your own email in Settings.')
       return
     }
     setBusy(true)
@@ -121,7 +121,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       const json = await res.json()
       setBusy(false)
       if (!json.status) {
-        setMessage(json.message ?? 'Could not start Paystack checkout')
+        setMessage(json.message ?? 'Could not start checkout')
         return
       }
       window.location.assign(json.data.authorization_url)
@@ -215,7 +215,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              {email ? `Paystack receipt: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
+              {email ? `Receipt email: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
             </p>
             {message && <p className="text-sm text-destructive">{message}</p>}
             <div className="flex gap-2">
@@ -224,7 +224,7 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
                 disabled={busy}
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {busy ? 'Opening Paystack…' : 'Top Up'}
+                {busy ? 'Opening checkout…' : 'Top Up'}
               </Button>
               <Button onClick={() => setShowTopup(false)} variant="outline" className="flex-1">
                 Cancel

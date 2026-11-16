@@ -49,7 +49,7 @@ export default function AdminMoneyPage() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          ['Paystack balance', data.paystack?.naira == null ? '—' : formatNaira(data.paystack.naira)],
+          ['Settlement balance', data.paystack?.naira == null ? '—' : formatNaira(data.paystack.naira)],
           ['In circulation', formatNaira(data.totals.circulation)],
           ['Deposits', formatNaira(data.totals.deposits)],
           ['Withdrawals', formatNaira(data.totals.withdrawals)],
@@ -58,10 +58,10 @@ export default function AdminMoneyPage() {
           <Card key={label} className="p-5">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
             <p className="mt-2 text-2xl font-bold">{value}</p>
-            {label === 'Paystack balance' && data.paystack?.error && (
+            {label === 'Settlement balance' && data.paystack?.error && (
               <p className="mt-1 text-xs text-destructive">{data.paystack.error}</p>
             )}
-            {label === 'Paystack balance' && !data.paystack?.error && (
+            {label === 'Settlement balance' && !data.paystack?.error && (
               <p className="mt-1 text-xs text-muted-foreground">Live Transfers wallet</p>
             )}
           </Card>

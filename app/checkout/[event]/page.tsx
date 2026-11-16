@@ -148,7 +148,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
   }
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-xl px-4 py-12">
         <Button

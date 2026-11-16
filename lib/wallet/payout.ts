@@ -5,18 +5,18 @@ import { bankCodeFromName, displayBankName, NGN_BANKS, payoutBankCodes } from '@
 import { moveLiveWallet } from '@/lib/wallet/move'
 
 export function paystackPayoutMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || 'Paystack transfer failed')
+  const message = error instanceof Error ? error.message : String(error || 'Bank transfer failed')
   if (/third party payouts|starter business|transfers are not available/i.test(message)) {
-    return 'Paystack Transfers are not enabled on this business. Enable Transfers in Paystack, fund the balance, then retry.'
+    return 'Automatic bank payouts are not enabled yet. Try again later or contact support.'
   }
   if (/insufficient|not enough balance|balance is low|not enough to fulfil|not enough to fulfill/i.test(message)) {
-    return 'Paystack business balance is too low to send this payout (not your Ƀucks wallet). Top up Paystack → Balance, then retry.'
+    return 'Settlement balance is too low to send this payout right now. Try again later.'
   }
   if (/otp/i.test(message)) {
-    return 'Paystack is waiting for a transfer OTP. Complete it in the Paystack dashboard, or turn off Transfer OTP.'
+    return 'This payout needs an extra confirmation step. Try again shortly, or contact support.'
   }
   if (/bank is invalid/i.test(message)) {
-    return 'This bank is not valid for Paystack Transfers. Choose OPay, Kuda, PalmPay, or a listed Nigerian bank and use the 10-digit account number, not a phone number.'
+    return 'This bank is not valid for payouts. Choose OPay, Kuda, PalmPay, or a listed Nigerian bank and use the 10-digit account number, not a phone number.'
   }
   if (/invalid.*account|could not resolve account|could not confirm/i.test(message)) {
     return 'Bank account could not be verified. Check the 10-digit NUBAN and bank, then retry.'
@@ -186,7 +186,7 @@ export async function createPayoutRecipient(row: Record<string, unknown>) {
 
 export async function sendWithdrawalPayout(row: Record<string, unknown>, db: SupabaseClient) {
   if (!isPaystackConfigured()) {
-    throw new Error('Paystack is not configured. Add the live secret key, then enable Transfers in Paystack.')
+    throw new Error('Bank payouts are not available right now.')
   }
   const id = String(row.id)
   const reuse =
@@ -309,19 +309,19 @@ export async function applyPaystackTransferEvent(
         naira: Number(row.naira),
         direction: 'credit',
         type: 'refund',
-        description: 'Withdrawal reversed by Paystack',
+        description: 'Withdrawal reversed',
         metadata: { withdrawal_id: row.id, reason: name || transferStatus },
       })
       await updateWithdrawal(db, String(row.id), {
         status: 'reversed',
         transfer_error: null,
-        note: 'Paystack reversed the bank transfer. ɃU returned to the wallet.',
+        note: 'The bank transfer was reversed. ɃU returned to the wallet.',
         reviewed_at: new Date().toISOString(),
       })
       return { ok: true as const, id: String(row.id), status: 'reversed' }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'wallet credit failed'
-      await markWithdrawalFailed(String(row.id), `Paystack reversed the transfer. ${message}`, db)
+      await markWithdrawalFailed(String(row.id), `Bank transfer reversed. ${message}`, db)
       return { ok: true as const, id: String(row.id), status: 'payout_failed' }
     }
   }
@@ -329,7 +329,7 @@ export async function applyPaystackTransferEvent(
     if (String(row.status) === 'rejected' || String(row.status) === 'failed' || String(row.status) === 'reversed') {
       return { ok: true as const, id: String(row.id), status: String(row.status) }
     }
-    await markWithdrawalFailed(String(row.id), `Paystack ${name || transferStatus}`, db)
+    await markWithdrawalFailed(String(row.id), `Transfer ${name || transferStatus}`, db)
     return { ok: true as const, id: String(row.id), status: 'payout_failed' }
   }
   return { ok: true as const, id: String(row.id), status: String(row.status) }

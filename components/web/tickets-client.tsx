@@ -87,7 +87,7 @@ export default function TicketsClient() {
   const history = tickets.filter((ticket) => isEventPast(ticket.event))
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-lg px-4 py-12">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary">Gate pass</p>
@@ -110,7 +110,7 @@ export default function TicketsClient() {
                 : "You don't have any event tickets yet."}
             </p>
             {!history.length && (
-              <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to discover your next night out.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Explore upcoming events to find your next celebration.</p>
             )}
             <Button asChild className="mt-5">
               <a href="/events">Explore Events</a>

@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!roles.is_super_admin) redirect('/')
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <div className="flex min-h-screen flex-col md:flex-row">
         <AdminNav />
         <div className="min-w-0 flex-1">

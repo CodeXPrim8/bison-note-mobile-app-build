@@ -94,12 +94,12 @@ export default function GatewayDashboard() {
   const sampleEvent = events[0]
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="text-3xl font-bold">Gateway keys</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Like Paystack: put <code>sk_live_</code> on another website&apos;s server. Guests pay, ɃU issues the ticket.{' '}
+          Put <code>sk_live_</code> on another website&apos;s server. Guests pay, ɃU issues the ticket.{' '}
           <Link href="/gateway/docs" className="text-primary underline">
             API docs
           </Link>

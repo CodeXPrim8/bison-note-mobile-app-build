@@ -82,11 +82,11 @@ function paystackSecretKind(key: string): 'live' | 'test' | 'unknown' {
 export function getPaystackSecret(): string {
   const key = optional('PAYSTACK_SECRET_KEY')?.trim()
   if (!key) {
-    throw new Error('Paystack is not configured')
+    throw new Error('Settlement is not configured')
   }
   if (process.env.VERCEL_ENV === 'production' && paystackSecretKind(key) === 'test') {
     throw new Error(
-      'Paystack test keys cannot take live charges. Set PAYSTACK_SECRET_KEY on Vercel to the live secret (sk_live_).',
+      'Test settlement keys cannot take live charges. Set PAYSTACK_SECRET_KEY on Vercel to the live secret (sk_live_).',
     )
   }
   return key

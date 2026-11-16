@@ -17,6 +17,8 @@ type AccountSnapshot = {
 }
 
 type AccountContextValue = AccountSnapshot & {
+  /** Bumps only on spend/credit so RollingBalance animates once, not on remount/refresh. */
+  balanceMotion: number
   applySpendBu: (bu: number, options?: { refresh?: boolean }) => void
   applyCreditNaira: (naira: number) => void
   applyWallet: (wallet: { bu_balance?: unknown; naira_available?: unknown }) => void
@@ -70,6 +72,7 @@ function writeCache(snapshot: AccountSnapshot) {
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<AccountSnapshot>(() => readCache() ?? emptySnapshot)
+  const [balanceMotion, setBalanceMotion] = useState(0)
 
   const ingestWallet = useCallback((wallet: { bu_balance?: unknown; naira_available?: unknown }) => {
     const naira = Number(wallet.naira_available)
@@ -131,6 +134,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const applySpendBu = useCallback((bu: number, options?: { refresh?: boolean }) => {
     if (!Number.isFinite(bu) || bu <= 0) return
     const debit = nairaFromBu(bu)
+    setBalanceMotion((n) => n + 1)
     setSnapshot((prev) => {
       if (prev.nairaBalance == null) return prev
       const naira = roundMoney(Math.max(0, prev.nairaBalance - debit))
@@ -138,6 +142,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       writeCache(next)
       return next
     })
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(WALLET_PULSE_EVENT))
+    }
     if (options?.refresh === false) {
       spendHoldUntil.current = Date.now() + 8000
       return
@@ -147,6 +154,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const applyCreditNaira = useCallback((nairaDelta: number) => {
     if (!Number.isFinite(nairaDelta) || nairaDelta === 0) return
+    setBalanceMotion((n) => n + 1)
     setSnapshot((prev) => {
       if (prev.nairaBalance == null) return prev
       const naira = roundMoney(Math.max(0, prev.nairaBalance + nairaDelta))
@@ -154,6 +162,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       writeCache(next)
       return next
     })
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(WALLET_PULSE_EVENT))
+    }
     void refreshWallet()
   }, [refreshWallet])
 
@@ -255,13 +266,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AccountContextValue>(
     () => ({
       ...snapshot,
+      balanceMotion,
       applySpendBu,
       applyCreditNaira,
       applyWallet: ingestWallet,
       refreshWallet,
       refreshAccount,
     }),
-    [snapshot, applySpendBu, applyCreditNaira, ingestWallet, refreshWallet, refreshAccount],
+    [snapshot, balanceMotion, applySpendBu, applyCreditNaira, ingestWallet, refreshWallet, refreshAccount],
   )
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>

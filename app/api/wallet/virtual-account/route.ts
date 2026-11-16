@@ -46,7 +46,7 @@ function publicAccount(account: Awaited<ReturnType<typeof getOrCreateVirtualAcco
 export async function GET() {
   try {
     if (!isPaystackConfigured()) {
-      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
     }
     const { liveId, email, phone, displayName } = await resolveFundingIdentity()
     const account = await getOrCreateVirtualAccount({
@@ -68,7 +68,7 @@ const postSchema = z.object({
 export async function POST(request: Request) {
   try {
     if (!isPaystackConfigured()) {
-      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+      throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
     }
     const limited = rateLimit(`dva-recreate:${clientIp(request)}`, 3, 15 * 60_000)
     if (!limited.ok) {

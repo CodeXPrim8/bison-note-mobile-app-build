@@ -26,13 +26,13 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: BU_SITE_NAME,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black-translucent',
   },
   icons: {
     icon: [
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
       { url: '/apple-icon.png', type: 'image/png', sizes: '180x180' },
-      { url: '/icon', type: 'image/png' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: [{ url: '/apple-icon.png', type: 'image/png', sizes: '180x180' }],
   },

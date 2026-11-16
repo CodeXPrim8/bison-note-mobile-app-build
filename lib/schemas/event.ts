@@ -19,7 +19,7 @@ export const EVENT_CATEGORY_LABELS: Record<(typeof EVENT_CATEGORIES)[number], st
   birthday: 'Birthday',
   concert: 'Concert',
   club: 'Club',
-  night_party: 'Night Party',
+  night_party: 'Party',
   corporate: 'Corporate',
   festival: 'Festival',
   church: 'Church',

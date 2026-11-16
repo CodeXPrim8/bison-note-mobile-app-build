@@ -128,7 +128,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
           // Account store pulse already fires once when the balance changes — don't double-dispatch.
         }
       } catch {
-        // Keep polling; Paystack can lag a few seconds after OPay shows success.
+        // Keep polling; bank apps can confirm a few seconds before we credit.
       } finally {
         syncingRef.current = false
       }
@@ -163,7 +163,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
 
   const shareText = useMemo(() => {
     if (!virtualAccount?.account_number) return ''
-    const bank = virtualAccount.bank_name || 'Paystack'
+    const bank = virtualAccount.bank_name || 'Bank'
     const name = virtualAccount.account_name || 'Ƀucks'
     return `Transfer to Ƀucks\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}\n1 ɃU = ₦1`
   }, [virtualAccount])
@@ -197,7 +197,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   async function handleCheckout() {
     if (!readyQuote) return
     if (!email) {
-      setMessage('This account has no email yet. Add your own email in Settings. It is the address Paystack uses.')
+      setMessage('This account has no email yet. Add your own email in Settings.')
       return
     }
     setBusy(true)
@@ -212,7 +212,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
       const json = await res.json()
       setBusy(false)
       if (!json.status) {
-        setMessage(json.message ?? 'Could not start Paystack checkout')
+        setMessage(json.message ?? 'Could not start checkout')
         return
       }
       window.location.assign(json.data.authorization_url)
@@ -257,7 +257,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bank</p>
-                  <p className="mt-1 text-lg font-semibold">{virtualAccount.bank_name || 'Paystack'}</p>
+                  <p className="mt-1 text-lg font-semibold">{virtualAccount.bank_name || 'Bank'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Account name</p>
@@ -270,7 +270,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Transfer any amount. Stay on this screen — we check Paystack several times a second and credit the moment it confirms.
+                  Transfer any amount. Stay on this screen — we credit your ɃU as soon as the transfer lands.
                 </p>
                 {syncNote && <p className="text-sm font-semibold text-primary">{syncNote}</p>}
                 <div className="flex gap-2">
@@ -439,7 +439,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   return (
     <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
-        <WalletPageSummary kicker="Fund" title="Checkout" detail="Paystack uses the email saved on this account." />
+        <WalletPageSummary kicker="Fund" title="Checkout" detail="Checkout uses the email saved on this account." />
         <div className="mb-4 mt-6">
           <Button onClick={() => setStep('conversion')} variant="outline" className="w-full">
             ← Back
@@ -463,7 +463,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
           </div>
         </Card>
         <p className="mb-3 text-sm text-muted-foreground">
-          {email ? `Paystack receipt: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
+          {email ? `Receipt email: ${email}` : 'No email on this account yet. Add one in Settings before funding.'}
         </p>
         {message && <p className="mb-3 text-sm text-destructive">{message}</p>}
         <Button
@@ -471,7 +471,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
           disabled={busy || !readyQuote}
           className="w-full bg-primary py-6 text-primary-foreground hover:bg-primary/90"
         >
-          {busy ? 'Opening Paystack…' : 'Pay with Paystack'}
+          {busy ? 'Opening checkout…' : 'Pay now'}
         </Button>
       </div>
     </div>

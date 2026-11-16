@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get('x-paystack-signature')
 
   if (isPaystackConfigured() && !verifyPaystackSignature(raw, signature)) {
-    return errorResponse(401, 'INVALID_SIGNATURE', 'Invalid Paystack signature')
+    return errorResponse(401, 'INVALID_SIGNATURE', 'Invalid webhook signature')
   }
 
   let event: {

@@ -88,23 +88,22 @@ export default function AdminWithdrawalsPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-300">Payouts</p>
         <h1 className="mt-1 text-3xl font-bold">Withdrawals</h1>
         <p className="text-sm text-muted-foreground">
-          Automatic sends naira to the guest bank through Paystack Transfers as soon as they request it. Manual holds
-          the request until you Approve. Reverse returns the ɃU to the user wallet. Enable Transfers on the live
-          Paystack account and keep that balance funded.
+          Automatic sends naira to the guest bank as soon as they request it. Manual holds the request until you
+          Approve. Reverse returns the ɃU to the user wallet. Keep the settlement balance funded.
         </p>
       </div>
       {!paystackReady && (
         <p className="text-sm text-destructive">
-          Paystack is not configured. Add the live secret key on Vercel, enable Transfers, then redeploy.
+          Bank payouts are not configured. Add settlement credentials and redeploy.
         </p>
       )}
       <Card className="p-5">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">Paystack balance</p>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Settlement balance</p>
         <p className="mt-2 text-3xl font-bold">
           {paystack?.naira == null ? '—' : formatNaira(paystack.naira)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Live Transfers wallet. Automatic withdrawals pay from this.
+          Automatic withdrawals pay from this balance.
         </p>
         {paystack?.error && <p className="mt-2 text-xs text-destructive">{paystack.error}</p>}
         {paystack?.naira != null &&
@@ -112,7 +111,7 @@ export default function AdminWithdrawalsPage() {
             .filter((row) => row.status === 'pending' || row.status === 'payout_failed' || row.status === 'approved')
             .reduce((sum, row) => sum + Number(row.naira || 0), 0) > paystack.naira && (
             <p className="mt-2 text-xs text-destructive">
-              Pending payouts exceed this balance. Fund Paystack before paying.
+              Pending payouts exceed this balance. Top up settlement before paying.
             </p>
           )}
       </Card>
@@ -144,7 +143,7 @@ export default function AdminWithdrawalsPage() {
                   {row.user_phone} · {row.bank_name} · {row.account_name} · {row.account_number} · {row.label ?? row.status}
                 </p>
                 {row.paystack_reference && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">Paystack {row.paystack_reference}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Ref {row.paystack_reference}</p>
                 )}
                 {row.transfer_error && <p className="mt-1 text-xs text-destructive">{row.transfer_error}</p>}
               </div>

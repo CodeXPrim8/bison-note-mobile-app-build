@@ -78,7 +78,7 @@ export default function LoginPage() {
         return
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        setMessage('Enter your email. It is used for Paystack and receipts, and it cannot be shared with another account.')
+        setMessage('Enter your email. It is used for receipts and account recovery, and it cannot be shared with another account.')
         return
       }
       if (!phone.trim()) {
@@ -289,10 +289,10 @@ export default function LoginPage() {
 
       <div className="relative z-[1] mx-auto flex min-h-dvh max-w-lg flex-col px-4 pb-10 pt-6">
         <div className="mb-6 flex items-center justify-between">
-          <Link href="/" className="text-sm font-bold tracking-tight text-[#07101f]">
+          <Link href="/" className="text-sm font-bold tracking-tight text-white">
             Ƀucks
           </Link>
-          <span className="rounded-full bg-[#0b1733]/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#0b1733]/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+          <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#e0dff5] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
             Digital voucher
           </span>
         </div>
@@ -306,11 +306,11 @@ export default function LoginPage() {
             </div>
 
             <div className="mb-6 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#1f5fd6]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#22e0ff]">
                 Ƀucks
               </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#07101f]">{headline}</h1>
-              <p className="mt-2 text-sm font-medium text-[#0b1733]/75">{subtitle}</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">{headline}</h1>
+              <p className="mt-2 text-sm font-medium text-[#e0dff5]/80">{subtitle}</p>
             </div>
 
             <form
@@ -322,7 +322,7 @@ export default function LoginPage() {
             >
               {mode === 'signup' && (
                 <label className="bu-auth-field">
-                  <User className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <User className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     placeholder="Full name"
                     autoComplete="name"
@@ -334,10 +334,10 @@ export default function LoginPage() {
 
               {mode === 'signup' && (
                 <label className="bu-auth-field">
-                  <Mail className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <Mail className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     type="email"
-                    placeholder="Email for Paystack & receipts"
+                    placeholder="Email for receipts"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -347,7 +347,7 @@ export default function LoginPage() {
 
               {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (
                 <label className="bu-auth-field">
-                  <Phone className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <Phone className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     placeholder="Phone / ɃU ID"
                     inputMode="tel"
@@ -360,7 +360,7 @@ export default function LoginPage() {
 
               {mode === 'reset' && (
                 <label className="bu-auth-field">
-                  <KeyRound className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <KeyRound className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     placeholder="6-digit email code"
                     inputMode="numeric"
@@ -374,7 +374,7 @@ export default function LoginPage() {
 
               {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
                 <label className="bu-auth-field">
-                  <Lock className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <Lock className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     placeholder={
                       mode === 'signup' ? 'Create 4–6 digit PIN' : mode === 'reset' ? 'New 4–6 digit PIN' : 'PIN'
@@ -388,7 +388,7 @@ export default function LoginPage() {
                   />
                   <button
                     type="button"
-                    className="rounded-full p-1 text-[#0b1733]/70"
+                    className="rounded-full p-1 text-[#e0dff5]/70"
                     aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
                     onClick={() => setShowPin((v) => !v)}
                   >
@@ -399,7 +399,7 @@ export default function LoginPage() {
 
               {(mode === 'signup' || mode === 'reset') && (
                 <label className="bu-auth-field">
-                  <Lock className="h-4 w-4 shrink-0 text-[#1f5fd6]" />
+                  <Lock className="h-4 w-4 shrink-0 text-[#22e0ff]" />
                   <input
                     placeholder={mode === 'reset' ? 'Confirm new PIN' : 'Confirm PIN'}
                     type={showConfirm ? 'text' : 'password'}
@@ -410,7 +410,7 @@ export default function LoginPage() {
                   />
                   <button
                     type="button"
-                    className="rounded-full p-1 text-[#0b1733]/70"
+                    className="rounded-full p-1 text-[#e0dff5]/70"
                     aria-label={showConfirm ? 'Hide confirm PIN' : 'Show confirm PIN'}
                     onClick={() => setShowConfirm((v) => !v)}
                   >
@@ -423,7 +423,7 @@ export default function LoginPage() {
                 <div className="flex items-center justify-end px-1">
                   <button
                     type="button"
-                    className="text-sm font-bold text-[#1f5fd6]"
+                    className="text-sm font-bold text-[#22e0ff]"
                     onClick={() => switchMode('forgot')}
                   >
                     Forgot PIN?
@@ -432,7 +432,7 @@ export default function LoginPage() {
               )}
 
               {message ? (
-                <p className={`px-1 text-sm font-semibold ${messageOk ? 'text-[#0b1733]/75' : 'text-red-700'}`}>
+                <p className={`px-1 text-sm font-semibold ${messageOk ? 'text-[#e0dff5]/85' : 'text-red-300'}`}>
                   {message}
                 </p>
               ) : null}
@@ -449,7 +449,7 @@ export default function LoginPage() {
               {(mode === 'forgot' || mode === 'reset') && (
                 <button
                   type="button"
-                  className="text-sm font-bold text-[#0b1733]/80"
+                  className="text-sm font-bold text-[#e0dff5]/90"
                   onClick={() => switchMode('login')}
                 >
                   Back to login
@@ -458,7 +458,7 @@ export default function LoginPage() {
               {(mode === 'login' || mode === 'signup') && (
                 <button
                   type="button"
-                  className="text-sm font-bold text-[#0b1733]/80"
+                  className="text-sm font-bold text-[#e0dff5]/90"
                   onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
                 >
                   {mode === 'login' ? "Don't have an account? Create one" : 'Have an account? Login'}
@@ -467,7 +467,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-[#0b1733]/55">
+          <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-[#e0dff5]/55">
             Celebrate · Send ɃU · Redeem
           </p>
         </div>

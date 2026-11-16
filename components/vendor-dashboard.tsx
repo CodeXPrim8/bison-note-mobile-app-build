@@ -58,7 +58,7 @@ export default function VendorDashboard({
   onModeChange?: (mode: 'user' | 'celebrant' | 'vendor') => void
   currentMode?: 'user' | 'celebrant' | 'vendor'
 } = {}) {
-  const { buBalance, nairaBalance, userId } = useAccount()
+  const { buBalance, nairaBalance, userId, balanceMotion } = useAccount()
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [stats, setStats] = useState<VendorStats>(emptyStats)
   const [sales, setSales] = useState<Sale[]>([])
@@ -145,6 +145,7 @@ export default function VendorDashboard({
       <ModeWalletHero
         title="Vendor"
         balanceValue={buBalance}
+        balanceMotion={balanceMotion}
         balanceVisible={balanceVisible}
         onToggleBalance={() => setBalanceVisible((value) => !value)}
         subtitle={

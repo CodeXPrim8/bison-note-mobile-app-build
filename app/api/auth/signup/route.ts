@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
     const ticketEmail = contactEmail(body.email)
     if (!ticketEmail) {
-      throw new ApiError(400, 'INVALID_EMAIL', 'Enter the real email you will use for Paystack and receipts.')
+      throw new ApiError(400, 'INVALID_EMAIL', 'Enter the real email you will use for receipts and account recovery.')
     }
     const pinHash = await bcrypt.hash(body.pin, 10)
     const password = supabasePinPassword(body.pin)

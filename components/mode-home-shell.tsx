@@ -61,6 +61,7 @@ export function ModeWalletHero({
   title,
   balanceLabel,
   balanceValue,
+  balanceMotion = 0,
   balanceVisible,
   onToggleBalance,
   subtitle,
@@ -71,6 +72,7 @@ export function ModeWalletHero({
   title: string
   balanceLabel?: string
   balanceValue?: number | null
+  balanceMotion?: number
   balanceVisible: boolean
   onToggleBalance: () => void
   subtitle?: string
@@ -89,6 +91,7 @@ export function ModeWalletHero({
               {balanceValue !== undefined ? (
                 <RollingBalance
                   value={balanceValue}
+                  motionKey={balanceMotion}
                   visible={balanceVisible}
                   className="bu-balance text-4xl font-semibold tracking-tight text-white"
                 />

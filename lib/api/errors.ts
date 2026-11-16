@@ -55,7 +55,7 @@ export function handleRouteError(error: unknown): NextResponse<ApiErrorBody> {
   }
   if (error instanceof MissingEnvError) {
     console.error(error.message)
-    return errorResponse(503, 'AUTH_UNAVAILABLE', 'Could not start Paystack checkout.')
+    return errorResponse(503, 'AUTH_UNAVAILABLE', 'Could not start checkout.')
   }
   if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
     const message = (error as { message: string }).message

@@ -268,7 +268,7 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
       throw new ApiError(
         502,
         'PAYSTACK_ERROR',
-        error instanceof Error ? error.message : 'Paystack initialize failed',
+        error instanceof Error ? error.message : 'Checkout initialize failed',
       )
     }
   }

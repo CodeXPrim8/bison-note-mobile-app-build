@@ -84,7 +84,7 @@ export default function SettingsPage() {
       <Card className="mt-6 space-y-3 p-6">
         <Input placeholder="Display name" value={name} onChange={(e) => setName(e.target.value)} />
         <Input
-          placeholder="Email for receipts and Paystack"
+          placeholder="Email for receipts"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}

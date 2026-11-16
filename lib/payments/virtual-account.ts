@@ -216,7 +216,7 @@ async function resolvePaystackCustomerForUser(input: {
           : new ApiError(
               502,
               'PAYSTACK_CUSTOMER_FAILED',
-              error instanceof Error ? error.message : 'Could not create Paystack customer',
+              error instanceof Error ? error.message : 'Could not set up funding profile',
             )
       }
     }
@@ -232,13 +232,13 @@ export async function getOrCreateVirtualAccount(input: {
   displayName?: string | null
 }): Promise<VirtualAccountRecord> {
   if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
   }
 
   const stored = await getStoredVirtualAccount(input.userId)
   if (stored) {
-    // One-shot upgrade off the old PROTECTORNG prefix. "UCKS/..." means Paystack
-    // stripped Ƀ from "Ƀucks" — fix trading name to ASCII "BUCKS" in Paystack first.
+    // One-shot upgrade off the old PROTECTORNG prefix. "UCKS/..." means the provider
+    // stripped Ƀ from "Ƀucks" — trading name must stay ASCII "BUCKS".
     if (/protectorng/i.test(stored.account_name || '')) {
       try {
         return await recreateVirtualAccount(input)
@@ -276,13 +276,13 @@ export async function getOrCreateVirtualAccount(input: {
     phone,
   })
   if (!created?.account_number) {
-    throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Paystack did not return a dedicated account number')
+    throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Could not create a funding account number')
   }
   return persistVirtualAccount(fromPaystackAccount(input.userId, created, customerCode, customerId), created)
 }
 
 /**
- * Deactivate the current Paystack DVA and issue a new one so the account name
+ * Deactivate the current dedicated virtual account and issue a new one so the account name
  * picks up the latest trading name (e.g. BUCKS instead of PROTECTORNG).
  */
 export async function recreateVirtualAccount(input: {
@@ -292,7 +292,7 @@ export async function recreateVirtualAccount(input: {
   displayName?: string | null
 }): Promise<VirtualAccountRecord> {
   if (!isPaystackConfigured()) {
-    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Paystack is not configured.')
+    throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
   }
 
   const { customer, phone, firstName, lastName } = await resolvePaystackCustomerForUser(input)
@@ -323,7 +323,7 @@ export async function recreateVirtualAccount(input: {
     phone,
   })
   if (!created?.account_number) {
-    throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Paystack did not return a new dedicated account number')
+    throw new ApiError(502, 'VIRTUAL_ACCOUNT_CREATE_FAILED', 'Could not create a new funding account number')
   }
 
   return persistVirtualAccount(fromPaystackAccount(input.userId, created, customerCode, customerId), created)

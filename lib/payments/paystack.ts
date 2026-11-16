@@ -48,7 +48,7 @@ async function paystackRequest<T>(
   })
   const json = (await response.json()) as PaystackEnvelope<T> & { meta?: PaystackMeta }
   if (!response.ok || !json.status) {
-    throw new Error(json.message || `Paystack request failed: ${path}`)
+    throw new Error(json.message || `Settlement request failed: ${path}`)
   }
   return json
 }
@@ -249,7 +249,7 @@ export async function deactivateDedicatedVirtualAccount(dedicatedAccountId: numb
 
 const requeryCooldown = new Map<string, number>()
 
-/** Ask Paystack to pull pending bank transfers into charge.success (max once / 10 min per account). */
+/** Pull pending bank transfers into charge.success (max once / 10 min per account). */
 export async function requeryDedicatedVirtualAccount(input: {
   accountNumber: string
   providerSlug: string
@@ -392,7 +392,7 @@ export async function getPaystackBalances(): Promise<PaystackBalanceRow[]> {
 export async function adminPaystackSnapshot(): Promise<AdminPaystackSnapshot> {
   if (balanceCache && Date.now() - balanceCache.at < 20_000) return balanceCache.value
   if (!isPaystackConfigured()) {
-    const empty = { ready: false, naira: null, currency: 'NGN', error: 'Paystack is not configured' }
+    const empty = { ready: false, naira: null, currency: 'NGN', error: 'Settlement is not configured' }
     balanceCache = { at: Date.now(), value: empty }
     return empty
   }

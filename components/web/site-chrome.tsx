@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { AffiliateCapture } from '@/components/web/affiliate-capture'
 import { AdSlot } from '@/components/web/ad-slot'
-import { IconBuMark } from '@/components/web/bu-icons'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
 interface MeResponse {
@@ -44,11 +43,8 @@ export function SiteHeader() {
     <header className="bu-site-header">
       <AffiliateCapture />
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2.5 text-white">
-          <span className="bu-site-mark">
-            <IconBuMark className="h-5 w-5" />
-          </span>
-          <span className="bu-site-display text-lg font-bold tracking-tight">Ƀucks</span>
+        <Link href="/" className="bu-site-display text-lg font-bold tracking-tight text-white">
+          Ƀucks
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-white/65 md:flex">
           <Link href="/events" className="transition-colors hover:text-white">
@@ -105,7 +101,8 @@ export function SiteFooter() {
         <div>
           <p className="bu-site-display text-2xl font-bold tracking-tight text-white">Ƀucks</p>
           <p className="mt-2 max-w-sm text-sm text-white/55">
-            The digital voucher for African nights — celebrate, send ɃU, redeem. Coming to App Store and Google Play.
+            The digital voucher that moves with you — gift, send, sell tickets, take payments, redeem anytime. Coming to
+            App Store and Google Play.
           </p>
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-white/55">

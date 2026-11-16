@@ -46,7 +46,7 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
             }
           }
         } else if (json.code === 'PAYMENT_PENDING') {
-          setMessage('Payment is still pending. Complete Paystack checkout, then return here.')
+          setMessage('Payment is still pending. Complete checkout, then return here.')
         } else {
           setMessage(json.message ?? 'Payment not confirmed yet.')
         }
@@ -55,7 +55,7 @@ export default function PayPage({ params }: { params: Promise<{ reference: strin
   }, [reference])
 
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <SiteHeader />
       <main className="mx-auto max-w-lg px-4 py-16">
         <Card className="p-8 text-center">

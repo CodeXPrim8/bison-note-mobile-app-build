@@ -2,7 +2,7 @@ import { AffiliateNav } from '@/components/web/account-shell-nav'
 
 export default function AffiliateLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="theme-pink min-h-screen bg-background text-foreground">
+    <div className="bu-site min-h-screen">
       <div className="flex min-h-screen flex-col md:flex-row">
         <AffiliateNav />
         <div className="min-w-0 flex-1">
