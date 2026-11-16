@@ -12,14 +12,27 @@ import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { getAccountRolesForViewer } from '@/lib/account/roles'
 import type { Profile } from '@/lib/types/database'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const boot = new URL(request.url).searchParams.get('boot') === '1'
     const user = await getSessionUser()
     if (!user) return successResponse({ user: null, profile: null, roles: null })
     const profile = await getProfile(user.id)
     const session = await readBuSession()
     const email =
       contactEmail(profile?.email) ?? contactEmail(user.email) ?? contactEmail(session?.email)
+    const profileOut = profile ? { ...profile, email } : null
+
+    // Fast path for app shell boot — skip role resolution until needed.
+    if (boot) {
+      return successResponse({
+        user: { id: user.id, email },
+        profile: profileOut,
+        email_required: !email,
+        roles: null,
+      })
+    }
+
     let rolesPayload = null
     try {
       const liveId = await resolveLiveCelebrantId({
@@ -32,7 +45,6 @@ export async function GET() {
     } catch {
       rolesPayload = null
     }
-    const profileOut = profile ? { ...profile, email } : null
     return successResponse({
       user: { id: user.id, email },
       profile: profileOut,

@@ -6,7 +6,7 @@ import { bindAccountSnapshots, clearAccountSnapshots } from '@/lib/session-snaps
 
 const CACHE_KEY = 'bu_account_snapshot_v2'
 export const WALLET_PULSE_EVENT = 'bu-wallet-changed'
-const PULSE_MS = 3500
+const PULSE_MS = 5000
 
 type AccountSnapshot = {
   userId: string
@@ -102,7 +102,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAccount = useCallback(async () => {
     try {
-      const res = await fetch('/api/me', { credentials: 'include' })
+      // Boot first (no roles), then hydrate roles in the background.
+      const res = await fetch('/api/me?boot=1', { credentials: 'include' })
       const json = await res.json()
       const userId = json.status ? String(json.data?.user?.id || '') : ''
       bindAccountSnapshots(userId || null)
@@ -126,6 +127,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         writeCache(next)
         return next
       })
+      void fetch('/api/me', { credentials: 'include' }).catch(() => undefined)
     } catch {
       // Wait for the next /api/me instead of showing another account.
     }
@@ -254,7 +256,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
     }
     void syncBankTopUps()
-    const syncTimer = window.setInterval(() => void syncBankTopUps(), 12000)
+    const syncTimer = window.setInterval(() => void syncBankTopUps(), 18000)
 
     return () => {
       stopped = true

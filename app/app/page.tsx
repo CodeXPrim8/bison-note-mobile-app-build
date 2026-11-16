@@ -1,29 +1,34 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Dashboard from '@/components/dashboard'
-import Profile from '@/components/profile'
-import Notifications from '@/components/notifications'
-import Wallet from '@/components/wallet'
-import Spraying from '@/components/spraying'
-import Redemption from '@/components/redemption'
-import VendorDashboard from '@/components/vendor-dashboard'
-import VendorPOS from '@/components/vendor-pos'
-import QRScanner from '@/components/qr-scanner'
 import Navigation from '@/components/navigation'
 import ModeSwitcher from '@/components/mode-switcher'
-import CelebrantDashboard from '@/components/celebrant-dashboard'
-import BuyBU from '@/components/buy-bu'
-import BuyAirtimeData from '@/components/buy-airtime-data'
-import History from '@/components/history'
-import Invites from '@/components/invites'
-import EventsTickets from '@/components/events-tickets'
-import SendBU from '@/components/send-bu'
-import ReceiveBU from '@/components/receive-bu'
-import EventInfo from '@/components/event-info'
-import MyTickets from '@/components/my-tickets'
 import { AccountProvider } from '@/components/account-store'
 import RequireEmailGate from '@/components/require-email-gate'
+import { BuLoader } from '@/components/bu-loader'
+
+const pageFallback = <BuLoader compact />
+
+const Profile = dynamic(() => import('@/components/profile'), { loading: () => pageFallback })
+const Notifications = dynamic(() => import('@/components/notifications'), { loading: () => pageFallback })
+const Wallet = dynamic(() => import('@/components/wallet'), { loading: () => pageFallback })
+const Spraying = dynamic(() => import('@/components/spraying'), { loading: () => pageFallback })
+const Redemption = dynamic(() => import('@/components/redemption'), { loading: () => pageFallback })
+const VendorDashboard = dynamic(() => import('@/components/vendor-dashboard'), { loading: () => pageFallback })
+const VendorPOS = dynamic(() => import('@/components/vendor-pos'), { loading: () => pageFallback })
+const QRScanner = dynamic(() => import('@/components/qr-scanner'), { loading: () => pageFallback })
+const CelebrantDashboard = dynamic(() => import('@/components/celebrant-dashboard'), { loading: () => pageFallback })
+const BuyBU = dynamic(() => import('@/components/buy-bu'), { loading: () => pageFallback })
+const BuyAirtimeData = dynamic(() => import('@/components/buy-airtime-data'), { loading: () => pageFallback })
+const History = dynamic(() => import('@/components/history'), { loading: () => pageFallback })
+const Invites = dynamic(() => import('@/components/invites'), { loading: () => pageFallback })
+const EventsTickets = dynamic(() => import('@/components/events-tickets'), { loading: () => pageFallback })
+const SendBU = dynamic(() => import('@/components/send-bu'), { loading: () => pageFallback })
+const ReceiveBU = dynamic(() => import('@/components/receive-bu'), { loading: () => pageFallback })
+const EventInfo = dynamic(() => import('@/components/event-info'), { loading: () => pageFallback })
+const MyTickets = dynamic(() => import('@/components/my-tickets'), { loading: () => pageFallback })
 
 function ticketIdFromPageData(pageData: unknown) {
   if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
@@ -94,7 +99,8 @@ function MobileAppShell() {
       // Ignore private-mode storage failures.
     }
 
-    fetch('/api/me', { credentials: 'include', cache: 'no-store' })
+    // Lite boot endpoint skips role resolution for a faster first paint.
+    const boot = fetch('/api/me?boot=1', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (json.status && json.data?.user) {
@@ -112,6 +118,10 @@ function MobileAppShell() {
       .catch(() => {
         setMounted(true)
       })
+
+    // Never leave users staring at the splash longer than needed.
+    const maxWait = window.setTimeout(() => setMounted(true), 2200)
+    void boot.finally(() => window.clearTimeout(maxWait))
   }, [])
 
   useEffect(() => {
@@ -145,17 +155,22 @@ function MobileAppShell() {
   }, [theme, mounted])
 
   if (!mounted) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Checking your ɃU account…
-      </div>
-    )
+    return <BuLoader label="Opening your wallet…" />
   }
 
   if (!allowed) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-center text-sm text-muted-foreground">
-        Could not reach ɃU. Keep this tab open and try again in a moment.
+      <div className="relative">
+        <BuLoader label="Could not reach Ƀucks" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-[2] flex justify-center px-4">
+          <button
+            type="button"
+            className="pointer-events-auto rounded-full bg-gradient-to-r from-[#2f7bff] to-[#8b5cf6] px-5 py-2.5 text-sm font-bold text-white"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     )
   }

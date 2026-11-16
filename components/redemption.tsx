@@ -300,15 +300,15 @@ export default function Redemption() {
               }
               className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
             />
-            <p className="mt-2 text-sm font-medium text-primary">
-              {resolving
-                ? 'Looking up account name…'
-                : form.accountName
-                  ? form.accountName
-                  : form.accountNumber.length === 10
-                    ? 'Account name not found'
-                    : 'Account name appears after you enter the number'}
-            </p>
+            {(resolving || form.accountName || form.accountNumber.length === 10) && (
+              <p className="mt-2 text-sm font-medium text-primary">
+                {resolving
+                  ? 'Looking up account name…'
+                  : form.accountName
+                    ? form.accountName
+                    : 'Account name not found'}
+              </p>
+            )}
           </div>
 
           <div>

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ArrowRight, Check, Copy, Share2 } from 'lucide-react'
 import { WalletPageSummary } from '@/components/wallet-summary'
 import { useAccount } from '@/components/account-store'
+import { BuLoader } from '@/components/bu-loader'
 import {
   BU_BUY_PRESETS,
   BU_MIN_PURCHASE,
@@ -252,7 +253,12 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
 
           <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6">
             {vaLoading ? (
-              <p className="text-sm text-muted-foreground">Loading your Ƀucks account number…</p>
+              <div className="py-6">
+                <div className="flex justify-center">
+                  <BuLoader compact />
+                </div>
+                <p className="mt-3 text-center text-sm text-muted-foreground">Loading your Ƀucks account number…</p>
+              </div>
             ) : virtualAccount ? (
               <div className="space-y-4">
                 <div>

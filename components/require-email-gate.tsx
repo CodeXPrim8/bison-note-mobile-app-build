@@ -16,7 +16,7 @@ export default function RequireEmailGate({ children }: { children: React.ReactNo
 
   const check = useCallback(async () => {
     try {
-      const res = await fetch('/api/me', { credentials: 'include', cache: 'no-store' })
+      const res = await fetch('/api/me?boot=1', { credentials: 'include', cache: 'default' })
       const json = await res.json()
       if (!json.status || !json.data?.user) {
         setNeedsEmail(false)
