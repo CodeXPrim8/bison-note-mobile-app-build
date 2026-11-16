@@ -1,5 +1,5 @@
 /* Ƀucks service worker — installable PWA shell */
-const CACHE = 'bu-shell-v1'
+const CACHE = 'bu-shell-v2'
 const PRECACHE = [
   '/',
   '/app',
