@@ -13,7 +13,8 @@ export function isPublicPagePath(pathname: string): boolean {
     pathname === '/icon' ||
     pathname === '/apple-icon' ||
     pathname === '/manifest.webmanifest' ||
-    pathname.startsWith('/icon/') ||
+    pathname === '/sw.js' ||
+    pathname.startsWith('/icon') ||
     pathname.startsWith('/apple-icon') ||
     pathname.startsWith('/opengraph-image') ||
     pathname.startsWith('/twitter-image')

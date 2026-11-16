@@ -37,12 +37,17 @@ interface DashboardProps {
   onNavigate: (page: string, data?: any) => void
 }
 
-function showBuId(phone: string) {
-  const local = displayBuId(phone.replace(/\D/g, ''))
-  const shown = local.startsWith('0') ? local.slice(1) : local
-  if (shown.length === 10) return `${shown.slice(0, 3)} ${shown.slice(3, 6)} ${shown.slice(6)}`
-  if (shown.length === 11) return `${shown.slice(0, 4)} ${shown.slice(4, 7)} ${shown.slice(7)}`
-  return shown || 'Your number'
+/** Static local ɃU ID for display — always keep the leading 0. */
+function formatStaticBuId(phone: string) {
+  const digits = phone.replace(/\D/g, '')
+  const local = displayBuId(digits)
+  if (/^0\d{10}$/.test(local)) {
+    return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
+  }
+  if (/^\d{10}$/.test(local)) {
+    return `0${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`
+  }
+  return local || 'Your number'
 }
 
 function movementFromWallet(tx: Record<string, unknown>, index: number): HomeMovement {
@@ -82,7 +87,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [alertNeon, setAlertNeon] = useState(false)
   const [neonKey, setNeonKey] = useState(0)
-
   function applyWalletPayload(transactions: Array<Record<string, unknown>>) {
     const nextUnread = countUnseenAlerts(transactions)
     setUnreadAlerts((prev) => {
@@ -244,7 +248,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             <div className="mt-6">
-              <p className="font-mono text-sm tracking-wide text-white/90">{showBuId(buId)}</p>
+              <p className="font-mono text-sm tracking-wide text-white/90">{formatStaticBuId(buId)}</p>
             </div>
           </div>
 
