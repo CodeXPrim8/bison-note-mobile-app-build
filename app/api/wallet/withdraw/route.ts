@@ -192,7 +192,9 @@ export async function POST(request: Request) {
       naira: quote.naira,
       bank_naira: quote.bankNaira,
       paystack_transfer_fee: quote.paystackFee,
-      fee_absorbed: true,
+      platform_fee: quote.platformFee,
+      total_debit: quote.totalDebit,
+      fee_absorbed: false,
       value_rate: getBuNairaValue(),
       bank_name: bankName,
       bank_code: bankCode,
@@ -204,7 +206,7 @@ export async function POST(request: Request) {
 
     await moveLiveWallet(db, {
       userId: liveId,
-      naira: quote.naira,
+      naira: quote.totalDebit,
       direction: 'debit',
       type: 'withdrawal',
       description: remark ? `Sent to ${bankName} · ${remark}` : `Sent to ${bankName}`,
@@ -232,7 +234,7 @@ export async function POST(request: Request) {
     } catch (error) {
       await moveLiveWallet(db, {
         userId: liveId,
-        naira: quote.naira,
+        naira: quote.totalDebit,
         direction: 'credit',
         type: 'refund',
         description: 'Bank send rolled back',
@@ -246,7 +248,7 @@ export async function POST(request: Request) {
         {
           ...guestRow(row),
           bank_naira: quote.bankNaira,
-          paystack_transfer_fee: quote.paystackFee,
+          total_debit: quote.totalDebit,
           remark: remark || null,
           invoice_number: id,
         },
@@ -261,7 +263,7 @@ export async function POST(request: Request) {
         {
           ...guestRow(paidRow),
           bank_naira: quote.bankNaira,
-          paystack_transfer_fee: quote.paystackFee,
+          total_debit: quote.totalDebit,
           paystack_reference: payout.reference,
           remark: remark || null,
           invoice_number: id,
@@ -273,7 +275,7 @@ export async function POST(request: Request) {
       try {
         await moveLiveWallet(db, {
           userId: liveId,
-          naira: quote.naira,
+          naira: quote.totalDebit,
           direction: 'credit',
           type: 'refund',
           description: 'Bank send refunded after payout failed',

@@ -1,8 +1,7 @@
 /**
  * Wallet FX. Live `wallets.balance` stays naira.
- * Spray / send / withdraw: 1 ɃU = ₦1 (display ɃU = ledger naira).
- * Card Fund Wallet: 5% buy spread so collection fees (~1.5% + ₦100)
- * and Paystack Transfers (₦10–₦50 + ₦50 stamp duty from ₦10,000) stay covered.
+ * Display: 1 ɃU = ₦1. Peer/spray/tip: fee-on-top (receiver gets face amount).
+ * Card Fund Wallet: 5% buy spread. Withdraw: face to bank; Paystack + platform on top.
  * Ticket prices and the 5% ticket service fee stay naira and are separate.
  */
 export const BU_NAIRA_VALUE = 1
@@ -12,6 +11,8 @@ export const BU_MIN_PURCHASE = 2000
 export const BU_MIN_SPRAY = 200
 export const BU_MIN_TRANSFER = 1
 export const BU_MIN_WITHDRAW = 100
+export const BU_WITHDRAW_PLATFORM_FEE = 25
+export const BU_VTU_MARKUP = 1.02
 export const BU_SPRAY_NOTES = [200, 500, 1000] as const
 export const BU_BUY_PRESETS = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000] as const
 
@@ -59,6 +60,18 @@ export type WithdrawQuote = {
   naira: number
   bankNaira: number
   paystackFee: number
+  platformFee: number
+  totalDebit: number
+  totalDebitBu: number
+}
+
+export type PeerFeeQuote = {
+  bu: number
+  naira: number
+  feeBu: number
+  feeNaira: number
+  totalDebitBu: number
+  totalDebitNaira: number
 }
 
 export function roundMoney(amount: number, digits = 2): number {
@@ -143,6 +156,61 @@ export function quoteBuyFromChargeNaira(chargeNaira: number): BuyQuote {
   return quoteBuyBu(chargeNaira / cardBuyRate())
 }
 
+/** Quiet peer fee (send / tip). Receiver gets full `bu`; fee debited on top. */
+export function peerTransferFeeBu(bu: number): number {
+  const amount = roundMoney(bu, 2)
+  if (!(amount > 0)) return 0
+  if (amount + 1e-9 < 500) return 5
+  if (amount + 1e-9 <= 5000) return 10
+  return Math.min(50, Math.max(10, roundMoney(amount * 0.005, 2)))
+}
+
+/** Quiet spray fee. Receiver / event gets full face; fee on top. */
+export function sprayFeeBu(bu: number): number {
+  const amount = roundMoney(bu, 2)
+  if (!(amount > 0)) return 0
+  return Math.min(100, Math.max(10, roundMoney(amount * 0.01, 2)))
+}
+
+export function quotePeerMoveBu(
+  bu: number,
+  kind: 'transfer' | 'tip' | 'spray' = 'transfer',
+): PeerFeeQuote {
+  const roundedBu = roundMoney(bu, 2)
+  const feeBu = kind === 'spray' ? sprayFeeBu(roundedBu) : peerTransferFeeBu(roundedBu)
+  const naira = nairaFromBu(roundedBu)
+  const feeNaira = nairaFromBu(feeBu)
+  return {
+    bu: roundedBu,
+    naira,
+    feeBu,
+    feeNaira,
+    totalDebitBu: roundMoney(roundedBu + feeBu, 2),
+    totalDebitNaira: roundMoney(naira + feeNaira),
+  }
+}
+
+/** DVA bank-in convenience: net credited after fee. */
+export function dvaCreditFeeNaira(grossNaira: number): number {
+  const gross = roundMoney(grossNaira)
+  if (!(gross > 0)) return 0
+  if (gross + 1e-9 <= 20000) return 25
+  return Math.min(150, Math.max(25, roundMoney(gross * 0.003)))
+}
+
+export function dvaNetCreditNaira(grossNaira: number): { gross: number; fee: number; net: number } {
+  const gross = roundMoney(grossNaira)
+  const fee = dvaCreditFeeNaira(gross)
+  return { gross, fee, net: roundMoney(Math.max(0, gross - fee)) }
+}
+
+/** VTU debit (face to provider; markup kept). */
+export function vtuDebitNaira(faceNaira: number): { face: number; debit: number; fee: number } {
+  const face = roundMoney(faceNaira)
+  const debit = roundMoney(face * BU_VTU_MARKUP)
+  return { face, debit, fee: roundMoney(debit - face) }
+}
+
 export function quoteWithdrawBu(bu: number): WithdrawQuote {
   if (!Number.isFinite(bu) || bu <= 0) {
     throw new WalletAmountError('Enter how many ɃU to withdraw', 'INVALID_BU')
@@ -155,11 +223,17 @@ export function quoteWithdrawBu(bu: number): WithdrawQuote {
   }
   const roundedBu = roundMoney(bu, 2)
   const naira = nairaFromBu(roundedBu)
+  const paystackFee = paystackTransferFeeNaira(naira)
+  const platformFee = BU_WITHDRAW_PLATFORM_FEE
+  const totalDebit = roundMoney(naira + paystackFee + platformFee)
   return {
     bu: roundedBu,
     naira,
     bankNaira: naira,
-    paystackFee: paystackTransferFeeNaira(naira),
+    paystackFee,
+    platformFee,
+    totalDebit,
+    totalDebitBu: buFromNaira(totalDebit),
   }
 }
 

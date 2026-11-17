@@ -182,7 +182,7 @@ export default function Redemption() {
         return
       }
       setPinOpen(false)
-      applySpendBu(readyQuote.bu)
+      applySpendBu(readyQuote.totalDebitBu)
       const row = json.data as WithdrawalRequest & {
         invoice_number?: string
         remark?: string | null
@@ -231,7 +231,7 @@ export default function Redemption() {
             {buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Minimum {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU. Transfer fees are covered by Ƀucks.
+            Minimum {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU.
           </p>
         </Card>
 

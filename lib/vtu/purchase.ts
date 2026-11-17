@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api/errors'
+import { vtuDebitNaira } from '@/lib/bu-rate'
 import { createDataClient } from '@/lib/supabase/data'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { moveLiveWallet } from '@/lib/wallet/move'
@@ -73,6 +74,7 @@ export async function purchaseVtu(input: {
 
   const reference = makeVtpassRequestId(input.kind === 'airtime' ? 'air' : 'data')
   const db = tryCreateAdminClient() ?? createDataClient()
+  const priced = vtuDebitNaira(product.naira)
   const description =
     product.kind === 'airtime'
       ? `Airtime ${product.label} · ${phone}`
@@ -88,6 +90,9 @@ export async function purchaseVtu(input: {
     validity: product.kind === 'data' ? product.validity : null,
     variation_code: product.kind === 'data' ? product.variationCode || product.id : null,
     naira: product.naira,
+    face_naira: priced.face,
+    debit_naira: priced.debit,
+    fee_naira: priced.fee,
     reference,
     move_id: reference,
     provider: 'vtpass',
@@ -98,7 +103,7 @@ export async function purchaseVtu(input: {
   try {
     await moveLiveWallet(db, {
       userId: input.userId,
-      naira: product.naira,
+      naira: priced.debit,
       direction: 'debit',
       type: 'purchase',
       description,
@@ -111,14 +116,14 @@ export async function purchaseVtu(input: {
         ? await vtpassPayAirtime({
             network: networkId,
             phone,
-            amount: product.naira,
+            amount: priced.face,
             requestId: reference,
           })
         : await vtpassPayData({
             network: networkId,
             phone,
             variationCode: product.variationCode || product.id,
-            amount: product.naira,
+            amount: priced.face,
             requestId: reference,
           })
 
@@ -127,8 +132,8 @@ export async function purchaseVtu(input: {
         label: product.label,
         phone,
         network: networkId,
-        naira: product.naira,
-        bu: product.naira,
+        naira: priced.face,
+        bu: priced.debit,
         reference: pay.requestId || reference,
         provider_status: pay.status || 'delivered',
         transaction_id: pay.transactionId,
@@ -149,7 +154,7 @@ export async function purchaseVtu(input: {
       await reverseFailedDebit(db, {
         userId: input.userId,
         originalReference: reference,
-        naira: product.naira,
+        naira: priced.debit,
         reason: 'fulfillment failed',
         originalDescription: description,
       })

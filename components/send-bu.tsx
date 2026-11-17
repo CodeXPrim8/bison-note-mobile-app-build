@@ -7,7 +7,16 @@ import { Input } from '@/components/ui/input'
 import { User, CheckCircle, AlertCircle, Search, QrCode, Sparkles, Star } from 'lucide-react'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
 import { formatEventDateTime } from '@/lib/datetime'
-import { BU_MIN_SPRAY, BU_MIN_TRANSFER, BU_SPRAY_NOTES, buFromNaira, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
+import {
+  BU_MIN_SPRAY,
+  BU_MIN_TRANSFER,
+  BU_SPRAY_NOTES,
+  buFromNaira,
+  formatBu,
+  formatNairaPlain,
+  nairaFromBu,
+  quotePeerMoveBu,
+} from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { WalletPageSummary } from '@/components/wallet-summary'
 import { BuInvoiceActions } from '@/components/bu-invoice'
@@ -373,7 +382,8 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
     }
     setBusy(true)
     setMessage(null)
-    applySpendBu(amount, { refresh: false })
+    const debitBu = quotePeerMoveBu(amount, isTip ? 'tip' : 'transfer').totalDebitBu
+    applySpendBu(debitBu, { refresh: false })
     try {
       const res = await fetch('/api/wallet/transfer', {
         method: 'POST',

@@ -1,5 +1,5 @@
 import { ApiError } from '@/lib/api/errors'
-import { buFromNaira, getBuNairaValue } from '@/lib/bu-rate'
+import { buFromNaira, getBuNairaValue, quotePeerMoveBu } from '@/lib/bu-rate'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
 import { moveLiveWallet } from '@/lib/wallet/move'
@@ -33,11 +33,17 @@ export async function transferBu(input: {
   }
   const db = tryCreateAdminClient() ?? createDataClient()
   const bu = buFromNaira(input.amount)
+  const kind = input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer'
+  const feeQuote = quotePeerMoveBu(bu, kind)
   const [fromName, toName] = await Promise.all([liveUserLabel(input.fromUserId), liveUserLabel(input.toUserId)])
   const meta = {
-    kind: input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer',
+    kind,
     bu,
     naira: input.amount,
+    fee_bu: feeQuote.feeBu,
+    fee_naira: feeQuote.feeNaira,
+    total_debit_bu: feeQuote.totalDebitBu,
+    total_debit_naira: feeQuote.totalDebitNaira,
     value_rate: getBuNairaValue(),
     event_id: input.eventId ?? null,
     from_name: fromName,
@@ -64,7 +70,7 @@ export async function transferBu(input: {
   const sharedMeta = { ...meta, move_id: moveId }
   await moveLiveWallet(db, {
     userId: input.fromUserId,
-    naira: input.amount,
+    naira: feeQuote.totalDebitNaira,
     direction: 'debit',
     type: debitType,
     description: debitDescription,
@@ -84,6 +90,10 @@ export async function transferBu(input: {
     toName,
     bu,
     naira: input.amount,
-    kind: input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer',
+    feeBu: feeQuote.feeBu,
+    feeNaira: feeQuote.feeNaira,
+    totalDebitBu: feeQuote.totalDebitBu,
+    totalDebitNaira: feeQuote.totalDebitNaira,
+    kind,
   }
 }

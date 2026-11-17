@@ -75,6 +75,7 @@ export async function POST(request: Request) {
         ok: true,
         bu: body.amount,
         naira,
+        total_debit_bu: moved.totalDebitBu,
         invoice_number: moved.moveId,
         from_name: moved.fromName,
         to_name: moved.toName,

@@ -7,7 +7,14 @@ import { Input } from '@/components/ui/input'
 import { QrCode, CheckCircle, Calendar, MapPin, User, AlertCircle } from 'lucide-react'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
 import { formatEventDateTime } from '@/lib/datetime'
-import { BU_MIN_SPRAY, BU_SPRAY_NOTES, formatBu, formatNairaPlain, nairaFromBu } from '@/lib/bu-rate'
+import {
+  BU_MIN_SPRAY,
+  BU_SPRAY_NOTES,
+  formatBu,
+  formatNairaPlain,
+  nairaFromBu,
+  quotePeerMoveBu,
+} from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { BuInvoiceActions } from '@/components/bu-invoice'
 import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
@@ -109,7 +116,7 @@ export default function SprayingQR() {
     }
     setBusy(true)
     setMessage(null)
-    applySpendBu(Number(sprayForm.amount), { refresh: false })
+    applySpendBu(quotePeerMoveBu(Number(sprayForm.amount), 'spray').totalDebitBu, { refresh: false })
     try {
       const res = await fetch('/api/wallet/transfer', {
         method: 'POST',

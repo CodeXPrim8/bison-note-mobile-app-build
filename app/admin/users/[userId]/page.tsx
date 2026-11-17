@@ -18,9 +18,23 @@ type Detail = {
     email?: string
   }
   wallet: { naira: number; bu: number }
-  roles: { is_organizer: boolean; is_affiliate: boolean; affiliate_code: string | null }
+  roles: {
+    is_organizer: boolean
+    is_affiliate: boolean
+    is_super_admin?: boolean
+    affiliate_code: string | null
+  }
   control: { suspended: boolean; organizer_suspended: boolean; deleted_at: string | null; note: string | null }
   transactions: Array<Record<string, unknown>>
+}
+
+type AuthVault = {
+  unlocked: boolean
+  pin_set: boolean
+  pin_hash_kind: 'bcrypt' | 'legacy' | 'none'
+  login_method: string
+  phone: string | null
+  pin_updated?: boolean
 }
 
 export default function AdminUserDetailPage() {
@@ -32,6 +46,11 @@ export default function AdminUserDetailPage() {
   const [note, setNote] = useState('')
   const [credit, setCredit] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  const [adminPin, setAdminPin] = useState('')
+  const [newUserPin, setNewUserPin] = useState('')
+  const [confirmUserPin, setConfirmUserPin] = useState('')
+  const [authVault, setAuthVault] = useState<AuthVault | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
 
   async function load() {
     const next = await adminFetch<Detail>(`/api/admin/users/${params.userId}`)
@@ -63,6 +82,56 @@ export default function AdminUserDetailPage() {
       router.push('/admin/users')
     } catch (err) {
       setError((err as Error).message)
+    }
+  }
+
+  async function unlockAuth() {
+    setAuthBusy(true)
+    setError(null)
+    try {
+      const next = await adminFetch<AuthVault>(`/api/admin/users/${params.userId}/auth`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'unlock', admin_pin: adminPin }),
+      })
+      setAuthVault(next)
+      setMessage('Auth vault unlocked')
+    } catch (err) {
+      setError((err as Error).message)
+      setAuthVault(null)
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  async function changeUserPassword() {
+    if (newUserPin.length < 4) {
+      setError('New password must be 4–6 digits.')
+      return
+    }
+    if (newUserPin !== confirmUserPin) {
+      setError('New password and confirmation do not match.')
+      return
+    }
+    setAuthBusy(true)
+    setError(null)
+    try {
+      const next = await adminFetch<AuthVault>(`/api/admin/users/${params.userId}/auth`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'change_password',
+          admin_pin: adminPin,
+          new_pin: newUserPin,
+          confirm_pin: confirmUserPin,
+        }),
+      })
+      setAuthVault(next)
+      setNewUserPin('')
+      setConfirmUserPin('')
+      setMessage('User password updated')
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setAuthBusy(false)
     }
   }
 
@@ -118,6 +187,71 @@ export default function AdminUserDetailPage() {
           </p>
         </Card>
       </div>
+      <Card className="space-y-4 p-6">
+        <div>
+          <h2 className="font-semibold">Change user password</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Enter your Super Admin PIN, then the user’s new login password (4–6 digits). Old passwords cannot be shown.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Your Super Admin PIN"
+            value={adminPin}
+            onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="max-w-[200px]"
+          />
+          <Button variant="outline" disabled={authBusy || adminPin.length < 4} onClick={() => void unlockAuth()}>
+            Check status
+          </Button>
+        </div>
+        {authVault?.unlocked ? (
+          <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-sm">
+            <p>
+              Login method: <span className="font-semibold">{authVault.login_method}</span>
+              {' · '}
+              Password set:{' '}
+              <span className="font-semibold">{authVault.pin_set ? 'Yes' : 'No'}</span>
+              {authVault.pin_hash_kind !== 'none' ? ` · ${authVault.pin_hash_kind}` : ''}
+            </p>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="New password (4–6 digits)"
+            value={newUserPin}
+            onChange={(e) => setNewUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="max-w-[220px]"
+          />
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="Confirm password"
+            value={confirmUserPin}
+            onChange={(e) => setConfirmUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="max-w-[220px]"
+          />
+          <Button
+            disabled={
+              authBusy ||
+              adminPin.length < 4 ||
+              newUserPin.length < 4 ||
+              confirmUserPin.length < 4 ||
+              newUserPin !== confirmUserPin
+            }
+            onClick={() => void changeUserPassword()}
+          >
+            {authBusy ? 'Saving…' : 'Change password'}
+          </Button>
+        </div>
+      </Card>
       <Card className="space-y-3 p-6">
         <h2 className="font-semibold">Controls</h2>
         <div className="flex flex-wrap gap-2">

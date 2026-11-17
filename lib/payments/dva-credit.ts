@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api/errors'
+import { dvaNetCreditNaira } from '@/lib/bu-rate'
 import {
   isPaystackConfigured,
   listPaystackTransactions,
@@ -103,10 +104,12 @@ async function creditDedicatedNubanRow(
 
   const meta = (charge.metadata ?? data.metadata ?? {}) as Record<string, unknown>
   const amountKobo = Number(charge.amount ?? data.amount ?? 0)
-  const creditNaira = Math.round(amountKobo) / 100
-  if (!(creditNaira > 0)) {
+  const grossNaira = Math.round(amountKobo) / 100
+  if (!(grossNaira > 0)) {
     throw new ApiError(400, 'INVALID_AMOUNT', 'Charge amount must be greater than zero')
   }
+  const credited = dvaNetCreditNaira(grossNaira)
+  const creditNaira = credited.net
 
   const resolved = await resolveDvaUserId({ ...data, ...charge }, meta)
   const userId = knownUserId || resolved.userId
@@ -133,6 +136,9 @@ async function creditDedicatedNubanRow(
     customer_code: resolved.customerCode || null,
     paystack_amount_kobo: amountKobo,
     paystack_fees: charge.fees ?? data.fees ?? null,
+    gross_naira: credited.gross,
+    fee_naira: credited.fee,
+    net_naira: credited.net,
     direction: 'credit',
     requested_type: 'deposit',
     description: 'Bank transfer top-up',
