@@ -25,6 +25,7 @@ import {
   nairaToKobo,
   verifyTransaction,
 } from '@/lib/payments/paystack'
+import { debitTicketWallet, requireTicketWalletPin, reverseTicketWalletDebit } from '@/lib/payments/wallet-ticket'
 import { createDataClient } from '@/lib/supabase/data'
 import { generateCheckinCode, generateReference } from '@/lib/tickets/ids'
 import { extractLivePayRef, parseTicketQr, ticketQrPayload } from '@/lib/tickets/qr-generator'
@@ -45,6 +46,8 @@ interface LiveInitializeInput {
   custom?: Record<string, unknown>
   affiliate_code?: string | null
   merchant?: GatewayMerchant | null
+  payment_method?: 'paystack' | 'wallet'
+  pin?: string
 }
 
 export const LIVE_TICKET_REF_PREFIX = 'BU_LIVE_'
@@ -393,6 +396,51 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
   const merchantCallback = input.callback_url?.trim() || ''
   const callbackUrl = `${getAppUrl()}/pay/${reference}${returnToApp ? '?next=/app' : ''}`
 
+  const ticketsUrl =
+    merchantCallback ||
+    (returnToApp ? `${getAppUrl()}/app?page=tickets` : `${getAppUrl()}/tickets?ref=${reference}`)
+
+  const finishMinted = async (tickets: Awaited<ReturnType<typeof mintLiveTickets>>, paymentMethod: string) => {
+    if (packed.organizer_id) {
+      try {
+        await creditTicketSaleShares({
+          reference,
+          eventId: packed.id,
+          organiserUserId: packed.organizer_id,
+          ticketNaira: Number(tier.price) * input.quantity,
+          affiliateEnabled: Boolean(packed.affiliate_enabled),
+          affiliateCommissionPct: Number(packed.affiliate_commission_pct ?? 0),
+          affiliateCode: input.affiliate_code ?? null,
+        })
+      } catch (error) {
+        console.error('creditTicketSaleShares after wallet/free ticket mint', error)
+      }
+    }
+    await notifyLiveTicketMerchants({
+      eventId: packed.id,
+      merchantId: input.merchant?.id,
+      eventType: 'ticket.purchased',
+      payload: {
+        reference,
+        event_id: packed.id,
+        event_title: packed.title,
+        email: input.email,
+        quantity: input.quantity,
+        payment_method: paymentMethod,
+        tickets: tickets.map((ticket) => ({ id: ticket.id, event_id: ticket.event_id })),
+      },
+    })
+    return {
+      authorization_url: ticketsUrl,
+      access_code: reference,
+      reference,
+      payment_id: reference,
+      payment_method: paymentMethod,
+      quote,
+      tickets,
+    }
+  }
+
   if (quote.total === 0) {
     const tickets = await mintLiveTickets({
       eventId: packed.id,
@@ -408,28 +456,50 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
       when: packed.start_time,
       venue: packed.venue_name,
     })
-    await notifyLiveTicketMerchants({
+    return finishMinted(tickets, 'free')
+  }
+
+  if (input.payment_method === 'wallet') {
+    if (input.merchant) {
+      throw new ApiError(400, 'WALLET_UNAVAILABLE', 'Pay with ɃU is only available when signed in on Ƀucks.')
+    }
+    await requireTicketWalletPin(input.buyer_phone, input.pin)
+    await debitTicketWallet({
+      userId: buyerId,
+      naira: quote.total,
+      reference,
       eventId: packed.id,
-      merchantId: input.merchant?.id,
-      eventType: 'ticket.purchased',
-      payload: {
-        reference,
-        event_id: packed.id,
-        event_title: packed.title,
-        email: input.email,
-        quantity: input.quantity,
-        tickets: tickets.map((ticket) => ({ id: ticket.id, event_id: ticket.event_id })),
+      eventTitle: packed.title,
+      quantity: input.quantity,
+      metadata: {
+        ticket_tier_id: tier.id,
+        service_fee: quote.serviceFee,
       },
     })
-    return {
-      authorization_url: merchantCallback || (returnToApp
-        ? `${getAppUrl()}/app?page=tickets`
-        : `${getAppUrl()}/tickets?ref=${reference}`),
-      access_code: reference,
-      reference,
-      payment_id: reference,
-      quote,
-      tickets,
+    try {
+      const tickets = await mintLiveTickets({
+        eventId: packed.id,
+        buyerId,
+        quantity: input.quantity,
+        unitPrice: Number(tier.price),
+        reference,
+        eventTitle: packed.title,
+        email: input.email,
+        buyerName: input.buyer_name,
+        ticketTierId: tier.id,
+        tierName: tier.name,
+        when: packed.start_time,
+        venue: packed.venue_name,
+      })
+      return finishMinted(tickets, 'wallet')
+    } catch (error) {
+      await reverseTicketWalletDebit({
+        userId: buyerId,
+        naira: quote.total,
+        reference,
+        reason: error instanceof Error ? error.message : 'ticket_mint_failed',
+      }).catch((reverseError) => console.error('reverse ticket wallet debit', reverseError))
+      throw error
     }
   }
 
@@ -467,6 +537,7 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
           merchant_id: input.merchant?.id ?? '',
           callback_url: merchantCallback,
           gateway: Boolean(input.merchant),
+          payment_method: 'paystack',
         },
       })
       return {
@@ -474,6 +545,7 @@ export async function initializeLiveTicketPurchase(input: LiveInitializeInput) {
         access_code: paystack.access_code,
         reference,
         payment_id: reference,
+        payment_method: 'paystack' as const,
         quote,
       }
   } catch (error) {

@@ -12,7 +12,8 @@ import {
 } from '@/lib/payments/paystack'
 import { fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { initializeLiveTicketPurchase } from '@/lib/payments/live-ticket'
-import { parseLiveTierId } from '@/lib/events/live'
+import { debitTicketWallet, requireTicketWalletPin, reverseTicketWalletDebit } from '@/lib/payments/wallet-ticket'
+import { parseLiveTierId, resolveLiveCelebrantId } from '@/lib/events/live'
 import { isEventUpcoming } from '@/lib/events/sale'
 import { generateReference } from '@/lib/tickets/ids'
 import type { EventRecord, GatewayMerchant, Payment, TicketTier } from '@/lib/types/database'
@@ -31,6 +32,8 @@ export interface InitializeTicketInput {
   user_id?: string | null
   merchant?: GatewayMerchant | null
   event_id?: string
+  payment_method?: 'paystack' | 'wallet'
+  pin?: string
 }
 
 export async function initializeTicketPurchase(input: InitializeTicketInput) {
@@ -233,8 +236,62 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
       authorization_url: `${getAppUrl()}/tickets?ref=${reference}`,
       reference,
       payment_id: payment.id,
+      payment_method: 'free' as const,
       quote,
       tickets: fulfilled.tickets,
+    }
+  }
+
+  if (input.payment_method === 'wallet') {
+    if (input.merchant) {
+      throw new ApiError(400, 'WALLET_UNAVAILABLE', 'Pay with ɃU is only available when signed in on Ƀucks.')
+    }
+    await requireTicketWalletPin(input.buyer_phone, input.pin)
+    const walletUserId =
+      (await resolveLiveCelebrantId({
+        id: linkedUserId || '',
+        email: input.email,
+        phone: input.buyer_phone,
+      })) || linkedUserId
+    if (!walletUserId) {
+      throw new ApiError(403, 'NOT_LIVE_USER', 'Sign in with your ɃU ID to pay from your wallet.')
+    }
+    await debitTicketWallet({
+      userId: walletUserId,
+      naira: quote.total,
+      reference,
+      eventId: event.id,
+      eventTitle: event.title,
+      quantity,
+      metadata: { ticket_tier_id: tier.id, payment_id: payment.id, service_fee: quote.serviceFee },
+    })
+    try {
+      await admin
+        .from('payments')
+        .update({
+          metadata: { ...metadata, payment_method: 'wallet', payment_id: payment.id },
+        })
+        .eq('id', payment.id)
+      const fulfilled = await fulfillSuccessfulPayment(reference)
+      return {
+        authorization_url: `${getAppUrl()}/tickets?ref=${reference}`,
+        reference,
+        payment_id: payment.id,
+        payment_method: 'wallet' as const,
+        quote,
+        tickets: fulfilled.tickets,
+      }
+    } catch (error) {
+      await reverseTicketWalletDebit({
+        userId: walletUserId,
+        naira: quote.total,
+        reference,
+        reason: error instanceof Error ? error.message : 'ticket_fulfill_failed',
+      }).catch((reverseError) => console.error('reverse ticket wallet debit', reverseError))
+      await admin.rpc('release_tickets', { p_tier_id: tier.id, p_qty: quantity })
+      await admin.from('tickets').update({ status: 'cancelled' }).eq('payment_id', payment.id)
+      await admin.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+      throw error
     }
   }
 
@@ -250,7 +307,7 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
         amountKobo: nairaToKobo(quote.total),
         reference,
         callbackUrl: checkoutUrl,
-        metadata: { ...metadata, payment_id: payment.id },
+        metadata: { ...metadata, payment_id: payment.id, payment_method: 'paystack' },
         subaccount: event.paystack_subaccount_code ?? input.merchant?.paystack_subaccount_code ?? undefined,
         transactionCharge: commissionRate > 0 ? commissionKobo(quote.total, commissionRate) : undefined,
       })
@@ -259,6 +316,7 @@ export async function initializeTicketPurchase(input: InitializeTicketInput) {
         authorization_url: paystack.authorization_url,
         reference,
         payment_id: payment.id,
+        payment_method: 'paystack' as const,
         quote,
       }
     } catch (error) {

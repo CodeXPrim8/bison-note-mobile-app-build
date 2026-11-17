@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
       custom: body.metadata?.custom,
       affiliate_code: body.metadata?.affiliate_code,
       user_id: user?.id ?? null,
+      payment_method: body.payment_method,
+      pin: body.pin,
     })
 
     const payload = { status: true, message: 'Initialized', data: result }

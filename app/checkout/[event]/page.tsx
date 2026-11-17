@@ -20,6 +20,8 @@ interface Quote {
   remaining?: number
 }
 
+type PayMethod = 'wallet' | 'paystack'
+
 export default function CheckoutPage({ params }: { params: Promise<{ event: string }> }) {
   const router = useRouter()
   const [slug, setSlug] = useState('')
@@ -29,6 +31,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [pin, setPin] = useState('')
+  const [method, setMethod] = useState<PayMethod>('paystack')
+  const [walletNaira, setWalletNaira] = useState<number | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -70,6 +75,23 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         }
       })
       .catch(() => undefined)
+
+    fetch('/api/wallet?history=0', { credentials: 'include' })
+      .then(async (res) => {
+        if (res.status === 401) {
+          setWalletNaira(null)
+          return
+        }
+        const json = await res.json()
+        if (json.status) {
+          const wallet = json.data?.wallet as Record<string, unknown> | undefined
+          const naira = Number(
+            wallet?.naira_available ?? wallet?.naira ?? wallet?.balance ?? wallet?.bu_balance ?? 0,
+          )
+          setWalletNaira(Number.isFinite(naira) ? naira : 0)
+        }
+      })
+      .catch(() => setWalletNaira(null))
   }, [])
 
   useEffect(() => {
@@ -111,7 +133,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
       .catch(() => undefined)
   }, [tierId, quantity, event])
 
-  async function pay() {
+  const canPayWallet =
+    walletNaira != null && quote != null && walletNaira + 1e-9 >= quote.total && pin.length >= 4
+
+  async function pay(selected: PayMethod) {
+    if (selected === 'wallet' && pin.length < 4) {
+      setError('Enter your PIN to pay with ɃU.')
+      return
+    }
     setBusy(true)
     setError(null)
     const res = await fetch('/api/tickets/initialize', {
@@ -122,6 +151,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
         email,
         ticket_tier_id: tierId,
         quantity,
+        payment_method: selected,
+        pin: selected === 'wallet' ? pin : undefined,
         metadata: {
           buyer_name: name,
           phone,
@@ -147,6 +178,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
     window.location.assign(json.data.authorization_url)
   }
 
+  const ended = event ? eventDateHasPassed(event) : true
+
   return (
     <div className="bu-site min-h-screen">
       <SiteHeader />
@@ -168,7 +201,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
             className="space-y-4"
             onSubmit={(eventSubmit) => {
               eventSubmit.preventDefault()
-              void pay()
+              void pay(method)
             }}
           >
             <label className="text-sm font-semibold">Ticket type</label>
@@ -211,9 +244,77 @@ export default function CheckoutPage({ params }: { params: Promise<{ event: stri
                 )}
               </div>
             )}
+
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-sm font-semibold">Pay with</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setMethod('wallet')}
+                  className={`rounded-lg border px-3 py-3 text-left text-sm transition ${
+                    method === 'wallet'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border bg-secondary/40 hover:bg-secondary'
+                  }`}
+                >
+                  <span className="font-semibold">ɃU wallet</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {walletNaira == null
+                      ? 'Sign in to use balance'
+                      : `Balance ${formatNaira(walletNaira)}`}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod('paystack')}
+                  className={`rounded-lg border px-3 py-3 text-left text-sm transition ${
+                    method === 'paystack'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border bg-secondary/40 hover:bg-secondary'
+                  }`}
+                >
+                  <span className="font-semibold">Paystack</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Card, bank, USSD</span>
+                </button>
+              </div>
+              {method === 'wallet' && (
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="PIN (4–6 digits)"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
+                  {quote && walletNaira != null && walletNaira + 1e-9 < quote.total && (
+                    <p className="text-xs text-destructive">
+                      Not enough ɃU. Fund your wallet or pay with Paystack.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="w-full" disabled={busy || !email || !quote || (event ? eventDateHasPassed(event) : true)} type="submit">
-              {busy ? 'Processing…' : event && eventDateHasPassed(event) ? 'Event ended' : 'Continue to payment'}
+            <Button
+              className="w-full"
+              disabled={
+                busy ||
+                !email ||
+                !quote ||
+                ended ||
+                (method === 'wallet' && !canPayWallet)
+              }
+              type="submit"
+            >
+              {busy
+                ? 'Processing…'
+                : ended
+                  ? 'Event ended'
+                  : method === 'wallet'
+                    ? `Pay ${quote ? formatNaira(quote.total) : ''} with ɃU`
+                    : `Pay ${quote ? formatNaira(quote.total) : ''} with Paystack`}
             </Button>
           </form>
         </Card>

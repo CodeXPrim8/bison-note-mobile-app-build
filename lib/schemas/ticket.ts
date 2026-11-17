@@ -10,6 +10,8 @@ export const ticketTierIdSchema = z
     'Invalid ticket type',
   )
 
+export const ticketPaymentMethodSchema = z.enum(['paystack', 'wallet'])
+
 export const initializeTicketSchema = z
   .object({
     email: z.string().email(),
@@ -25,6 +27,11 @@ export const initializeTicketSchema = z
     quantity: z.number().int().min(1).max(20).optional().default(1),
     callback_url: z.string().url().optional(),
     spray_bu_amount: z.number().min(0).optional().default(0),
+    payment_method: ticketPaymentMethodSchema.optional().default('paystack'),
+    pin: z
+      .string()
+      .regex(/^\d{4,6}$/)
+      .optional(),
     metadata: z
       .object({
         buyer_name: z.string().max(160).optional(),
@@ -36,6 +43,10 @@ export const initializeTicketSchema = z
   })
   .refine((body) => Boolean(body.ticket_tier_id || body.event_id), {
     message: 'Pass event_id or ticket_tier_id',
+  })
+  .refine((body) => body.payment_method !== 'wallet' || Boolean(body.pin), {
+    message: 'Enter your PIN to pay with ɃU',
+    path: ['pin'],
   })
 
 export const initializeDepositSchema = z
