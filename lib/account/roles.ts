@@ -3,12 +3,13 @@ import { ApiError } from '@/lib/api/errors'
 import { normalizePhone } from '@/lib/phone'
 
 export const ACCOUNT_ROLES_SQL_HINT =
-  'Run supabase/migrations/0015_account_roles_sales.sql in the live ɃU Supabase SQL editor, then try again.'
+  'Run supabase/migrations/0015_account_roles_sales.sql and 0034_vendor_pos.sql in the live ɃU Supabase SQL editor, then try again.'
 
 export type AccountRoles = {
   user_id: string
   is_organizer: boolean
   is_affiliate: boolean
+  is_vendor: boolean
   is_super_admin: boolean
   affiliate_code: string | null
   live_role: string | null
@@ -25,6 +26,7 @@ function emptyRoles(userId: string): AccountRoles {
     user_id: userId,
     is_organizer: false,
     is_affiliate: false,
+    is_vendor: false,
     is_super_admin: false,
     affiliate_code: null,
     live_role: null,
@@ -37,6 +39,7 @@ function asRoles(raw: unknown, userId: string): AccountRoles {
     user_id: typeof row.user_id === 'string' ? row.user_id : userId,
     is_organizer: Boolean(row.is_organizer),
     is_affiliate: Boolean(row.is_affiliate),
+    is_vendor: Boolean(row.is_vendor),
     is_super_admin: false,
     affiliate_code: typeof row.affiliate_code === 'string' && row.affiliate_code ? row.affiliate_code : null,
     live_role: null,
@@ -66,6 +69,28 @@ export function isOwnerSuperAdmin(userId?: string | null, phone?: string | null)
   return Boolean(got && allowed.includes(got))
 }
 
+export function liveRoleIsOrganizer(liveRole?: string | null) {
+  const role = String(liveRole ?? '')
+    .trim()
+    .toLowerCase()
+  return role === 'organizer' || role === 'organiser' || role === 'celebrant'
+}
+
+export function liveRoleIsVendor(liveRole?: string | null) {
+  const role = String(liveRole ?? '')
+    .trim()
+    .toLowerCase()
+  return role === 'vendor' || role === 'merchant'
+}
+
+export function canUseCelebrantMode(roles: AccountRoles) {
+  return roles.is_super_admin || roles.is_organizer || liveRoleIsOrganizer(roles.live_role)
+}
+
+export function canUseVendorMode(roles: AccountRoles) {
+  return roles.is_super_admin || roles.is_vendor || liveRoleIsVendor(roles.live_role)
+}
+
 export async function fetchLiveUserRole(userId: string): Promise<string | null> {
   if (!userId) return null
   const db = createDataClient()
@@ -87,10 +112,13 @@ export async function getAccountRoles(userId: string): Promise<AccountRoles> {
 export async function getAccountRolesForViewer(userId: string, viewer?: RoleViewer | null): Promise<AccountRoles> {
   const roles = await getAccountRoles(userId)
   const liveRole = (await fetchLiveUserRole(userId)) || viewer?.role?.trim() || null
+  const isOrganizer = roles.is_organizer || liveRoleIsOrganizer(liveRole)
+  const isVendor = roles.is_vendor || liveRoleIsVendor(liveRole)
   return {
     ...roles,
     live_role: liveRole,
-    is_organizer: roles.is_organizer,
+    is_organizer: isOrganizer,
+    is_vendor: isVendor,
     is_affiliate: roles.is_affiliate,
     is_super_admin: isOwnerSuperAdmin(userId, viewer?.phone_e164 || viewer?.phone),
   }
@@ -104,7 +132,7 @@ export async function requireLiveSuperAdmin(userId: string, viewer?: RoleViewer 
   return roles
 }
 
-export async function enableAccountRole(userId: string, flag: 'organizer' | 'affiliate') {
+export async function enableAccountRole(userId: string, flag: 'organizer' | 'affiliate' | 'vendor') {
   const db = createDataClient()
   const rpc = await db.rpc('bu_upsert_account_role', { p_user_id: userId, p_flag: flag })
   if (!rpc.error) return asRoles(rpc.data, userId)
@@ -119,10 +147,36 @@ export async function enableAccountRole(userId: string, flag: 'organizer' | 'aff
     updated_at: new Date().toISOString(),
   }
   if (flag === 'organizer') patch.is_organizer = true
+  if (flag === 'vendor') patch.is_vendor = true
   if (flag === 'affiliate') {
     patch.is_affiliate = true
     patch.affiliate_code = `bua${userId.replace(/-/g, '').slice(0, 8)}`
   }
+  const upsert = await db.from('bu_account_roles').upsert(patch, { onConflict: 'user_id' }).select('*').maybeSingle()
+  if (upsert.error || !upsert.data) {
+  // Column may be missing before 0034 — try without is_vendor.
+    if (flag === 'vendor' && /is_vendor|column/i.test(upsert.error?.message ?? '')) {
+      throw new ApiError(503, 'ROLES_SQL_REQUIRED', ACCOUNT_ROLES_SQL_HINT)
+    }
+    throw new ApiError(503, 'ROLES_SQL_REQUIRED', ACCOUNT_ROLES_SQL_HINT)
+  }
+  return asRoles(upsert.data, userId)
+}
+
+export async function setAccountRoleFlag(
+  userId: string,
+  flag: 'organizer' | 'affiliate' | 'vendor',
+  enabled: boolean,
+) {
+  if (enabled) return enableAccountRole(userId, flag)
+  const db = createDataClient()
+  const patch: Record<string, unknown> = {
+    user_id: userId,
+    updated_at: new Date().toISOString(),
+  }
+  if (flag === 'organizer') patch.is_organizer = false
+  if (flag === 'vendor') patch.is_vendor = false
+  if (flag === 'affiliate') patch.is_affiliate = false
   const upsert = await db.from('bu_account_roles').upsert(patch, { onConflict: 'user_id' }).select('*').maybeSingle()
   if (upsert.error || !upsert.data) {
     throw new ApiError(503, 'ROLES_SQL_REQUIRED', ACCOUNT_ROLES_SQL_HINT)

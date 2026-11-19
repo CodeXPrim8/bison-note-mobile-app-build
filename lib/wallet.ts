@@ -36,6 +36,7 @@ export async function transferBu(input: {
   const kind = input.eventId ? 'spray' : input.isTip ? 'tip' : 'transfer'
   const feeQuote = quotePeerMoveBu(bu, kind)
   const [fromName, toName] = await Promise.all([liveUserLabel(input.fromUserId), liveUserLabel(input.toUserId)])
+  const tipAnonymous = Boolean(input.isTip)
   const meta = {
     kind,
     bu,
@@ -46,9 +47,11 @@ export async function transferBu(input: {
     total_debit_naira: feeQuote.totalDebitNaira,
     value_rate: getBuNairaValue(),
     event_id: input.eventId ?? null,
-    from_name: fromName,
+    // Tips stay anonymous for the recipient — never expose tipper name/phone/id there.
+    from_name: tipAnonymous ? null : fromName,
     to_name: toName,
     note: input.note?.trim() || null,
+    anonymous: tipAnonymous || null,
   }
   const debitType = 'spray'
   const creditType = 'spray_credit'
@@ -56,16 +59,22 @@ export async function transferBu(input: {
     ? toName
       ? `Tip to ${toName}`
       : 'Tip'
-    : toName
-      ? `Sent ɃU to ${toName}`
-      : 'Sent ɃU'
-  const creditDescription = input.isTip
-    ? fromName
-      ? `Tip received from ${fromName}`
-      : 'Tip received'
-    : fromName
-      ? `Received ɃU from ${fromName}`
-      : 'Received ɃU'
+    : input.eventId
+      ? toName
+        ? `Event spray to ${toName}`
+        : 'Event spray'
+      : toName
+        ? `Sent ɃU to ${toName}`
+        : 'Sent ɃU'
+  const creditDescription = tipAnonymous
+    ? 'Tip received'
+    : input.eventId
+      ? fromName
+        ? `Event spray from ${fromName}`
+        : 'Event spray received'
+      : fromName
+        ? `Received ɃU from ${fromName}`
+        : 'Received ɃU'
   const moveId = crypto.randomUUID()
   const sharedMeta = { ...meta, move_id: moveId }
   await moveLiveWallet(db, {
@@ -82,11 +91,12 @@ export async function transferBu(input: {
     direction: 'credit',
     type: creditType,
     description: creditDescription,
-    metadata: { ...sharedMeta, from: input.fromUserId },
+    // Do not attach tipper user id on tip credits — history enrichment would reveal them.
+    metadata: tipAnonymous ? { ...sharedMeta } : { ...sharedMeta, from: input.fromUserId },
   })
   return {
     moveId,
-    fromName,
+    fromName: tipAnonymous ? '' : fromName,
     toName,
     bu,
     naira: input.amount,

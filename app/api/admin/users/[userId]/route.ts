@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireAdmin } from '@/lib/admin/session'
 import { upsertUserControl, writeAdminAudit } from '@/lib/admin/platform'
-import { getAccountRoles, enableAccountRole } from '@/lib/account/roles'
+import { getAccountRoles, enableAccountRole, setAccountRoleFlag } from '@/lib/account/roles'
 import { getAdminUser } from '@/lib/admin/users'
 import { getBuNairaValue } from '@/lib/bu-rate'
 import { normalizePhone } from '@/lib/phone'
@@ -55,6 +55,7 @@ export async function GET(_request: Request, context: { params: Promise<{ userId
         is_organizer: listed.is_organizer || roles.is_organizer,
         is_affiliate: listed.is_affiliate || roles.is_affiliate,
         is_super_admin: listed.is_super_admin || roles.is_super_admin,
+        is_vendor: roles.is_vendor,
         affiliate_code: listed.affiliate_code || roles.affiliate_code,
       },
       control: {
@@ -83,6 +84,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
     if (body.email !== undefined) updates.email = body.email || null
     if (body.role) updates.role = body.role
     if (body.phone) {
+    if (body.role === 'vendor' || body.role === 'merchant') {
+      await enableAccountRole(userId, 'vendor').catch(() => undefined)
+    }
+    if (body.role === 'organizer' || body.role === 'celebrant') {
+      await enableAccountRole(userId, 'organizer').catch(() => undefined)
+    }
       const phone = normalizePhone(body.phone)
       if (!phone) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID')
       updates.phone_number = phone
@@ -100,6 +107,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
     if (body.organizer) await enableAccountRole(userId, 'organizer')
     if (body.affiliate) await enableAccountRole(userId, 'affiliate')
     if (
+    if (body.vendor !== undefined) await setAccountRoleFlag(userId, 'vendor', body.vendor)
       body.suspended !== undefined ||
       body.organizer_suspended !== undefined ||
       body.note !== undefined

@@ -60,10 +60,14 @@ export function CoverImageField({
     <div className="space-y-3">
       <p className="text-sm font-semibold">Cover image</p>
       {preview ? (
-        <div
-          className="h-40 w-full rounded-xl bg-cover bg-center"
-          style={{ backgroundImage: `url(${preview})` }}
-        />
+        <div className="flex max-h-80 min-h-40 w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-secondary/40 p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview}
+            alt="Cover preview"
+            className="max-h-72 w-full object-contain"
+          />
+        </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <input

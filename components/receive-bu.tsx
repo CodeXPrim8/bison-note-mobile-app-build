@@ -99,14 +99,20 @@ export default function ReceiveBU({ initialIntent }: { initialIntent?: 'tip' | '
                   : walletDirection({ type, description, metadata: tx.metadata })
               return direction === 'credit' && historyBucket({ type, description }) === 'bu_transfer'
             })
-            .map((tx) => ({
-              id: String(tx.id),
-              senderUsername: String(tx.counterparty ?? ''),
-              senderName: String(tx.description ?? 'ɃU received'),
-              amount: buFromNaira(Math.abs(Number(tx.amount ?? 0))),
-              type: String(tx.metadata ?? '').includes('tip') || /tip/i.test(String(tx.description ?? '')) ? 'tip' : 'transfer',
-              date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
-            })),
+            .map((tx) => {
+              const isTip =
+                String(tx.metadata ?? '').includes('tip') || /tip/i.test(String(tx.description ?? ''))
+              return {
+                id: String(tx.id),
+                senderUsername: isTip ? '' : String(tx.counterparty ?? ''),
+                senderName: isTip
+                  ? 'Anonymous tip'
+                  : String(tx.description ?? tx.counterparty ?? 'ɃU received'),
+                amount: buFromNaira(Math.abs(Number(tx.amount ?? 0))),
+                type: isTip ? ('tip' as const) : ('transfer' as const),
+                date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
+              }
+            }),
         )
       })
       .catch(() => setReceivedTransfers([]))

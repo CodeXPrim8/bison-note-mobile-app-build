@@ -14,6 +14,8 @@ export type EventFormDetails = {
   ticket_sales_end: string | null
   affiliate_enabled: boolean
   affiliate_commission_pct: number
+  /** When true (default), vendors can see and request to join this event. */
+  vendors_invite_enabled: boolean
 }
 
 function asTrimmed(value: unknown): string | null {
@@ -60,7 +62,13 @@ export function emptyEventFormDetails(): EventFormDetails {
     ticket_sales_end: null,
     affiliate_enabled: false,
     affiliate_commission_pct: 10,
+    vendors_invite_enabled: true,
   }
+}
+
+function asVendorsInvite(value: unknown): boolean {
+  if (value == null) return true
+  return asFlag(value)
 }
 
 export function buildEventFormDetails(input: Partial<EventFormDetails>): EventFormDetails {
@@ -78,6 +86,7 @@ export function buildEventFormDetails(input: Partial<EventFormDetails>): EventFo
     ticket_sales_end: asIso(input.ticket_sales_end),
     affiliate_enabled: asFlag(input.affiliate_enabled),
     affiliate_commission_pct: asPct(input.affiliate_commission_pct),
+    vendors_invite_enabled: asVendorsInvite(input.vendors_invite_enabled),
   }
 }
 
@@ -102,6 +111,7 @@ function parseDetailsObject(raw: unknown): EventFormDetails | null {
     ticket_sales_end: row.ticket_sales_end as string | null,
     affiliate_enabled: asFlag(row.affiliate_enabled),
     affiliate_commission_pct: asPct(row.affiliate_commission_pct),
+    vendors_invite_enabled: asVendorsInvite(row.vendors_invite_enabled),
   })
 }
 

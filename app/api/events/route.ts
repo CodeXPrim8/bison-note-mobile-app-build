@@ -83,6 +83,7 @@ export async function POST(request: Request) {
       ticket_sales_end: body.ticket_sales_end,
       affiliate_enabled: body.affiliate_enabled,
       affiliate_commission_pct: body.affiliate_commission_pct,
+      vendors_invite_enabled: body.vendors_invite_enabled,
     })
 
     if ('error' in created) {

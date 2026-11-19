@@ -21,6 +21,7 @@ type Detail = {
   roles: {
     is_organizer: boolean
     is_affiliate: boolean
+    is_vendor?: boolean
     is_super_admin?: boolean
     affiliate_code: string | null
   }
@@ -152,8 +153,14 @@ export default function AdminUserDetailPage() {
             : [
                 data.roles.is_super_admin ? 'Super Admin' : null,
                 data.roles.is_organizer ? 'Organiser' : null,
+                data.roles.is_vendor ? 'Vendor' : null,
                 data.roles.is_affiliate ? 'Affiliate' : null,
-                !data.roles.is_organizer && !data.roles.is_affiliate && !data.roles.is_super_admin ? 'Guest' : null,
+                !data.roles.is_organizer &&
+                !data.roles.is_vendor &&
+                !data.roles.is_affiliate &&
+                !data.roles.is_super_admin
+                  ? 'Guest'
+                  : null,
               ].filter(Boolean)
           ).map((label) => (
             <span
@@ -176,7 +183,9 @@ export default function AdminUserDetailPage() {
         <Card className="p-5">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Account roles</p>
           <p className="mt-2 text-sm">
-            {data.roles.is_organizer ? 'Organiser' : 'Not organiser'} · {data.roles.is_affiliate ? `Affiliate ${data.roles.affiliate_code}` : 'Not affiliate'}
+            {data.roles.is_organizer ? 'Organiser' : 'Not organiser'} ·{' '}
+            {data.roles.is_vendor ? 'Vendor' : 'Not vendor'} ·{' '}
+            {data.roles.is_affiliate ? `Affiliate ${data.roles.affiliate_code}` : 'Not affiliate'}
           </p>
         </Card>
         <Card className="p-5">
@@ -267,6 +276,17 @@ export default function AdminUserDetailPage() {
           </Button>
           <Button variant="outline" onClick={() => void patch({ organizer: true }, 'Organiser enabled')}>
             Make organiser
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              void patch(
+                { vendor: !data.roles.is_vendor },
+                data.roles.is_vendor ? 'Vendor revoked' : 'Vendor enabled',
+              )
+            }
+          >
+            {data.roles.is_vendor ? 'Revoke vendor' : 'Make vendor'}
           </Button>
           <Button variant="outline" onClick={() => void patch({ affiliate: true }, 'Affiliate enabled')}>
             Make affiliate

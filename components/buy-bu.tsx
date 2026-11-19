@@ -165,8 +165,8 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   const shareText = useMemo(() => {
     if (!virtualAccount?.account_number) return ''
     const bank = virtualAccount.bank_name || 'Bank'
-    const name = virtualAccount.account_name || 'Ƀucks'
-    return `Transfer to Ƀucks\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}\n1 ɃU = ₦1`
+    const name = virtualAccount.account_name || 'BUCKS'
+    return `Transfer to BUCKS\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}\n1 ɃU = ₦1`
   }, [virtualAccount])
 
   async function handleCopyAccount() {

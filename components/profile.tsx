@@ -4,20 +4,25 @@ import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   CalendarDays,
+  CreditCard,
+  Gift,
   History,
   Lock,
   Megaphone,
   Nfc,
   Palette,
+  Radio,
   Settings,
+  Sparkles,
   Ticket,
+  WalletCards,
 } from 'lucide-react'
 import { displayBuId } from '@/lib/phone'
 import ThemeSelector from '@/components/theme-selector'
 import { useAccount } from '@/components/account-store'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
 
-type MenuView = 'menu' | 'appearance' | 'settings' | 'pnd'
+type MenuView = 'menu' | 'appearance' | 'settings' | 'pnd' | 'coming-soon'
 
 interface ProfileProps {
   onNavigate: (page: string) => void
@@ -125,6 +130,12 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
       onClick: () => onNavigate('history'),
     },
     {
+      Icon: Gift,
+      title: 'Refer & earn',
+      desc: 'Invite friends · earn Ƀ1,000',
+      onClick: () => onNavigate('refer'),
+    },
+    {
       Icon: Nfc,
       title: 'Contactless Pay',
       desc: 'Setup your account for contactless pay',
@@ -147,6 +158,30 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
       title: 'Request PND',
       desc: 'Post no debit restriction',
       onClick: () => setView('pnd'),
+    },
+    {
+      Icon: Sparkles,
+      title: 'Coming soon',
+      desc: 'Data & airtime, card, overdraft',
+      onClick: () => setView('coming-soon'),
+    },
+  ]
+
+  const comingSoonItems: Array<{ Icon: LucideIcon; title: string; desc: string }> = [
+    {
+      Icon: Radio,
+      title: 'Data and Airtime',
+      desc: 'Buy data and airtime from your ɃU wallet',
+    },
+    {
+      Icon: CreditCard,
+      title: 'Card',
+      desc: 'Virtual card for online and POS spend',
+    },
+    {
+      Icon: WalletCards,
+      title: 'Overdraft',
+      desc: 'Short-term wallet overdraft when you need it',
     },
   ]
 
@@ -302,6 +337,33 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
               To freeze a bank account, contact your bank. To stop ɃU spending, do not share your receive QR and keep your PIN private.
             </p>
           </div>
+        </div>
+      )}
+
+      {view === 'coming-soon' && (
+        <div className="space-y-3 px-4">
+          <div className="bu-glass-soft rounded-2xl p-4">
+            <h3 className="font-bold">Coming soon</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              These features are on the way. We’ll unlock them in your wallet when ready.
+            </p>
+          </div>
+          {comingSoonItems.map(({ Icon, title, desc }) => (
+            <div key={title} className="bu-glass-soft flex items-start gap-3 rounded-2xl p-4">
+              <span className="bu-well-navy flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
+                <Icon className="h-5 w-5" strokeWidth={2.2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-neutral-950">{title}</h4>
+                  <span className="rounded-full bg-neutral-950/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Soon
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-neutral-500">{desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

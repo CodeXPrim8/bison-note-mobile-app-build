@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DeleteEventButton } from '@/components/organizer/delete-event-button'
+import { EventVendorsManage } from '@/components/event-vendors-manage'
 
 interface EventDash {
   event: {

@@ -88,6 +88,8 @@ export function EventEditorFields({
   setAffiliateEnabled,
   affiliateCommissionPct,
   setAffiliateCommissionPct,
+  vendorsInviteEnabled = true,
+  setVendorsInviteEnabled,
 }: {
   form: EventFormFields
   set: <K extends keyof EventFormFields>(key: K, value: string) => void
@@ -100,6 +102,8 @@ export function EventEditorFields({
   setAffiliateEnabled: (value: boolean) => void
   affiliateCommissionPct: string
   setAffiliateCommissionPct: (value: string) => void
+  vendorsInviteEnabled?: boolean
+  setVendorsInviteEnabled?: (value: boolean) => void
 }) {
   return (
     <>
@@ -179,6 +183,23 @@ export function EventEditorFields({
           Private / invite only
         </Button>
       </div>
+      {setVendorsInviteEnabled ? (
+        <div className="space-y-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-semibold">Invite vendors</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Vendors can request to vend ceremonial cash at this party. You approve or reject each request. On by
+                default.
+              </p>
+            </div>
+            <Switch
+              checked={vendorsInviteEnabled}
+              onCheckedChange={(checked) => setVendorsInviteEnabled(checked === true)}
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
         <div className="flex items-start justify-between gap-4">
           <div>

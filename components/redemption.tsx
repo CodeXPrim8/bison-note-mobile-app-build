@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Card } from '@/components/ui/card'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, ChevronDown, Search, Star, Trash2 } from 'lucide-react'
+import { BankLogo } from '@/components/bank-logo'
+import { BalanceSparkline, useBalanceSpark } from '@/components/balance-sparkline'
 import { formatEventDateTime } from '@/lib/datetime'
 import {
   BU_BUY_PRESETS,
@@ -16,8 +17,7 @@ import {
   WalletAmountError,
 } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
-import { NGN_BANKS } from '@/lib/payments/ngn-banks'
-import { WalletPageSummary } from '@/components/wallet-summary'
+import { bankCodeFromName, NGN_BANKS } from '@/lib/payments/ngn-banks'
 import { PinPadModal } from '@/components/pin-pad-modal'
 import { BuInvoiceDialog } from '@/components/bu-invoice'
 import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
@@ -27,6 +27,7 @@ interface WithdrawalRequest {
   bu: number
   naira: number
   bank_name: string
+  bank_code?: string
   account_number: string
   account_name: string
   public_status: string
@@ -37,10 +38,97 @@ interface WithdrawalRequest {
 
 type BankOption = { name: string; code: string }
 
+type BankReceiver = {
+  bankCode: string
+  bankName: string
+  accountNumber: string
+  accountName: string
+}
+
+const BENEFICIARIES_KEY = 'bu_bank_beneficiaries'
+
+function receiverKey(row: Pick<BankReceiver, 'bankCode' | 'accountNumber'>) {
+  return `${row.bankCode}|${row.accountNumber}`
+}
+
+function readBeneficiaries(userId: string | null | undefined): BankReceiver[] {
+  if (typeof window === 'undefined' || !userId) return []
+  try {
+    const raw = window.localStorage.getItem(`${BENEFICIARIES_KEY}:${userId}`)
+    const parsed = raw ? (JSON.parse(raw) as unknown) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null
+        const item = row as Record<string, unknown>
+        const accountNumber = String(item.accountNumber ?? '').replace(/\D/g, '')
+        const bankCode = String(item.bankCode ?? '').trim()
+        const bankName = String(item.bankName ?? '').trim()
+        const accountName = String(item.accountName ?? '').trim()
+        if (accountNumber.length !== 10 || !bankCode) return null
+        return {
+          bankCode,
+          bankName: bankName || 'Bank',
+          accountNumber,
+          accountName: accountName || accountNumber,
+        }
+      })
+      .filter((row): row is BankReceiver => Boolean(row))
+  } catch {
+    return []
+  }
+}
+
+function writeBeneficiaries(userId: string, rows: BankReceiver[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(`${BENEFICIARIES_KEY}:${userId}`, JSON.stringify(rows.slice(0, 40)))
+}
+
+function maskNuban(account: string) {
+  const digits = account.replace(/\D/g, '')
+  if (digits.length < 4) return digits
+  return `•••• ${digits.slice(-4)}`
+}
+
+function withdrawalToReceiver(row: WithdrawalRequest): BankReceiver | null {
+  const accountNumber = String(row.account_number || '').replace(/\D/g, '')
+  if (accountNumber.length !== 10) return null
+  const bankName = String(row.bank_name || 'Bank')
+  const bankCode = String(row.bank_code || bankCodeFromName(bankName) || '').trim()
+  if (!bankCode) return null
+  return {
+    bankCode,
+    bankName,
+    accountNumber,
+    accountName: String(row.account_name || accountNumber),
+  }
+}
+
+function uniqueReceivers(rows: WithdrawalRequest[]): BankReceiver[] {
+  const seen = new Set<string>()
+  const out: BankReceiver[] = []
+  for (const row of rows) {
+    const receiver = withdrawalToReceiver(row)
+    if (!receiver) continue
+    const key = receiverKey(receiver)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(receiver)
+  }
+  return out
+}
+
 export default function Redemption() {
   const { applySpendBu, refreshWallet, buBalance, userId, displayName } = useAccount()
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [banks, setBanks] = useState<BankOption[]>(NGN_BANKS.map((bank) => ({ name: bank.name, code: bank.code })))
+  const [beneficiaries, setBeneficiaries] = useState<BankReceiver[]>([])
+  const spark = useBalanceSpark(userId, buBalance)
+  const [receiverSearch, setReceiverSearch] = useState('')
+  const [bankQuery, setBankQuery] = useState('')
+  const [bankMenuOpen, setBankMenuOpen] = useState(false)
+  const bankPickerRef = useRef<HTMLDivElement | null>(null)
+  const [saveBeneficiary, setSaveBeneficiary] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [resolving, setResolving] = useState(false)
@@ -49,7 +137,7 @@ export default function Redemption() {
   const [invoice, setInvoice] = useState<BuInvoice | null>(null)
   const [form, setForm] = useState({
     buAmount: '',
-    bankCode: '999992',
+    bankCode: '',
     accountNumber: '',
     accountName: '',
     remark: '',
@@ -71,12 +159,16 @@ export default function Redemption() {
       const next = json.data.banks as BankOption[]
       setBanks(next)
       setForm((current) =>
-        next.some((bank) => bank.code === current.bankCode)
+        !current.bankCode || next.some((bank) => bank.code === current.bankCode)
           ? current
-          : { ...current, bankCode: next.find((bank) => bank.code === '999992')?.code ?? next[0]?.code ?? '058' },
+          : { ...current, bankCode: '' },
       )
     }
   }
+
+  useEffect(() => {
+    setBeneficiaries(readBeneficiaries(userId))
+  }, [userId])
 
   useEffect(() => {
     loadHistory().catch(() => setWithdrawals([]))
@@ -136,14 +228,124 @@ export default function Redemption() {
   const readyQuote = quote && !('error' in quote) ? quote : null
   const quoteError = quote && 'error' in quote ? quote.error : null
   const bank = banks.find((item) => item.code === form.bankCode)
+  const insufficient =
+    readyQuote != null && buBalance != null && buBalance + 1e-9 < readyQuote.totalDebitBu
   const canSend =
     Boolean(readyQuote) &&
+    !insufficient &&
     form.accountNumber.length === 10 &&
     Boolean(form.accountName) &&
+    Boolean(form.bankCode) &&
     !resolving &&
     !busy
 
+  const bankSuggestions = useMemo(() => {
+    const q = bankQuery.trim().toLowerCase()
+    // Only suggest after the user types — never show a default bank list.
+    if (!q) return []
+    return banks
+      .filter((item) => item.name.toLowerCase().includes(q) || item.code.includes(q))
+      .slice(0, 8)
+  }, [bankQuery, banks])
+
+  useEffect(() => {
+    if (!bankMenuOpen) return
+    function onPointerDown(event: MouseEvent | TouchEvent) {
+      const node = bankPickerRef.current
+      if (!node) return
+      if (event.target instanceof Node && !node.contains(event.target)) {
+        setBankMenuOpen(false)
+        if (bank) setBankQuery(bank.name)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [bankMenuOpen, bank])
+
+  useEffect(() => {
+    if (bank && !bankMenuOpen) setBankQuery(bank.name)
+  }, [bank?.code, bank?.name, bankMenuOpen])
+
+  const pastReceivers = useMemo(() => uniqueReceivers(withdrawals), [withdrawals])
+  const recentReceivers = pastReceivers.slice(0, 3)
+
+  const searchableReceivers = useMemo(() => {
+    const map = new Map<string, BankReceiver>()
+    for (const row of beneficiaries) map.set(receiverKey(row), row)
+    for (const row of pastReceivers) {
+      if (!map.has(receiverKey(row))) map.set(receiverKey(row), row)
+    }
+    return Array.from(map.values())
+  }, [beneficiaries, pastReceivers])
+
+  const searchHits = useMemo(() => {
+    const q = receiverSearch.trim().toLowerCase()
+    if (!q) return []
+    return searchableReceivers.filter((row) => {
+      const hay = `${row.accountName} ${row.bankName} ${row.accountNumber}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [receiverSearch, searchableReceivers])
+
+  const formReceiverKey =
+    form.accountNumber.length === 10 && form.bankCode
+      ? receiverKey({ bankCode: form.bankCode, accountNumber: form.accountNumber })
+      : ''
+  const alreadyBeneficiary = Boolean(
+    formReceiverKey && beneficiaries.some((row) => receiverKey(row) === formReceiverKey),
+  )
+
+  function pickBank(option: BankOption) {
+    setBankQuery(option.name)
+    setBankMenuOpen(false)
+    setForm((current) => ({
+      ...current,
+      bankCode: option.code,
+      accountName: '',
+    }))
+  }
+
+  function applyReceiver(receiver: BankReceiver) {
+    setMessage(null)
+    setReceiverSearch('')
+    setSaveBeneficiary(false)
+    setBankQuery(receiver.bankName)
+    setBankMenuOpen(false)
+    setForm((current) => ({
+      ...current,
+      bankCode: receiver.bankCode,
+      accountNumber: receiver.accountNumber,
+      accountName: receiver.accountName,
+    }))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function persistBeneficiary(receiver: BankReceiver) {
+    if (!userId) return
+    const next = [receiver, ...beneficiaries.filter((row) => receiverKey(row) !== receiverKey(receiver))]
+    writeBeneficiaries(userId, next)
+    setBeneficiaries(next)
+  }
+
+  function removeBeneficiary(receiver: BankReceiver) {
+    if (!userId) return
+    const next = beneficiaries.filter((row) => receiverKey(row) !== receiverKey(receiver))
+    writeBeneficiaries(userId, next)
+    setBeneficiaries(next)
+  }
+
   function openPin() {
+    if (!readyQuote) return
+    if (insufficient) {
+      setMessage(
+        `Not enough ɃU. Bank gets ₦${formatNairaPlain(readyQuote.bankNaira)}; you need Ƀ ${formatBu(readyQuote.totalDebitBu)} (amount + charges).`,
+      )
+      return
+    }
     if (!canSend) return
     setMessage(null)
     setPinError(null)
@@ -188,13 +390,21 @@ export default function Redemption() {
         remark?: string | null
         bank_naira?: number
       }
+      if (saveBeneficiary || alreadyBeneficiary) {
+        persistBeneficiary({
+          bankCode: form.bankCode,
+          bankName: bank?.name ?? row.bank_name ?? 'Bank',
+          accountNumber: form.accountNumber.replace(/\D/g, ''),
+          accountName: form.accountName.trim() || row.account_name,
+        })
+      }
       setInvoice({
         number: invoiceNumberFromId(String(row.invoice_number || row.id)),
         issuedAt: new Date().toISOString(),
         kind: 'bank',
         fromName: displayName || 'Ƀucks wallet',
         toName: `${row.account_name} · ${row.bank_name}`,
-        toId: row.account_number,
+        toId: form.accountNumber.replace(/\D/g, '') || row.account_number,
         amountBu: Number(row.bu ?? readyQuote.bu),
         amountNaira: Number(row.bank_naira ?? row.naira ?? readyQuote.bankNaira),
         note: form.remark.trim() || undefined,
@@ -207,6 +417,7 @@ export default function Redemption() {
         accountName: '',
         remark: '',
       })
+      setSaveBeneficiary(false)
       await loadHistory()
       await refreshWallet()
     } catch {
@@ -216,159 +427,406 @@ export default function Redemption() {
     }
   }
 
+  function ReceiverRow({
+    receiver,
+    meta,
+    onRemove,
+  }: {
+    receiver: BankReceiver
+    meta?: string
+    onRemove?: () => void
+  }) {
+    return (
+      <div className="bu-glass-soft rounded-2xl px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <BankLogo bankCode={receiver.bankCode} bankName={receiver.bankName} className="h-8 w-8" />
+          <button type="button" onClick={() => applyReceiver(receiver)} className="bu-press min-w-0 flex-1 text-left">
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-semibold">{receiver.accountName}</h3>
+              <span className="bu-glass-dark shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-neutral-800">
+                {receiver.bankName}
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {maskNuban(receiver.accountNumber)}
+              {meta ? ` · ${meta}` : ''}
+            </p>
+          </button>
+          {onRemove ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-white/50 hover:text-destructive"
+              aria-label="Remove beneficiary"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  const fieldClass =
+    'mt-1.5 h-11 w-full rounded-2xl border border-white/70 bg-white/55 px-3.5 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none placeholder:text-muted-foreground focus:border-primary/40 focus:bg-white/75'
+
   return (
-    <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
+    <div className="space-y-5 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
-        <WalletPageSummary
-          kicker="To Bank"
-          title="Send to bank"
-          detail={`Send ɃU as naira to any Nigerian bank or wallet. 1 ɃU = ₦${BU_NAIRA_VALUE.toLocaleString('en-NG')}.`}
-        />
+        <div className="bu-well-navy relative mt-1 overflow-hidden rounded-[30px] p-5 text-white shadow-[0_20px_48px_rgba(11,23,51,0.32)]">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,rgba(255,255,255,0.26)_0%,transparent_40%,rgba(255,255,255,0.08)_100%)]" />
+          <div className="pointer-events-none absolute -right-10 top-0 h-40 w-40 rounded-full bg-cyan-300/15 blur-3xl" />
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/55">To Bank</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">Send to bank</h1>
+              </div>
+              <span className="bu-glass-dark rounded-full px-3 py-1 text-[11px] font-medium text-white/90">
+                Min {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU
+              </span>
+            </div>
 
-        <Card className="mt-6 border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-5">
-          <p className="text-xs text-muted-foreground">Wallet</p>
-          <p className="mt-1 text-2xl font-bold text-primary">
-            {buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Minimum {BU_MIN_WITHDRAW.toLocaleString('en-NG')} ɃU.
-          </p>
-        </Card>
+            <div className="mt-5 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-white/65">Available</p>
+                <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums">
+                  {buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+                </p>
+              </div>
+              <p className="pb-1 text-right text-[11px] text-white/55">
+                Live · 1 ɃU = ₦{BU_NAIRA_VALUE.toLocaleString('en-NG')}
+              </p>
+            </div>
 
-        <Card className="mt-4 space-y-4 border-primary/20 bg-card p-5">
-          <div>
-            <label className="text-sm font-semibold">Amount (ɃU)</label>
-            <Input
-              type="number"
-              min={BU_MIN_WITHDRAW}
-              step="1"
-              placeholder={`Minimum ${BU_MIN_WITHDRAW.toLocaleString('en-NG')}`}
-              value={form.buAmount}
-              onChange={(e) => setForm({ ...form, buAmount: e.target.value })}
-              className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-            />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {BU_BUY_PRESETS.filter((preset) => preset >= BU_MIN_WITHDRAW).map((preset) => (
-                <Button
-                  key={preset}
-                  type="button"
-                  size="sm"
-                  variant={form.buAmount === String(preset) ? 'default' : 'outline'}
-                  onClick={() => setForm({ ...form, buAmount: String(preset) })}
+              <div className="bu-glass-dark mt-4 rounded-2xl px-3 pb-1 pt-2">
+              <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">Balance trend</p>
+              <BalanceSparkline
+                gradientId="bu-bank-balance-fill"
+                ready={spark.ready}
+                values={spark.values}
+              />
+            </div>
+          </div>
+        </div>
+
+        {beneficiaries.length > 0 ? (
+          <div className="mt-5">
+            <h3 className="mb-2.5 text-sm font-semibold tracking-wide text-neutral-700">Beneficiaries</h3>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {beneficiaries.map((receiver) => (
+                <div
+                  key={receiverKey(receiver)}
+                  className="bu-glass-soft relative min-w-[9rem] shrink-0 rounded-2xl"
                 >
-                  Ƀ {preset.toLocaleString('en-NG')}
-                </Button>
+                  <button
+                    type="button"
+                    onClick={() => applyReceiver(receiver)}
+                    className="bu-press flex w-full items-start gap-2 px-3 py-2.5 pr-8 text-left"
+                  >
+                    <BankLogo bankCode={receiver.bankCode} bankName={receiver.bankName} className="mt-0.5 h-7 w-7" />
+                    <span className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{receiver.accountName}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{receiver.bankName}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{maskNuban(receiver.accountNumber)}</p>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeBeneficiary(receiver)}
+                    className="absolute right-1.5 top-1.5 rounded-md p-1 text-muted-foreground hover:bg-white/60 hover:text-destructive"
+                    aria-label="Remove beneficiary"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
-            {readyQuote ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Receiver gets ₦{formatNairaPlain(readyQuote.bankNaira)}
-              </p>
-            ) : quoteError ? (
-              <p className="mt-2 text-xs text-destructive">{quoteError}</p>
-            ) : null}
           </div>
+        ) : null}
 
-          <div>
-            <label className="text-sm font-semibold">Receiver bank</label>
-            <select
-              value={form.bankCode}
-              onChange={(e) => setForm({ ...form, bankCode: e.target.value, accountName: '' })}
-              className="mt-2 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground"
+        <div className="bu-glass relative mt-4 overflow-hidden rounded-[28px] p-4 sm:p-5">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.55)_0%,transparent_100%)]" />
+          <div className="relative space-y-4">
+            <div>
+              <label className="text-sm font-semibold text-neutral-900">Amount (ɃU)</label>
+              <Input
+                type="number"
+                min={BU_MIN_WITHDRAW}
+                step="1"
+                inputMode="decimal"
+                placeholder={`Minimum ${BU_MIN_WITHDRAW.toLocaleString('en-NG')}`}
+                value={form.buAmount}
+                onChange={(e) => setForm({ ...form, buAmount: e.target.value })}
+                className="mt-2 h-12 w-full rounded-xl border border-neutral-200/80 bg-secondary px-3.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/35 focus:bg-white"
+              />
+              <div className="mt-2.5 grid grid-cols-4 gap-2">
+                {BU_BUY_PRESETS.filter((preset) => preset >= BU_MIN_WITHDRAW).map((preset) => {
+                  const active = form.buAmount === String(preset)
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setForm({ ...form, buAmount: String(preset) })}
+                      className={`bu-press rounded-full border px-2 py-2 text-center text-xs font-semibold transition ${
+                        active
+                          ? 'border-neutral-950 bg-neutral-950 text-white'
+                          : 'border-neutral-200/90 bg-white text-neutral-800'
+                      }`}
+                    >
+                      Ƀ {preset.toLocaleString('en-NG')}
+                    </button>
+                  )
+                })}
+              </div>
+              {readyQuote ? (
+                <div className="bu-glass-soft mt-3 rounded-2xl px-3 py-2.5 text-xs text-neutral-600">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Bank receives</span>
+                    <span className="font-semibold text-neutral-950">₦{formatNairaPlain(readyQuote.bankNaira)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span>You pay</span>
+                    <span className="font-semibold text-neutral-950">Ƀ {formatBu(readyQuote.totalDebitBu)}</span>
+                  </div>
+                  {insufficient ? (
+                    <p className="mt-1.5 text-destructive">
+                      Need Ƀ {formatBu(readyQuote.totalDebitBu)} for this send.
+                    </p>
+                  ) : null}
+                </div>
+              ) : quoteError ? (
+                <p className="mt-2 text-xs text-destructive">{quoteError}</p>
+              ) : null}
+            </div>
+
+            <div className="bu-glass-soft rounded-[22px] p-3.5">
+              <div className="mb-3 flex items-center gap-2">
+                <BankLogo bankCode={form.bankCode} bankName={bank?.name} className="h-9 w-9" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">Receiver</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {bank?.name || 'Choose bank'}
+                  </p>
+                </div>
+              </div>
+
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                Bank
+              </label>
+              <div ref={bankPickerRef} className="relative mt-1.5">
+                <div className="flex items-center gap-2 rounded-2xl border border-white/70 bg-white/55 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus-within:border-primary/40 focus-within:bg-white/75">
+                  <input
+                    value={bankQuery}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setBankQuery(next)
+                      setBankMenuOpen(next.trim().length > 0)
+                      const exact = banks.find((item) => item.name.toLowerCase() === next.trim().toLowerCase())
+                      if (exact) {
+                        setForm((current) =>
+                          current.bankCode === exact.code
+                            ? current
+                            : { ...current, bankCode: exact.code, accountName: '' },
+                        )
+                      } else if (form.bankCode) {
+                        setForm((current) => ({ ...current, bankCode: '', accountName: '' }))
+                      }
+                    }}
+                    onFocus={() => {
+                      if (bankQuery.trim()) setBankMenuOpen(true)
+                    }}
+                    placeholder="Type bank name"
+                    autoComplete="off"
+                    className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                </div>
+                {bankMenuOpen && bankQuery.trim() ? (
+                  <div className="bu-glass absolute left-0 right-0 z-30 mt-1.5 max-h-56 overflow-y-auto rounded-2xl p-1.5 shadow-[0_16px_40px_rgba(11,23,51,0.16)]">
+                    {bankSuggestions.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-muted-foreground">No matching banks</p>
+                    ) : (
+                      bankSuggestions.map((item) => (
+                        <button
+                          key={item.code}
+                          type="button"
+                          onClick={() => pickBank(item)}
+                          className={`bu-press flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left ${
+                            item.code === form.bankCode ? 'bg-neutral-950 text-white' : 'hover:bg-white/70'
+                          }`}
+                        >
+                          <BankLogo bankCode={item.code} bankName={item.name} className="h-7 w-7" />
+                          <span className="truncate text-sm font-medium">{item.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                Account number
+              </label>
+              <Input
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="Account number"
+                value={form.accountNumber}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
+                    accountName: '',
+                  })
+                }
+                className={fieldClass}
+              />
+              {(resolving || form.accountName || form.accountNumber.length === 10) && (
+                <div className="mt-2.5 flex items-center gap-2 rounded-2xl bg-white/55 px-3 py-2 text-sm">
+                  {resolving ? (
+                    <p className="text-muted-foreground">Looking up account…</p>
+                  ) : form.accountName ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 shrink-0 text-emerald-500" />
+                      <p className="truncate font-semibold text-neutral-950">{form.accountName}</p>
+                    </>
+                  ) : (
+                    <p className="text-destructive">Account name not found</p>
+                  )}
+                </div>
+              )}
+
+              {form.accountNumber.length === 10 && form.accountName ? (
+                <button
+                  type="button"
+                  disabled={alreadyBeneficiary}
+                  onClick={() => {
+                    if (alreadyBeneficiary) return
+                    setSaveBeneficiary((value) => !value)
+                  }}
+                  className={`bu-press mt-3 flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition ${
+                    alreadyBeneficiary || saveBeneficiary
+                      ? 'bg-neutral-950 text-white'
+                      : 'bg-white/60 text-neutral-800'
+                  }`}
+                >
+                  <Star
+                    className={`h-4 w-4 shrink-0 ${
+                      alreadyBeneficiary || saveBeneficiary ? 'fill-current' : ''
+                    }`}
+                  />
+                  <span className="font-medium">
+                    {alreadyBeneficiary ? 'Saved beneficiary' : saveBeneficiary ? 'Will save beneficiary' : 'Add beneficiary'}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                Remarks
+              </label>
+              <Input
+                maxLength={160}
+                placeholder="Optional note"
+                value={form.remark}
+                onChange={(e) => setForm({ ...form, remark: e.target.value })}
+                className={fieldClass}
+              />
+            </div>
+
+            {message ? <p className="text-sm text-destructive">{message}</p> : null}
+
+            <Button
+              type="button"
+              onClick={openPin}
+              disabled={!canSend}
+              className="bu-press h-12 w-full rounded-2xl bg-neutral-950 text-base font-semibold text-white shadow-[0_14px_32px_rgba(11,23,51,0.28)] hover:bg-neutral-900 disabled:shadow-none"
             >
-              {banks.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              Send to bank
+            </Button>
           </div>
+        </div>
 
-          <div>
-            <label className="text-sm font-semibold">Receiver account number</label>
-            <Input
-              inputMode="numeric"
-              maxLength={10}
-              placeholder="10-digit NUBAN"
-              value={form.accountNumber}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
-                  accountName: '',
-                })
-              }
-              className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-            />
-            {(resolving || form.accountName || form.accountNumber.length === 10) && (
-              <p className="mt-2 text-sm font-medium text-primary">
-                {resolving
-                  ? 'Looking up account name…'
-                  : form.accountName
-                    ? form.accountName
-                    : 'Account name not found'}
-              </p>
-            )}
+        <div className="mt-7">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Recent sends</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Tap to fill and send again</p>
+            </div>
           </div>
-
-          <div>
-            <label className="text-sm font-semibold">Remarks</label>
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              maxLength={160}
-              placeholder="Optional note"
-              value={form.remark}
-              onChange={(e) => setForm({ ...form, remark: e.target.value })}
-              className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
+              value={receiverSearch}
+              onChange={(e) => setReceiverSearch(e.target.value)}
+              placeholder="Search receivers"
+              className={`${fieldClass} !mt-0 pl-10`}
             />
           </div>
 
-          {message && <p className="text-sm text-destructive">{message}</p>}
-
-          <Button
-            type="button"
-            onClick={openPin}
-            disabled={!canSend}
-            className="w-full bg-primary py-6 text-primary-foreground hover:bg-primary/90"
-          >
-            Send
-          </Button>
-        </Card>
-
-        <div className="mt-8">
-          <h3 className="mb-4 font-semibold">Recent sends</h3>
-          <div className="space-y-3">
-            {withdrawals.length === 0 ? (
-              <Card className="border-border/50 bg-card/50 p-8 text-center">
-                <p className="text-muted-foreground">No bank sends yet</p>
-              </Card>
+          <div className="space-y-2">
+            {receiverSearch.trim() ? (
+              searchHits.length === 0 ? (
+                <div className="bu-glass-soft rounded-2xl px-6 py-8 text-center">
+                  <p className="text-sm text-muted-foreground">No matching receivers</p>
+                </div>
+              ) : (
+                searchHits.map((receiver) => (
+                  <ReceiverRow
+                    key={receiverKey(receiver)}
+                    receiver={receiver}
+                    onRemove={
+                      beneficiaries.some((row) => receiverKey(row) === receiverKey(receiver))
+                        ? () => removeBeneficiary(receiver)
+                        : undefined
+                    }
+                  />
+                ))
+              )
+            ) : recentReceivers.length === 0 ? (
+              <div className="bu-glass-soft rounded-2xl px-6 py-8 text-center">
+                <p className="text-sm text-muted-foreground">No bank sends yet</p>
+              </div>
             ) : (
-              withdrawals.map((withdrawal) => (
-                <Card key={withdrawal.id} className="border-border/50 bg-card/50 p-4">
-                  <div className="flex items-start justify-between gap-3">
+              recentReceivers.map((receiver) => {
+                const last = withdrawals.find((row) => {
+                  const item = withdrawalToReceiver(row)
+                  return item && receiverKey(item) === receiverKey(receiver)
+                })
+                return (
+                  <button
+                    key={receiverKey(receiver)}
+                    type="button"
+                    onClick={() => applyReceiver(receiver)}
+                    className="bu-press bu-glass-soft flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-left"
+                  >
+                    <BankLogo bankCode={receiver.bankCode} bankName={receiver.bankName} className="h-8 w-8" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold">{withdrawal.bank_name}</h3>
-                        <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold">
-                          {withdrawal.label}
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="truncate text-sm font-semibold">{receiver.accountName}</h3>
+                        <span className="bu-glass-dark shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-neutral-800">
+                          {receiver.bankName}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-muted-foreground">
-                        {withdrawal.account_number} · {withdrawal.account_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {withdrawal.created_at ? formatEventDateTime(withdrawal.created_at) : ''}
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {maskNuban(receiver.accountNumber)}
+                        {last?.created_at ? ` · ${formatEventDateTime(last.created_at)}` : ''}
                       </p>
                     </div>
-                    <div className="text-right">
-                      {withdrawal.public_status === 'completed' && (
-                        <CheckCircle className="mb-1 ml-auto h-4 w-4 text-green-500" />
-                      )}
-                      <p className="font-bold">₦{formatNairaPlain(withdrawal.naira)}</p>
-                      <p className="text-xs text-muted-foreground">Ƀ {formatBu(withdrawal.bu)}</p>
+                    <div className="shrink-0 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {last?.public_status === 'completed' ? (
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : null}
+                        {last ? <p className="text-sm font-bold">₦{formatNairaPlain(last.naira)}</p> : null}
+                      </div>
+                      {last ? <p className="text-[11px] text-muted-foreground">Ƀ {formatBu(last.bu)}</p> : null}
                     </div>
-                  </div>
-                </Card>
-              ))
+                  </button>
+                )
+              })
             )}
           </div>
         </div>

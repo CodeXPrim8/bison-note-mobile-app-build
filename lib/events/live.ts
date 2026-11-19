@@ -123,6 +123,7 @@ export function mapLiveEvent(row: Record<string, unknown>): EventRecord {
     capacity: row.capacity == null && row.max_guests == null ? null : asNumber(row.capacity ?? row.max_guests),
     affiliate_enabled: extra.affiliate_enabled,
     affiliate_commission_pct: extra.affiliate_commission_pct,
+    vendors_invite_enabled: extra.vendors_invite_enabled,
     created_at: asIso(row.created_at),
     updated_at: asIso(row.updated_at ?? row.created_at),
   }
@@ -537,6 +538,7 @@ type EventWriteInput = {
   ticket_sales_end?: string | null
   affiliate_enabled?: boolean
   affiliate_commission_pct?: number
+  vendors_invite_enabled?: boolean
 }
 
 function detailsFromWriteInput(input: EventWriteInput): EventFormDetails {
@@ -554,6 +556,7 @@ function detailsFromWriteInput(input: EventWriteInput): EventFormDetails {
     ticket_sales_end: input.ticket_sales_end,
     affiliate_enabled: input.affiliate_enabled,
     affiliate_commission_pct: input.affiliate_commission_pct,
+    vendors_invite_enabled: input.vendors_invite_enabled,
   })
 }
 
@@ -842,6 +845,7 @@ async function callDeleteEventRpc(
 export async function deleteLiveEvent(
   eventId: string,
   celebrantId: string,
+  opts?: { adminOverride?: boolean },
 ): Promise<{ ok: true } | { error: string; code?: 'NOT_FOUND' | 'FORBIDDEN' }> {
   const data = createDataClient()
   const admin = tryCreateAdminClient()
@@ -849,11 +853,14 @@ export async function deleteLiveEvent(
   if (!existing) return { error: 'Event not found', code: 'NOT_FOUND' }
   const packed = withLiveTiers(existing)
   const owner = asString(existing.celebrant_id) || packed.organizer_id
-  if (owner !== celebrantId) return { error: 'Not the organizer', code: 'FORBIDDEN' }
+  if (!opts?.adminOverride && owner !== celebrantId) {
+    return { error: 'Not the organizer', code: 'FORBIDDEN' }
+  }
+  const actorId = opts?.adminOverride ? owner || celebrantId : celebrantId
 
   const rpcClients = admin ? [admin, data] : [data]
   for (const client of rpcClients) {
-    const result = await callDeleteEventRpc(client, packed.id, celebrantId)
+    const result = await callDeleteEventRpc(client, packed.id, actorId)
     if ('ok' in result) {
       if (!(await eventStillExists(packed.id, admin ?? data))) return { ok: true }
     }

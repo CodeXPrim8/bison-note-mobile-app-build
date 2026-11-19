@@ -14,11 +14,16 @@ type AccountSnapshot = {
   displayName: string
   buBalance: number | null
   nairaBalance: number | null
+  isOrganizer: boolean
+  isVendor: boolean
+  isSuperAdmin: boolean
 }
 
 type AccountContextValue = AccountSnapshot & {
   /** Bumps only on spend/credit so RollingBalance animates once, not on remount/refresh. */
   balanceMotion: number
+  canCelebrant: boolean
+  canVendor: boolean
   applySpendBu: (bu: number, options?: { refresh?: boolean }) => void
   applyCreditNaira: (naira: number) => void
   applyWallet: (wallet: { bu_balance?: unknown; naira_available?: unknown }) => void
@@ -32,6 +37,9 @@ const emptySnapshot: AccountSnapshot = {
   displayName: '',
   buBalance: null,
   nairaBalance: null,
+  isOrganizer: false,
+  isVendor: false,
+  isSuperAdmin: false,
 }
 
 const AccountContext = createContext<AccountContextValue | null>(null)
@@ -55,7 +63,16 @@ function readCache(): AccountSnapshot | null {
     const nairaBalance =
       typeof parsed.nairaBalance === 'number' && Number.isFinite(parsed.nairaBalance) ? parsed.nairaBalance : null
     if (!userId) return null
-    return { userId, greetingName, displayName, buBalance, nairaBalance }
+    return {
+      userId,
+      greetingName,
+      displayName,
+      buBalance,
+      nairaBalance,
+      isOrganizer: Boolean(parsed.isOrganizer),
+      isVendor: Boolean(parsed.isVendor),
+      isSuperAdmin: Boolean(parsed.isSuperAdmin),
+    }
   } catch {
     return null
   }
@@ -123,11 +140,40 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           greetingName: firstName(display || (sameUser ? prev.displayName : cached?.displayName) || ''),
           buBalance: keepWallet ? prev.buBalance : (cached?.userId === userId ? cached.buBalance : null),
           nairaBalance: keepWallet ? prev.nairaBalance : (cached?.userId === userId ? cached.nairaBalance : null),
+          isOrganizer: sameUser ? prev.isOrganizer : Boolean(cached?.userId === userId && cached.isOrganizer),
+          isVendor: sameUser ? prev.isVendor : Boolean(cached?.userId === userId && cached.isVendor),
+          isSuperAdmin: sameUser ? prev.isSuperAdmin : Boolean(cached?.userId === userId && cached.isSuperAdmin),
         }
         writeCache(next)
         return next
       })
-      void fetch('/api/me', { credentials: 'include' }).catch(() => undefined)
+      void fetch('/api/me', { credentials: 'include' })
+        .then(async (rolesRes) => {
+          const rolesJson = await rolesRes.json()
+          if (!rolesJson.status) return
+          const roles = rolesJson.data?.roles as
+            | {
+                is_organizer?: boolean
+                is_vendor?: boolean
+                is_super_admin?: boolean
+                live_role?: string | null
+              }
+            | null
+            | undefined
+          if (!roles) return
+          const live = String(roles.live_role ?? '').toLowerCase()
+          const isOrganizer =
+            Boolean(roles.is_organizer) || live === 'organizer' || live === 'organiser' || live === 'celebrant'
+          const isVendor = Boolean(roles.is_vendor) || live === 'vendor' || live === 'merchant'
+          const isSuperAdmin = Boolean(roles.is_super_admin)
+          setSnapshot((prev) => {
+            if (prev.userId !== userId) return prev
+            const next = { ...prev, isOrganizer, isVendor, isSuperAdmin }
+            writeCache(next)
+            return next
+          })
+        })
+        .catch(() => undefined)
     } catch {
       // Wait for the next /api/me instead of showing another account.
     }
@@ -265,17 +311,32 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }, [snapshot.userId, ingestWallet])
 
+  const canCelebrant = snapshot.isSuperAdmin || snapshot.isOrganizer
+  const canVendor = snapshot.isSuperAdmin || snapshot.isVendor
+
   const value = useMemo<AccountContextValue>(
     () => ({
       ...snapshot,
       balanceMotion,
+      canCelebrant,
+      canVendor,
       applySpendBu,
       applyCreditNaira,
       applyWallet: ingestWallet,
       refreshWallet,
       refreshAccount,
     }),
-    [snapshot, balanceMotion, applySpendBu, applyCreditNaira, ingestWallet, refreshWallet, refreshAccount],
+    [
+      snapshot,
+      balanceMotion,
+      canCelebrant,
+      canVendor,
+      applySpendBu,
+      applyCreditNaira,
+      ingestWallet,
+      refreshWallet,
+      refreshAccount,
+    ],
   )
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>

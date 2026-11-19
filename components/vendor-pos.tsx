@@ -1,179 +1,818 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import QRCode from 'qrcode'
 import { Button } from '@/components/ui/button'
-import { CheckCircle } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Building2, Check, CheckCircle, ChevronLeft, Copy, Nfc, QrCode, Share2 } from 'lucide-react'
 import { WalletPageSummary } from '@/components/wallet-summary'
 import { ModeListRow, ModeSegmented } from '@/components/mode-home-shell'
+import { useAccount } from '@/components/account-store'
+import { BU_MIN_TRANSFER, buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
+import { formatEventDateTime } from '@/lib/datetime'
 
-interface BUTransfer {
-  id: string
-  eventId: string
-  eventName: string
-  guestName: string
-  amount: number
-  timestamp: string
-  status: 'pending' | 'confirmed' | 'notes_issued'
-  noteIssued: boolean
+type PosMode = 'event' | 'business'
+type SaleStatus = 'pending_notes' | 'confirmed' | 'notes_issued' | 'cancelled'
+type BizTab = 'accept' | 'history'
+type EventTab = 'qr' | 'history'
+type AcceptMethod = 'bank' | 'qr' | 'contactless'
+
+type VirtualAccount = {
+  bank_name: string | null
+  account_number: string
+  account_name: string | null
 }
 
-export default function VendorPOS() {
-  const [mode, setMode] = useState<'pending' | 'history'>('pending')
-  const [selectedEvent, setSelectedEvent] = useState<string>('all')
-  const [events, setEvents] = useState<Array<{ id: string; name: string }>>([])
-  const [pendingTransfers, setPendingTransfers] = useState<BUTransfer[]>([])
-  const [completedTransfers, setCompletedTransfers] = useState<BUTransfer[]>([])
+function formatNuban(accountNumber: string) {
+  const digits = accountNumber.replace(/\D/g, '')
+  if (digits.length === 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`
+  return digits || accountNumber
+}
+
+type PosSale = {
+  id: string
+  reference: string
+  event_id: string | null
+  mode: PosMode
+  amount_naira: number
+  vendor_naira: number
+  celebrant_naira: number
+  status: SaleStatus
+  created_at: string
+  metadata?: Record<string, unknown>
+}
+
+type TerminalRow = {
+  terminal_id: string
+  serial_number?: string | null
+  label?: string | null
+  name?: string | null
+  active?: boolean
+}
+
+function saleStatusLabel(status: SaleStatus): 'Pending' | 'Received' | 'Reversed' {
+  if (status === 'notes_issued') return 'Received'
+  if (status === 'cancelled') return 'Reversed'
+  return 'Pending'
+}
+
+function saleTitle(sale: PosSale, isEventPos: boolean) {
+  if (sale.metadata?.kind === 'business_pos_terminal') return 'Contactless sale'
+  if (isEventPos) return 'Event POS sale'
+  return 'Business POS sale'
+}
+
+export default function VendorPOS({
+  eventId,
+  eventTitle,
+  onBack,
+}: {
+  eventId?: string | null
+  eventTitle?: string | null
+  onBack?: () => void
+} = {}) {
+  const { userId, canVendor, refreshWallet } = useAccount()
+  const isEventPos = Boolean(eventId)
+  const [tab, setTab] = useState<BizTab | EventTab>(isEventPos ? 'qr' : 'accept')
+  const [acceptMethod, setAcceptMethod] = useState<AcceptMethod | null>(null)
+  const [sales, setSales] = useState<PosSale[]>([])
+  const [resolvedTitle, setResolvedTitle] = useState(eventTitle || '')
+  const [qrImage, setQrImage] = useState('')
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(null)
+  const [vaLoading, setVaLoading] = useState(false)
+  const [vaError, setVaError] = useState<string | null>(null)
+  const [copiedAccount, setCopiedAccount] = useState(false)
+
+  const [activeTerminal, setActiveTerminal] = useState<TerminalRow | null>(null)
+  const [availableTerminals, setAvailableTerminals] = useState<TerminalRow[]>([])
+  const [presence, setPresence] = useState<{ online: boolean; available: boolean } | null>(null)
+  const [paystackReady, setPaystackReady] = useState(true)
+  const [terminalIdInput, setTerminalIdInput] = useState('')
+  const [chargeAmount, setChargeAmount] = useState('')
+  const [chargeNote, setChargeNote] = useState('')
+  const [chargeRef, setChargeRef] = useState<string | null>(null)
+  const [chargeStatus, setChargeStatus] = useState<string | null>(null)
+
+  const loadSales = useCallback(async () => {
+    if (!userId || !canVendor) return
+    try {
+      const salesRes = await fetch('/api/pos/sales', { credentials: 'include' })
+      const salesJson = await salesRes.json()
+      if (salesJson.status) setSales((salesJson.data?.sales ?? []) as PosSale[])
+
+      if (isEventPos && eventId && !eventTitle) {
+        const linksRes = await fetch('/api/pos/vendors?mine=1', { credentials: 'include' })
+        const linksJson = await linksRes.json()
+        if (linksJson.status) {
+          const links = (linksJson.data?.links ?? []) as Array<{
+            event_id: string
+            event_title?: string
+            status: string
+          }>
+          const match = links.find((row) => row.event_id === eventId && row.status === 'approved')
+          if (match?.event_title) setResolvedTitle(match.event_title)
+        }
+      }
+    } catch {
+      setMessage('Could not load POS.')
+    }
+  }, [userId, canVendor, isEventPos, eventId, eventTitle])
+
+  const loadTerminal = useCallback(async () => {
+    if (!userId || !canVendor || isEventPos) return
+    try {
+      const res = await fetch('/api/pos/terminal', { credentials: 'include' })
+      const json = await res.json()
+      if (!json.status) return
+      setActiveTerminal((json.data?.active as TerminalRow | null) ?? null)
+      setAvailableTerminals((json.data?.available ?? []) as TerminalRow[])
+      setPresence((json.data?.presence as { online: boolean; available: boolean } | null) ?? null)
+      setPaystackReady(Boolean(json.data?.paystack_ready))
+    } catch {
+      // keep previous
+    }
+  }, [userId, canVendor, isEventPos])
 
   useEffect(() => {
-    fetch('/api/events/mine', { credentials: 'include' })
+    void loadSales()
+    void loadTerminal()
+  }, [loadSales, loadTerminal])
+
+  useEffect(() => {
+    if (eventTitle) setResolvedTitle(eventTitle)
+  }, [eventTitle])
+
+  useEffect(() => {
+    if (!userId || isEventPos) {
+      setVirtualAccount(null)
+      setVaError(null)
+      setVaLoading(false)
+      return
+    }
+    let cancelled = false
+    setVaLoading(true)
+    setVaError(null)
+    fetch('/api/wallet/virtual-account', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
+        if (cancelled) return
         if (!json.status) {
-          setEvents([])
+          setVirtualAccount(null)
+          setVaError(json.message || 'Could not load bank account details')
           return
         }
-        const list = (json.data ?? []) as Array<Record<string, unknown>>
-        setEvents(
-          list.map((event) => ({
-            id: String(event.id),
-            name: String(event.title ?? event.name ?? 'Event'),
-          })),
-        )
+        setVirtualAccount(json.data as VirtualAccount)
+        setVaError(null)
       })
-      .catch(() => undefined)
-  }, [])
+      .catch(() => {
+        if (!cancelled) {
+          setVirtualAccount(null)
+          setVaError('Could not load bank account for Naira transfers')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVaLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, isEventPos])
 
-  const handleConfirmTransfer = (transferId: string) => {
-    setPendingTransfers((prev) =>
-      prev.map((transfer) =>
-        transfer.id === transferId ? { ...transfer, status: 'confirmed' as const } : transfer,
-      ),
+  useEffect(() => {
+    if (!userId) {
+      setQrImage('')
+      return
+    }
+    if (isEventPos && !eventId) {
+      setQrImage('')
+      return
+    }
+    // Only generate QR when needed (event POS always, business when QR selected)
+    if (!isEventPos && acceptMethod !== 'qr') return
+    const payload = JSON.stringify(
+      isEventPos
+        ? {
+            type: 'pos',
+            vendor_id: userId,
+            event_id: eventId,
+            mode: 'event',
+            label: resolvedTitle ? `Event POS · ${resolvedTitle}` : 'Event POS',
+          }
+        : {
+            type: 'pos',
+            vendor_id: userId,
+            mode: 'business',
+            label: 'Business POS',
+          },
     )
-  }
+    void QRCode.toDataURL(payload, { width: 280, margin: 1 }).then(setQrImage).catch(() => setQrImage(''))
+  }, [userId, isEventPos, eventId, resolvedTitle, acceptMethod])
 
-  const handleIssueNotes = (transferId: string) => {
-    const transfer = pendingTransfers.find((t) => t.id === transferId)
-    if (transfer) {
-      setPendingTransfers((prev) => prev.filter((t) => t.id !== transferId))
-      setCompletedTransfers((prev) => [
-        { ...transfer, status: 'notes_issued' as const, noteIssued: true },
-        ...prev,
-      ])
+  async function handleCopyAccount() {
+    if (!virtualAccount?.account_number) return
+    try {
+      await navigator.clipboard.writeText(virtualAccount.account_number)
+      setCopiedAccount(true)
+      window.setTimeout(() => setCopiedAccount(false), 1600)
+    } catch {
+      setCopiedAccount(false)
     }
   }
 
-  const filteredPending =
-    selectedEvent === 'all' ? pendingTransfers : pendingTransfers.filter((t) => t.eventId === selectedEvent)
+  async function handleShareAccount() {
+    if (!virtualAccount?.account_number) return
+    const bank = virtualAccount.bank_name || 'Bank'
+    const name = virtualAccount.account_name || 'BUCKS'
+    const text = `Pay via bank transfer\nBank: ${bank}\nAccount name: ${name}\nAccount number: ${virtualAccount.account_number}`
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'Business POS bank account', text })
+        return
+      }
+      await handleCopyAccount()
+    } catch {
+      // cancelled
+    }
+  }
+
+  useEffect(() => {
+    if (!chargeRef || chargeStatus === 'paid' || chargeStatus === 'failed') return
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/pos/terminal/charge?reference=${encodeURIComponent(chargeRef)}`, {
+            credentials: 'include',
+          })
+          const json = await res.json()
+          if (!json.status) return
+          const status = String(json.data?.charge?.status ?? '')
+          setChargeStatus(status)
+          if (status === 'paid') {
+            await loadSales()
+            void refreshWallet()
+          }
+        } catch {
+          // ignore poll errors
+        }
+      })()
+    }, 2500)
+    return () => window.clearInterval(timer)
+  }, [chargeRef, chargeStatus, loadSales, refreshWallet])
+
+  async function patchSale(saleId: string, status: SaleStatus) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/pos/sales', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_id: saleId, status }),
+      })
+      const json = await res.json()
+      setBusy(false)
+      if (!json.status) {
+        setMessage(json.message ?? 'Could not update sale')
+        return
+      }
+      await loadSales()
+    } catch {
+      setBusy(false)
+      setMessage('Could not update sale')
+    }
+  }
+
+  async function linkTerminal(terminalId: string) {
+    if (!terminalId.trim()) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/pos/terminal', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link', terminal_id: terminalId.trim() }),
+      })
+      const json = await res.json()
+      setBusy(false)
+      if (!json.status) {
+        setMessage(json.message ?? 'Could not link terminal')
+        return
+      }
+      setTerminalIdInput('')
+      await loadTerminal()
+    } catch {
+      setBusy(false)
+      setMessage('Could not link terminal')
+    }
+  }
+
+  async function unlinkTerminal() {
+    if (!activeTerminal?.terminal_id) return
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/pos/terminal', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unlink', terminal_id: activeTerminal.terminal_id }),
+      })
+      const json = await res.json()
+      setBusy(false)
+      if (!json.status) {
+        setMessage(json.message ?? 'Could not unlink terminal')
+        return
+      }
+      await loadTerminal()
+    } catch {
+      setBusy(false)
+      setMessage('Could not unlink terminal')
+    }
+  }
+
+  async function pushContactlessCharge() {
+    const amount = Number(chargeAmount)
+    if (!Number.isFinite(amount) || amount + 1e-9 < BU_MIN_TRANSFER) {
+      setMessage(`Minimum charge is ₦${BU_MIN_TRANSFER}`)
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    setChargeStatus(null)
+    setChargeRef(null)
+    try {
+      const res = await fetch('/api/pos/terminal/charge', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, note: chargeNote || null }),
+      })
+      const json = await res.json()
+      setBusy(false)
+      if (!json.status) {
+        setMessage(json.message ?? 'Could not push charge')
+        return
+      }
+      setChargeRef(String(json.data?.reference ?? ''))
+      setChargeStatus(String(json.data?.charge?.status ?? 'pushed'))
+      setMessage(null)
+    } catch {
+      setBusy(false)
+      setMessage('Could not push charge to terminal')
+    }
+  }
+
+  const scopedSales = useMemo(() => {
+    if (isEventPos && eventId) {
+      return sales.filter((sale) => sale.mode === 'event' && sale.event_id === eventId)
+    }
+    return sales.filter((sale) => sale.mode === 'business')
+  }, [sales, isEventPos, eventId])
+
+  const qrPayload = useMemo(
+    () =>
+      JSON.stringify(
+        isEventPos
+          ? { type: 'pos', vendor_id: userId, event_id: eventId, mode: 'event' }
+          : { type: 'pos', vendor_id: userId, mode: 'business' },
+      ),
+    [isEventPos, userId, eventId],
+  )
+
+  const history = useMemo(
+    () =>
+      [...scopedSales].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ),
+    [scopedSales],
+  )
+
+  if (!canVendor) {
+    return (
+      <div className="space-y-4 px-4 pb-28 pt-4">
+        <WalletPageSummary kicker="Vendor" title="POS" detail="Vendor role required." />
+        <p className="text-sm text-muted-foreground">Ask Super Admin to make your account a vendor.</p>
+      </div>
+    )
+  }
+
+  const tabOptions = isEventPos
+    ? [
+        { id: 'qr', label: 'My QR' },
+        { id: 'history', label: 'History' },
+      ]
+    : [
+        { id: 'accept', label: 'Accept' },
+        { id: 'history', label: 'History' },
+      ]
 
   return (
     <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       <div className="px-4">
         <WalletPageSummary
           kicker="Vendor"
-          title="POS"
-          detail="Confirm guest ɃU transfers, then issue ceremonial Bison Notes."
+          title={isEventPos ? 'Ceremonial cash' : 'Business POS'}
+          detail={
+            isEventPos
+              ? `${resolvedTitle || 'Linked event'} · Ceremonial cash QR. Celebrant gets 90%, you keep 10%.`
+              : 'Pick how the customer wants to pay. You get 100%.'
+          }
         />
 
-        <div className="mt-6 space-y-4">
+        {isEventPos && onBack ? (
+          <Button variant="outline" className="mt-3 w-full" onClick={onBack}>
+            ← Back to events
+          </Button>
+        ) : null}
+
+        <div className="mt-4">
           <ModeSegmented
-            value={mode}
-            onChange={(id) => setMode(id as 'pending' | 'history')}
-            options={[
-              { id: 'pending', label: `Pending (${pendingTransfers.length})` },
-              { id: 'history', label: 'History' },
-            ]}
+            value={tab}
+            onChange={(id) => {
+              setTab(id as BizTab)
+              if (id !== 'accept') setAcceptMethod(null)
+            }}
+            options={tabOptions}
           />
-
-          {mode === 'pending' && (
-            <>
-              <div>
-                <label className="mb-2 block text-sm font-semibold">Filter by event</label>
-                <select
-                  value={selectedEvent}
-                  onChange={(e) => setSelectedEvent(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm text-neutral-950"
-                >
-                  <option value="all">All events</option>
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                {filteredPending.length === 0 ? (
-                  <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
-                    No pending transfers
-                  </p>
-                ) : (
-                  filteredPending.map((transfer) => (
-                    <div key={transfer.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold">{transfer.eventName}</p>
-                          <p className="mt-1 text-sm text-neutral-500">Guest: {transfer.guestName}</p>
-                          <p className="text-xs text-neutral-400">{transfer.timestamp}</p>
-                        </div>
-                        <p className="font-bold tabular-nums">Ƀ {transfer.amount.toLocaleString()}</p>
-                      </div>
-                      <div className="mt-4 flex gap-2">
-                        {transfer.status === 'pending' && (
-                          <>
-                            <Button
-                              onClick={() => handleConfirmTransfer(transfer.id)}
-                              className="flex-1 bg-neutral-950 text-white hover:bg-neutral-800"
-                            >
-                              Confirm
-                            </Button>
-                            <Button onClick={() => handleIssueNotes(transfer.id)} variant="outline" className="flex-1" disabled>
-                              Issue notes
-                            </Button>
-                          </>
-                        )}
-                        {transfer.status === 'confirmed' && (
-                          <Button
-                            onClick={() => handleIssueNotes(transfer.id)}
-                            className="w-full bg-neutral-950 text-white hover:bg-neutral-800"
-                          >
-                            Issue physical notes
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-
-          {mode === 'history' && (
-            <div className="space-y-2">
-              {completedTransfers.length === 0 ? (
-                <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-500">
-                  No completed issuances yet
-                </p>
-              ) : (
-                completedTransfers.map((transfer) => (
-                  <ModeListRow
-                    key={transfer.id}
-                    title={transfer.eventName}
-                    detail={`Guest: ${transfer.guestName} · ${transfer.timestamp}`}
-                    amount={`Ƀ ${transfer.amount.toLocaleString()}`}
-                    amountTone="credit"
-                  />
-                ))
-              )}
-              {completedTransfers.length > 0 ? (
-                <p className="flex items-center gap-2 text-xs text-neutral-500">
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                  Notes issued are ceremonial tokens with zero monetary value.
-                </p>
-              ) : null}
-            </div>
-          )}
         </div>
+
+        {message && <p className="mt-3 text-sm text-destructive">{message}</p>}
+
+        {!isEventPos && tab === 'accept' && (
+          <div className="mt-4 space-y-4">
+            {!acceptMethod ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Ask the customer how they want to pay, then open that method.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAcceptMethod('bank')}
+                  className="w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-neutral-400"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white">
+                      <Building2 className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold">Bank transfer</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Customer sends Naira from any Nigerian bank to your receive account.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAcceptMethod('qr')}
+                  className="w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-neutral-400"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white">
+                      <QrCode className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold">ɃU QR</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Customer has ɃU — they scan and pay with PIN.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAcceptMethod('contactless')}
+                  className="w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-neutral-400"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white">
+                      <Nfc className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold">Contactless</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Tap Visa/Mastercard or phone on your Paystack Terminal.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setAcceptMethod(null)}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Change payment method
+                </Button>
+
+                {acceptMethod === 'bank' && (
+                  <Card className="space-y-4 p-5">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-500">
+                        Bank transfer
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Customer transfers Naira from any Nigerian bank to this account. 1 ɃU = ₦1.
+                      </p>
+                    </div>
+                    {vaLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading bank account…</p>
+                    ) : virtualAccount ? (
+                      <>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Bank
+                          </p>
+                          <p className="mt-1 text-lg font-semibold">
+                            {virtualAccount.bank_name || 'Bank'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Account name
+                          </p>
+                          <p className="mt-1 text-base font-medium">
+                            {virtualAccount.account_name || 'Ƀucks'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Account number
+                          </p>
+                          <p className="mt-1 font-mono text-3xl font-bold tracking-wide">
+                            {formatNuban(virtualAccount.account_number)}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            className="flex-1 gap-1.5"
+                            onClick={() => void handleCopyAccount()}
+                          >
+                            {copiedAccount ? (
+                              <Check className="h-4 w-4 text-emerald-600" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                            {copiedAccount ? 'Copied' : 'Copy number'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="flex-1 gap-1.5"
+                            onClick={() => void handleShareAccount()}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            Share
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-destructive">
+                        {vaError || 'Bank receive account unavailable'}
+                      </p>
+                    )}
+                  </Card>
+                )}
+
+                {acceptMethod === 'qr' && (
+                  <Card className="flex flex-col items-center gap-3 p-5">
+                    <p className="w-full text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-500">
+                      ɃU QR
+                    </p>
+                    {qrImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={qrImage} alt="POS QR" className="h-56 w-56 rounded-lg bg-white p-2" />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Generating QR…</p>
+                    )}
+                    <p className="text-center text-xs text-muted-foreground">
+                      Guests with ɃU scan this QR and pay with PIN. You get 100%.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void navigator.clipboard.writeText(qrPayload)}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy QR payload
+                    </Button>
+                  </Card>
+                )}
+
+                {acceptMethod === 'contactless' && (
+                  <div className="space-y-3">
+                    <Card className="space-y-3 p-5">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-500">
+                        Contactless
+                      </p>
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-950 text-white">
+                          <Nfc className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold">Paystack Terminal</p>
+                          <p className="text-xs text-muted-foreground">
+                            Guest taps Visa/Mastercard or phone. Cards from any bank.
+                          </p>
+                        </div>
+                      </div>
+
+                      {!paystackReady ? (
+                        <p className="text-sm text-destructive">
+                          Paystack is not configured on this environment.
+                        </p>
+                      ) : null}
+
+                      {activeTerminal ? (
+                        <div className="rounded-xl border bg-secondary/40 px-3 py-2 text-sm">
+                          <p className="font-medium">
+                            {activeTerminal.label || activeTerminal.terminal_id}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            ID {activeTerminal.terminal_id}
+                            {presence
+                              ? ` · ${presence.online && presence.available ? 'Ready' : presence.online ? 'Busy' : 'Offline'}`
+                              : ''}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            disabled={busy}
+                            onClick={() => void unlinkTerminal()}
+                          >
+                            Unlink terminal
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            Link your commissioned Paystack Terminal.
+                          </p>
+                          {availableTerminals.length > 0 ? (
+                            <div className="space-y-2">
+                              {availableTerminals.map((row) => (
+                                <Button
+                                  key={row.terminal_id}
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full justify-between"
+                                  disabled={busy}
+                                  onClick={() => void linkTerminal(row.terminal_id)}
+                                >
+                                  <span className="truncate">{row.name || row.terminal_id}</span>
+                                  <span className="text-xs text-muted-foreground">Link</span>
+                                </Button>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Terminal ID (e.g. 2872S934)"
+                              value={terminalIdInput}
+                              onChange={(e) => setTerminalIdInput(e.target.value)}
+                            />
+                            <Button
+                              type="button"
+                              disabled={busy || !terminalIdInput.trim()}
+                              onClick={() => void linkTerminal(terminalIdInput)}
+                            >
+                              Link
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+
+                    <Card className="space-y-3 p-5">
+                      <p className="text-sm font-semibold">Charge amount</p>
+                      <Input
+                        type="number"
+                        min={BU_MIN_TRANSFER}
+                        placeholder={`₦ amount (min ${BU_MIN_TRANSFER})`}
+                        value={chargeAmount}
+                        onChange={(e) => setChargeAmount(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Note (optional)"
+                        value={chargeNote}
+                        onChange={(e) => setChargeNote(e.target.value)}
+                      />
+                      <Button
+                        className="w-full"
+                        disabled={busy || !activeTerminal || !chargeAmount}
+                        onClick={() => void pushContactlessCharge()}
+                      >
+                        Push to terminal
+                      </Button>
+                      {chargeRef ? (
+                        <p className="text-xs text-muted-foreground">
+                          Ref {chargeRef.slice(0, 16)}… · Status: {chargeStatus || 'waiting'}
+                          {chargeStatus === 'paid'
+                            ? ' · Paid — mark Received or Reversed under History'
+                            : ' · Ask guest to tap on the Terminal'}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Money settles via Paystack; your ɃU wallet is credited 1:1 when the tap
+                          succeeds.
+                        </p>
+                      )}
+                      {chargeAmount && Number(chargeAmount) > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Guest pays ₦{formatNairaPlain(Number(chargeAmount))} · you receive Ƀ{' '}
+                          {formatBu(Number(chargeAmount))}
+                        </p>
+                      ) : null}
+                    </Card>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {isEventPos && tab === 'qr' && (
+          <Card className="mt-4 flex flex-col items-center gap-3 p-5">
+            {qrImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qrImage} alt="POS QR" className="h-64 w-64 rounded-lg bg-white p-2" />
+            ) : (
+              <p className="text-sm text-muted-foreground">Generating QR…</p>
+            )}
+            <p className="text-center text-xs text-muted-foreground">
+              Guests scan this QR, pay with ɃU + PIN (90% celebrant · 10% you).
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void navigator.clipboard.writeText(qrPayload)}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copy QR payload
+            </Button>
+          </Card>
+        )}
+
+        {tab === 'history' && (
+          <div className="mt-4 space-y-2">
+            {history.length === 0 && (
+              <p className="text-sm text-muted-foreground">No POS sales yet.</p>
+            )}
+            {history.map((sale) => {
+              const status = saleStatusLabel(sale.status)
+              const isOpen = status === 'Pending'
+              return (
+                <Card key={sale.id} className="space-y-3 p-4">
+                  <ModeListRow
+                    title={saleTitle(sale, isEventPos)}
+                    detail={`${formatEventDateTime(sale.created_at)} · ${sale.reference.slice(0, 12)} · ${status}`}
+                    amount={`${status === 'Reversed' ? '' : '+' }Ƀ ${formatBu(buFromNaira(sale.vendor_naira))}`}
+                    amountTone={status === 'Reversed' ? undefined : 'credit'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Guest paid Ƀ {formatBu(buFromNaira(sale.amount_naira))}
+                    {isEventPos ? ` · Celebrant Ƀ ${formatBu(buFromNaira(sale.celebrant_naira))}` : ''}
+                    {' · '}
+                    {status}
+                  </p>
+                  {isOpen ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void patchSale(sale.id, 'notes_issued')}
+                      >
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Mark received
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => void patchSale(sale.id, 'cancelled')}
+                      >
+                        Reverse
+                      </Button>
+                    </div>
+                  ) : null}
+                </Card>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

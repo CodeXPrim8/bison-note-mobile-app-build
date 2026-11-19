@@ -58,14 +58,18 @@ async function liveUser() {
 
 function guestRow(row: Record<string, unknown>) {
   const status = String(row.status ?? 'pending')
-  const account = String(row.account_number ?? '')
+  const account = String(row.account_number ?? '').replace(/\D/g, '')
+  const bankName = String(row.bank_name ?? '')
+  const bankCode = String(row.bank_code || bankCodeFromName(bankName) || '').trim()
   return {
     id: String(row.id),
     bu: Number(row.bu ?? 0),
     naira: Number(row.naira ?? 0),
-    bank_name: String(row.bank_name ?? ''),
+    bank_name: bankName,
+    bank_code: bankCode,
     account_name: String(row.account_name ?? ''),
-    account_number: account.length >= 4 ? `****${account.slice(-4)}` : account,
+    // Owner-only history: full NUBAN so Recent sends can refill the form.
+    account_number: account,
     status,
     public_status: publicWithdrawalStatus(status),
     label: publicWithdrawalLabel(status),
@@ -204,6 +208,7 @@ export async function POST(request: Request) {
       kind: 'bank_send',
     }
 
+    // Debit face + fees from sender. Bank payout uses face only (quote.bankNaira / quote.naira).
     await moveLiveWallet(db, {
       userId: liveId,
       naira: quote.totalDebit,
@@ -221,7 +226,8 @@ export async function POST(request: Request) {
         id,
         user_id: liveId,
         bu: quote.bu,
-        naira: quote.naira,
+        // Face amount only — this is what arrives in the bank. Fees are on the wallet debit.
+        naira: quote.bankNaira,
         bank_name: bankName,
         bank_code: recipientReady?.bankCode ?? bankCode,
         account_number: body.account_number,

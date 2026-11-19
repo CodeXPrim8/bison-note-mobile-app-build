@@ -28,12 +28,32 @@ export default function LoginPage() {
   const [draftReady, setDraftReady] = useState(false)
   const [showPin, setShowPin] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [referralCode, setReferralCode] = useState('')
+  const [referralLocked, setReferralLocked] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const next = safeNextPath(params.get('next'))
     setNextPath(next)
     if (params.get('forgot') === '1') setMode('forgot')
+    if (params.get('mode') === 'signup') setMode('signup')
+    const ref =
+      String(params.get('ref') || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 12) ||
+      String(window.sessionStorage.getItem('bu_referral_code') || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 12)
+    if (ref) {
+      setReferralCode(ref)
+      setReferralLocked(true)
+      window.sessionStorage.setItem('bu_referral_code', ref)
+      if (params.get('mode') !== 'login') setMode('signup')
+    }
     const draft = loadDraft<{ phone?: string; name?: string; email?: string }>(LOGIN_DRAFT_KEY)
     if (draft?.phone) setPhone(draft.phone)
     if (draft?.name) setName(draft.name)
@@ -112,7 +132,14 @@ export default function LoginPage() {
         body: JSON.stringify(
           mode === 'login'
             ? { pin, phone }
-            : { display_name: name, phone, pin, email: email.trim(), role: 'guest' },
+            : {
+                display_name: name,
+                phone,
+                pin,
+                email: email.trim(),
+                role: 'guest',
+                referral_code: referralCode.trim() || undefined,
+              },
         ),
       })
       const json = (await res.json()) as { status: boolean; message: string; code?: string }
@@ -343,6 +370,29 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </label>
+              )}
+
+              {mode === 'signup' && (
+                <div className="space-y-1.5">
+                  <label className="bu-auth-field">
+                    <User className="h-4 w-4 shrink-0 text-[#22e0ff]" />
+                    <input
+                      placeholder="Referral code (optional)"
+                      value={referralCode}
+                      readOnly={referralLocked}
+                      onChange={(e) => {
+                        if (referralLocked) return
+                        setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))
+                      }}
+                      className={referralLocked ? 'opacity-80' : undefined}
+                    />
+                  </label>
+                  {referralLocked ? (
+                    <p className="px-1 text-xs font-medium text-[#22e0ff]/90">
+                      Invite link applied — this code can’t be edited.
+                    </p>
+                  ) : null}
+                </div>
               )}
 
               {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (

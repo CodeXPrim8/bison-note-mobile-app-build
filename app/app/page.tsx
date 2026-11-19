@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Dashboard from '@/components/dashboard'
 import Navigation from '@/components/navigation'
 import ModeSwitcher from '@/components/mode-switcher'
-import { AccountProvider } from '@/components/account-store'
+import { AccountProvider, useAccount } from '@/components/account-store'
 import RequireEmailGate from '@/components/require-email-gate'
 import { BuLoader } from '@/components/bu-loader'
 
@@ -27,8 +27,11 @@ const Invites = dynamic(() => import('@/components/invites'), { loading: () => p
 const EventsTickets = dynamic(() => import('@/components/events-tickets'), { loading: () => pageFallback })
 const SendBU = dynamic(() => import('@/components/send-bu'), { loading: () => pageFallback })
 const ReceiveBU = dynamic(() => import('@/components/receive-bu'), { loading: () => pageFallback })
+const PosPay = dynamic(() => import('@/components/pos-pay'), { loading: () => pageFallback })
 const EventInfo = dynamic(() => import('@/components/event-info'), { loading: () => pageFallback })
 const MyTickets = dynamic(() => import('@/components/my-tickets'), { loading: () => pageFallback })
+const Refer = dynamic(() => import('@/components/refer'), { loading: () => pageFallback })
+const ReferCampaignPopup = dynamic(() => import('@/components/refer-campaign-popup'), { loading: () => null })
 
 function ticketIdFromPageData(pageData: unknown) {
   if (pageData && typeof pageData === 'object' && 'ticketId' in pageData) {
@@ -49,6 +52,14 @@ function intentFromPageData(pageData: unknown): 'tip' | undefined {
   return (pageData as { intent?: string }).intent === 'tip' ? 'tip' : undefined
 }
 
+function eventPosFromPageData(pageData: unknown): { eventId?: string; eventTitle?: string } {
+  if (!pageData || typeof pageData !== 'object') return {}
+  const data = pageData as { eventId?: string; eventTitle?: string }
+  const eventId = data.eventId ? String(data.eventId) : undefined
+  const eventTitle = data.eventTitle ? String(data.eventTitle) : undefined
+  return { eventId, eventTitle }
+}
+
 export default function MobileApp() {
   return (
     <AccountProvider>
@@ -60,12 +71,23 @@ export default function MobileApp() {
 }
 
 function MobileAppShell() {
+  const { canCelebrant, canVendor } = useAccount()
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [pageData, setPageData] = useState<unknown>(null)
   const [theme, setTheme] = useState('theme-pink')
   const [mode, setMode] = useState<'user' | 'celebrant' | 'vendor'>('user')
   const [mounted, setMounted] = useState(false)
   const [allowed, setAllowed] = useState(false)
+
+  useEffect(() => {
+    if (mode === 'celebrant' && !canCelebrant) {
+      setMode('user')
+      setCurrentPage('dashboard')
+    } else if (mode === 'vendor' && !canVendor) {
+      setMode('user')
+      setCurrentPage('dashboard')
+    }
+  }, [mode, canCelebrant, canVendor])
 
   const handleNavigate = (page: string, data?: unknown) => {
     // User home already covers wallet tools; drop the separate Wallet page.
@@ -74,8 +96,14 @@ function MobileAppShell() {
       setPageData(null)
       return
     }
+    // Bottom-nav / hero POS opens business till — clear any Event POS context.
+    if (mode === 'vendor' && page === 'wallet' && data == null) {
+      setCurrentPage('wallet')
+      setPageData(null)
+      return
+    }
     setCurrentPage(page)
-    setPageData(data)
+    setPageData(data ?? null)
   }
 
   useEffect(() => {
@@ -138,7 +166,14 @@ function MobileAppShell() {
     } else if ((page === 'event-info' || page === 'event') && event) {
       setCurrentPage('event-info')
       setPageData(event)
-    } else if (page === 'buy-bu' || page === 'redemption' || page === 'history' || page === 'send-bu') {
+    } else if (
+      page === 'buy-bu' ||
+      page === 'redemption' ||
+      page === 'history' ||
+      page === 'send-bu' ||
+      page === 'pos-pay' ||
+      page === 'refer'
+    ) {
       setCurrentPage(page)
     } else if (page === 'wallet') {
       setCurrentPage(mode === 'user' ? 'dashboard' : 'wallet')
@@ -192,10 +227,14 @@ function MobileAppShell() {
                   ? 'Data'
               : currentPage === 'send-bu'
                 ? 'Send ɃU'
+              : currentPage === 'pos-pay'
+                ? 'Pay POS'
               : currentPage === 'receive-bu'
                 ? 'Receive ɃU'
                 : currentPage === 'history'
                   ? 'History'
+                  : currentPage === 'refer'
+                    ? 'Refer & earn'
                   : currentPage
 
   const guestChrome = true
@@ -216,7 +255,12 @@ function MobileAppShell() {
               <div hidden={currentPage !== 'dashboard'}>
                 <Dashboard onNavigate={handleNavigate} />
                 <div className="px-4 pb-28">
-                  <ModeSwitcher currentMode={mode} onModeChange={setMode} />
+                  <ModeSwitcher
+                    currentMode={mode}
+                    onModeChange={setMode}
+                    canCelebrant={canCelebrant}
+                    canVendor={canVendor}
+                  />
                 </div>
               </div>
               {currentPage === 'spraying' && <Spraying onNavigate={handleNavigate} />}
@@ -248,10 +292,21 @@ function MobileAppShell() {
               {currentPage === 'event-info' && (
                 <EventInfo eventId={typeof pageData === 'string' ? pageData : undefined} onNavigate={handleNavigate} />
               )}
-              {currentPage === 'send-bu' && <SendBU key={`send-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />}
+              {currentPage === 'send-bu' && (
+                <SendBU
+                  key={`send-${intentFromPageData(pageData) || 'menu'}`}
+                  initialIntent={intentFromPageData(pageData)}
+                  onNavigate={handleNavigate}
+                />
+              )}
+              {currentPage === 'pos-pay' && (
+                <PosPay onBack={() => handleNavigate('dashboard')} />
+              )}
               {currentPage === 'receive-bu' && (
                 <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
               )}
+              {currentPage === 'refer' && <Refer />}
+              <ReferCampaignPopup onOpenRefer={() => handleNavigate('refer')} />
             </>
           ) : mode === 'celebrant' ? (
             <>
@@ -296,7 +351,18 @@ function MobileAppShell() {
                   currentMode={mode}
                 />
               </div>
-              {currentPage === 'wallet' && <VendorPOS />}
+              {currentPage === 'wallet' && (
+                <VendorPOS
+                  key={`pos-${eventPosFromPageData(pageData).eventId || 'business'}`}
+                  eventId={eventPosFromPageData(pageData).eventId}
+                  eventTitle={eventPosFromPageData(pageData).eventTitle}
+                  onBack={
+                    eventPosFromPageData(pageData).eventId
+                      ? () => handleNavigate('dashboard')
+                      : undefined
+                  }
+                />
+              )}
               {currentPage === 'spraying' && <QRScanner />}
               {currentPage === 'history' && <History />}
               {currentPage === 'profile' && (

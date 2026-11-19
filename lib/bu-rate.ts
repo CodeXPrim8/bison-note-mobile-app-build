@@ -211,6 +211,11 @@ export function vtuDebitNaira(faceNaira: number): { face: number; debit: number;
   return { face, debit, fee: roundMoney(debit - face) }
 }
 
+/**
+ * Send-to-bank quote. Bank always receives the full face amount (`bankNaira`).
+ * Paystack + platform fees are charged on top to the sender (`totalDebit`).
+ * If wallet balance < totalDebit → insufficient funds (do not shrink the bank amount).
+ */
 export function quoteWithdrawBu(bu: number): WithdrawQuote {
   if (!Number.isFinite(bu) || bu <= 0) {
     throw new WalletAmountError('Enter how many ɃU to withdraw', 'INVALID_BU')

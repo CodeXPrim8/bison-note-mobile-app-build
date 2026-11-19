@@ -36,9 +36,17 @@ function nigeriaLocalPhone(phone: string): string {
   return digits
 }
 
+/** Paystack / bank rails are ASCII — never send Ƀucks or it becomes UCKS. */
+const BRAND_ASCII = 'BUCKS'
+
 function splitName(displayName: string): { firstName: string; lastName: string } {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return { firstName: 'Ƀucks', lastName: 'User' }
+  const parts = displayName
+    .trim()
+    .replace(/Ƀucks/gi, BRAND_ASCII)
+    .replace(/^ucks\b/gi, BRAND_ASCII)
+    .split(/\s+/)
+    .filter(Boolean)
+  if (parts.length === 0) return { firstName: BRAND_ASCII, lastName: 'User' }
   if (parts.length === 1) return { firstName: parts[0], lastName: 'User' }
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
 }
@@ -174,7 +182,7 @@ export function virtualAccountNeedsBrandRefresh(accountName: string | null | und
   const name = (accountName || '').trim()
   if (!name) return false
   // Old trading name, or Ƀ stripped by banks from "Ƀucks" → "UCKS/..."
-  return /protectorng/i.test(name) || /^ucks\s*\//i.test(name)
+  return /protectorng/i.test(name) || /^ucks(\s*\/|\b)/i.test(name)
 }
 
 async function resolvePaystackCustomerForUser(input: {
@@ -196,7 +204,7 @@ async function resolvePaystackCustomerForUser(input: {
     throw new ApiError(400, 'PHONE_REQUIRED', 'This account has no phone number. Complete signup before bank transfer funding.')
   }
   const phone = nigeriaLocalPhone(phoneRaw)
-  const { firstName, lastName } = splitName(input.displayName || 'Ƀucks User')
+  const { firstName, lastName } = splitName(input.displayName || `${BRAND_ASCII} User`)
 
   let customer = await fetchPaystackCustomer(email)
   if (!customer) {
@@ -237,9 +245,8 @@ export async function getOrCreateVirtualAccount(input: {
 
   const stored = await getStoredVirtualAccount(input.userId)
   if (stored) {
-    // One-shot upgrade off the old PROTECTORNG prefix. "UCKS/..." means the provider
-    // stripped Ƀ from "Ƀucks" — trading name must stay ASCII "BUCKS".
-    if (/protectorng/i.test(stored.account_name || '')) {
+    // Upgrade off PROTECTORNG or "UCKS/..." (Ƀucks stripped by banks). Trading name must be ASCII BUCKS.
+    if (virtualAccountNeedsBrandRefresh(stored.account_name)) {
       try {
         return await recreateVirtualAccount(input)
       } catch (error) {
@@ -264,7 +271,12 @@ export async function getOrCreateVirtualAccount(input: {
   const customerId = customer.id != null ? Number(customer.id) : null
 
   const listed = await listDedicatedVirtualAccounts(customerCode).catch(() => [] as PaystackDedicatedAccount[])
-  const reusable = listed.find((row) => row.account_number && row.active !== false)
+  const reusable = listed.find(
+    (row) =>
+      row.account_number &&
+      row.active !== false &&
+      !virtualAccountNeedsBrandRefresh(row.account_name ? String(row.account_name) : null),
+  )
   if (reusable) {
     return persistVirtualAccount(fromPaystackAccount(input.userId, reusable, customerCode, customerId), reusable)
   }

@@ -29,6 +29,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
   const [tiers, setTiers] = useState<TierDraft[]>([emptyTier()])
   const [affiliateEnabled, setAffiliateEnabled] = useState(false)
   const [affiliateCommissionPct, setAffiliateCommissionPct] = useState('10')
+  const [vendorsInviteEnabled, setVendorsInviteEnabled] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -69,6 +70,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
         })
         setAffiliateEnabled(Boolean(event.affiliate_enabled))
         setAffiliateCommissionPct(String(event.affiliate_commission_pct ?? 10))
+        setVendorsInviteEnabled(event.vendors_invite_enabled !== false)
         setTiers(
           ticketTiers.length
             ? ticketTiers.map((tier) => ({
@@ -132,6 +134,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
       ticket_tiers: ticketTiers,
       affiliate_enabled: affiliateEnabled,
       affiliate_commission_pct: Number(affiliateCommissionPct) || 0,
+      vendors_invite_enabled: vendorsInviteEnabled,
     }
     const res = await fetch(`/api/events/${id}`, {
       method: 'PATCH',
@@ -194,6 +197,8 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
             setAffiliateEnabled={setAffiliateEnabled}
             affiliateCommissionPct={affiliateCommissionPct}
             setAffiliateCommissionPct={setAffiliateCommissionPct}
+            vendorsInviteEnabled={vendorsInviteEnabled}
+            setVendorsInviteEnabled={setVendorsInviteEnabled}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">

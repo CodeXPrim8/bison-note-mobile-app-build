@@ -148,17 +148,21 @@ export function ModeListRow({
   detail,
   amount,
   amountTone,
+  badgeCount,
   onClick,
 }: {
   title: string
   detail?: string
   amount?: string
   amountTone?: 'credit' | 'debit' | 'neutral'
+  /** Pending notification count shown as +N on the row */
+  badgeCount?: number
   onClick?: () => void
 }) {
   const tone =
     amountTone === 'credit' ? 'bu-credit' : amountTone === 'debit' ? 'bu-debit' : 'text-neutral-950'
   const Comp = onClick ? 'button' : 'div'
+  const badge = Number(badgeCount) > 0 ? Math.min(99, Math.floor(Number(badgeCount))) : 0
   return (
     <Comp
       type={onClick ? 'button' : undefined}
@@ -168,7 +172,14 @@ export function ModeListRow({
       }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-neutral-950">{title}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-sm font-semibold text-neutral-950">{title}</p>
+          {badge > 0 ? (
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+              +{badge}
+            </span>
+          ) : null}
+        </div>
         {detail ? <p className="mt-0.5 truncate text-xs text-neutral-500">{detail}</p> : null}
       </div>
       {amount ? <p className={`shrink-0 text-sm font-semibold tabular-nums ${tone}`}>{amount}</p> : null}

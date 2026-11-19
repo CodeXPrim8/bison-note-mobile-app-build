@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       .eq('slot', slot)
       .eq('active', true)
       .order('sort_order', { ascending: true })
-      .limit(6)
+      .limit(12)
     if (error) return successResponse({ ads: [] })
     return successResponse({ ads: data ?? [] })
   } catch (error) {

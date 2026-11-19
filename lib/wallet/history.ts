@@ -85,14 +85,21 @@ function firstUserId(...values: unknown[]) {
   return null
 }
 
-function partyOf(meta: Record<string, unknown>, direction: WalletDirection) {
+function isAnonymousTip(meta: Record<string, unknown>, description?: string | null) {
+  if (meta.kind === 'tip' || meta.anonymous === true) return true
+  return /^tip(\b| )/i.test(String(description ?? ''))
+}
+
+function partyOf(meta: Record<string, unknown>, direction: WalletDirection, description?: string | null) {
+  if (direction === 'credit' && isAnonymousTip(meta, description)) return null
   if (direction === 'debit') {
     return firstName(meta.to_name, meta.recipient_name, meta.counterparty, meta.to)
   }
   return firstName(meta.from_name, meta.sender_name, meta.counterparty, meta.from)
 }
 
-function partyUserIdOf(meta: Record<string, unknown>, direction: WalletDirection) {
+function partyUserIdOf(meta: Record<string, unknown>, direction: WalletDirection, description?: string | null) {
+  if (direction === 'credit' && isAnonymousTip(meta, description)) return null
   if (direction === 'debit') {
     return firstUserId(meta.to, meta.counterparty_user_id, meta.recipient_id)
   }
@@ -118,7 +125,13 @@ async function enrichCounterparties(
   const missingIds = Array.from(
     new Set(
       items
-        .filter((item) => item.bucket === 'bu_transfer' && !item.counterparty && item.counterpartyUserId)
+        .filter(
+          (item) =>
+            item.bucket === 'bu_transfer' &&
+            !item.counterparty &&
+            item.counterpartyUserId &&
+            !(item.direction === 'credit' && /^tip received/i.test(String(item.description ?? ''))),
+        )
         .map((item) => String(item.counterpartyUserId)),
     ),
   )
@@ -149,6 +162,8 @@ async function enrichCounterparties(
 function partyFromDescription(description: string, direction: WalletDirection) {
   const text = String(description ?? '').trim()
   if (!text) return null
+  // Tips must stay anonymous for the person who received them.
+  if (direction === 'credit' && /^tip received/i.test(text)) return null
   const received = text.match(/^(?:received Ƀu|received bu|bu received)(?: from)?\s+(.+)$/i)
   if (received?.[1]) return received[1].trim()
   const sent = text.match(/^(?:sent Ƀu|sent bu|bu transfer)(?: to)?\s+(.+)$/i)
@@ -156,6 +171,7 @@ function partyFromDescription(description: string, direction: WalletDirection) {
   const tip = text.match(/^tip (?:sent to|to)\s+(.+)$/i)
   if (tip?.[1]) return tip[1].trim()
   if (direction === 'credit') {
+    if (/^tip\b/i.test(text)) return null
     const from = text.match(/\bfrom\s+(.+)$/i)
     if (from?.[1]) return from[1].trim()
   }
@@ -177,19 +193,34 @@ function saleDescription(row: Record<string, unknown>) {
   const kind = kindOf(row)
   const meta = rowMeta(row)
   if (typeof meta.description === 'string' && meta.description.trim()) return meta.description.trim()
+  if (typeof row.description === 'string' && row.description.trim()) return String(row.description).trim()
+  const metaKind = String(meta.kind ?? '').toLowerCase()
   if (kind === 'wallet_debit') {
     if (meta.kind === 'bank_send') {
       const bank = typeof meta.bank_name === 'string' && meta.bank_name.trim() ? meta.bank_name.trim() : 'bank'
       return `Sent to ${bank}`
     }
+    if (metaKind === 'tip') {
+      return typeof meta.to_name === 'string' && meta.to_name ? `Tip to ${meta.to_name}` : 'Tip'
+    }
+    if (metaKind === 'spray' || meta.event_id) {
+      return typeof meta.to_name === 'string' && meta.to_name
+        ? `Event spray to ${meta.to_name}`
+        : 'Event spray'
+    }
     return typeof meta.to_name === 'string' && meta.to_name ? `Sent ɃU to ${meta.to_name}` : 'Sent ɃU'
   }
   if (kind === 'wallet_credit') {
+    if (metaKind === 'tip' || meta.anonymous === true) return 'Tip received'
+    if (metaKind === 'spray' || meta.event_id) {
+      return typeof meta.from_name === 'string' && meta.from_name
+        ? `Event spray from ${meta.from_name}`
+        : 'Event spray received'
+    }
     return typeof meta.from_name === 'string' && meta.from_name
       ? `Received ɃU from ${meta.from_name}`
       : 'Received ɃU'
   }
-  if (row.description && kind !== 'wallet_debit' && kind !== 'wallet_credit') return String(row.description)
   if (kind === 'affiliate_commission') return 'Affiliate commission'
   if (kind === 'organiser_sale') return 'Ticket sale'
   return 'Ticket sale'
@@ -238,8 +269,8 @@ function fromSale(row: Record<string, unknown>): WalletHistoryItem {
     reference: typeof rowMeta(row).move_id === 'string' ? String(rowMeta(row).move_id) : reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
-    counterparty: partyOf(rowMeta(row), direction) || partyFromDescription(rawDescription, direction),
-    counterpartyUserId: partyUserIdOf(rowMeta(row), direction),
+    counterparty: partyOf(rowMeta(row), direction, rawDescription) || partyFromDescription(rawDescription, direction),
+    counterpartyUserId: partyUserIdOf(rowMeta(row), direction, rawDescription),
     note: noteOf(rowMeta(row)),
   }
 }
@@ -274,10 +305,12 @@ function fromTx(row: Record<string, unknown>): WalletHistoryItem {
     reference: typeof meta.move_id === 'string' ? String(meta.move_id) : reference,
     direction,
     bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
-    counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
+    counterparty: partyOf(meta, direction, rawDescription) || partyFromDescription(rawDescription, direction),
     counterpartyUserId:
-      partyUserIdOf(meta, direction) ||
-      firstUserId(row.counterparty_user_id, meta.counterparty_user_id),
+      partyUserIdOf(meta, direction, rawDescription) ||
+      (isAnonymousTip(meta, rawDescription) && direction === 'credit'
+        ? null
+        : firstUserId(row.counterparty_user_id, meta.counterparty_user_id)),
     note: noteOf(meta),
   }
 }
@@ -310,8 +343,8 @@ function fromLedger(row: Record<string, unknown>): WalletHistoryItem {
     reference,
     direction,
     bucket: historyBucket({ type: resolvedType, description: rawDescription, metadata: meta }),
-    counterparty: partyOf(meta, direction) || partyFromDescription(rawDescription, direction),
-    counterpartyUserId: partyUserIdOf(meta, direction),
+    counterparty: partyOf(meta, direction, rawDescription) || partyFromDescription(rawDescription, direction),
+    counterpartyUserId: partyUserIdOf(meta, direction, rawDescription),
     note: noteOf(meta),
   }
 }
@@ -417,10 +450,12 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
         })
   const reference =
     typeof row.reference === 'string' && row.reference ? row.reference : null
-  const counterparty =
-    firstName(row.counterparty) ||
-    partyOf(meta, direction) ||
-    partyFromDescription(rawDescription, direction)
+  const anonymousTipCredit = direction === 'credit' && isAnonymousTip(meta, rawDescription)
+  const counterparty = anonymousTipCredit
+    ? null
+    : firstName(row.counterparty) ||
+      partyOf(meta, direction, rawDescription) ||
+      partyFromDescription(rawDescription, direction)
   return {
     id: String(row.id ?? reference ?? `${rawDescription}-${row.created_at}`),
     type,
@@ -432,9 +467,10 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
     direction,
     bucket: historyBucket({ type, description: rawDescription, metadata: row.metadata }),
     counterparty,
-    counterpartyUserId:
-      partyUserIdOf(meta, direction) ||
-      firstUserId(row.counterparty_user_id, meta.counterparty_user_id),
+    counterpartyUserId: anonymousTipCredit
+      ? null
+      : partyUserIdOf(meta, direction, rawDescription) ||
+        firstUserId(row.counterparty_user_id, meta.counterparty_user_id),
     note: noteOf(meta),
   }
 }
@@ -451,11 +487,8 @@ export async function listWalletHistory(
   const rpc = await db.rpc('bu_list_user_wallet_history', { p_user_id: userId, p_limit: limit })
   const rpcRows = !rpc.error ? asRows(rpc.data).map(fromRpcRow) : []
 
-  // Fast path for dashboards / beneficiaries: trust the RPC when it returns rows.
-  if (!full && rpcRows.length) {
-    return enrichCounterparties(db, mergeHistory(rpcRows).slice(0, limit))
-  }
-
+  // Always merge ledger + tx + sales so tips, sprays, event sprays, and POS never hide
+  // behind a partial RPC response. `full` also pulls sale-credit RPC fallbacks.
   const [saleTable, txs, ledger, withdrawals, pays] = await Promise.all([
     db.from('bu_sale_credits').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
     db.from('bu_transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
@@ -465,9 +498,10 @@ export async function listWalletHistory(
   ])
 
   let sales = !saleTable.error ? ((saleTable.data ?? []) as Array<Record<string, unknown>>).map(fromSale) : []
-  if (!sales.length && full) {
+  if ((!sales.length && full) || (full && sales.length < Math.min(10, limit))) {
     const saleRpc = await db.rpc('bu_list_wallet_history', { p_user_id: userId, p_limit: limit })
-    sales = !saleRpc.error ? asRows(saleRpc.data).map(fromSale) : []
+    const fromRpcSales = !saleRpc.error ? asRows(saleRpc.data).map(fromSale) : []
+    if (fromRpcSales.length) sales = mergeHistory([...sales, ...fromRpcSales])
     if (!sales.length) {
       sales = (await listSaleCredits(userId, limit)).map(fromSale)
     }

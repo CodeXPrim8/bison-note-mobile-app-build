@@ -24,6 +24,7 @@ import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 import { RollingBalance } from '@/components/rolling-balance'
 import { SignedBu } from '@/components/signed-bu'
+import { SmartCampaign } from '@/components/smart-campaign'
 
 interface HomeMovement {
   id: string
@@ -108,7 +109,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   useWalletPulse(() => {
     if (!userId) return
-    fetch('/api/wallet?history=1&limit=8', { credentials: 'include', cache: 'no-store' })
+    fetch('/api/wallet?history=1&limit=12&full=1', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
@@ -133,7 +134,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         setAvatarUrl(String(profile?.avatar_url || ''))
       })
       .catch(() => undefined)
-    fetch('/api/wallet?history=1&limit=8', { credentials: 'include', cache: 'no-store' })
+    fetch('/api/wallet?history=1&limit=12&full=1', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {
@@ -358,28 +359,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <AdSlot slot="app_home" />
       </div>
 
-      <div className="px-4">
-        <h3 className="mb-4 text-lg font-bold">Campaign Updates</h3>
-        <div className="bu-campaign relative h-48 overflow-hidden rounded-[24px] p-5 text-white">
-          <div className="bu-glass-dark absolute right-4 top-4 flex h-14 w-14 items-center justify-center rounded-2xl">
-            <Sparkles className="h-7 w-7 text-white/90" strokeWidth={1.8} />
-          </div>
-          <div className="relative space-y-2 pr-16">
-            <h4 className="text-xl font-bold">Celebrate Better</h4>
-            <p className="text-sm text-white/75">Send ɃU to events — receive ceremonial notes for spraying</p>
-            <div className="flex gap-2 pt-2">
-              <span className="bu-glass-dark inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
-                <Wifi className="h-3.5 w-3.5" />
-                Digital
-              </span>
-              <span className="bu-glass-dark inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
-                <Smartphone className="h-3.5 w-3.5" />
-                Mobile
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SmartCampaign />
     </div>
   )
 }

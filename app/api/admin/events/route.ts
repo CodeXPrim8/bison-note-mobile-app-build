@@ -2,10 +2,12 @@ import { z } from 'zod'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireAdmin } from '@/lib/admin/session'
 import { displayNameFromUser, listUserControls, upsertUserControl, writeAdminAudit } from '@/lib/admin/platform'
+import { deleteLiveEvent } from '@/lib/events/live'
 
 const patchSchema = z.object({
   public: z.boolean().optional(),
   suspend_organizer: z.boolean().optional(),
+  delete: z.boolean().optional(),
 })
 
 export async function GET() {
@@ -61,15 +63,37 @@ export async function PATCH(request: Request) {
     if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Event not found')
     const row = existing.data as Record<string, unknown>
     const ownerId = String(row.celebrant_id || row.organizer_id || '')
+
+    if (body.delete) {
+      const deleted = await deleteLiveEvent(body.event_id, liveId, { adminOverride: true })
+      if ('error' in deleted) {
+        if (deleted.code === 'NOT_FOUND') throw new ApiError(404, 'NOT_FOUND', deleted.error)
+        throw new ApiError(500, 'EVENT_DELETE_FAILED', deleted.error)
+      }
+      await writeAdminAudit(liveId, 'event.delete', body.event_id, body)
+      return successResponse({ ok: true }, 'Event deleted')
+    }
+
     if (body.public !== undefined) {
-      const { error } = await db
-        .from('events')
-        .update({
-          is_public: body.public,
-          strictly_by_invitation: !body.public,
-        })
-        .eq('id', body.event_id)
-      if (error) throw new ApiError(500, 'UPDATE_FAILED', error.message)
+      const updates: Record<string, unknown> = {
+        is_public: body.public,
+        strictly_by_invitation: !body.public,
+      }
+      // Also flip visibility enum when present on live schema.
+      updates.visibility = body.public ? 'PUBLIC' : 'PRIVATE'
+      if (!body.public) updates.status = 'draft'
+      else updates.status = 'published'
+      const { error } = await db.from('events').update(updates).eq('id', body.event_id)
+      if (error) {
+        const soft = await db
+          .from('events')
+          .update({
+            is_public: body.public,
+            strictly_by_invitation: !body.public,
+          })
+          .eq('id', body.event_id)
+        if (soft.error) throw new ApiError(500, 'UPDATE_FAILED', soft.error.message)
+      }
     }
     if (body.suspend_organizer !== undefined && ownerId) {
       await upsertUserControl(ownerId, { organizer_suspended: body.suspend_organizer }, db)

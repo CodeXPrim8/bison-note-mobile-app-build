@@ -10,12 +10,14 @@ import { isSupabaseConfigured } from '@/lib/env'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
 import { liveAccountExistsForPhone } from '@/lib/auth/legacy-login'
 import { ensureLiveBuUser } from '@/lib/auth/live-user'
+import { applyReferralCode, ensureReferralCode } from '@/lib/referrals'
 
 const schema = z.object({
   display_name: z.string().min(2).max(80),
   phone: z.string().min(7).max(32),
   pin: pinSchema,
   email: z.string().email(),
+  referral_code: z.string().min(4).max(24).optional(),
   role: z.enum(['guest', 'celebrant', 'vendor', 'merchant', 'organizer']).optional(),
 })
 
@@ -258,8 +260,19 @@ export async function POST(request: Request) {
         }
       }
 
+      const liveId = live.ok ? live.userId : createdUser.id
+      try {
+        await ensureReferralCode(db, liveId)
+        if (body.referral_code?.trim()) {
+          await applyReferralCode(db, liveId, body.referral_code)
+        }
+      } catch (referralError) {
+        // Account stays valid even if referral bonus cannot be applied.
+        console.error('signup referral apply failed', referralError)
+      }
+
       const session = {
-        id: live.ok ? live.userId : createdUser.id,
+        id: liveId,
         email: ticketEmail,
         display_name: body.display_name,
         phone: body.phone,

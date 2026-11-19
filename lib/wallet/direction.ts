@@ -22,6 +22,7 @@ const CREDIT_TYPES = new Set([
   'organiser_sale',
   'affiliate_commission',
   'wallet_credit',
+  'vendor_commission',
 ])
 
 const DEBIT_TYPES = new Set([
@@ -47,14 +48,14 @@ export function walletDirection(input: {
 
   // Description is the source of truth when it clearly says in/out
   if (
-    /bank transfer top-up|wallet top-?up|received Ƀu|received bu|bu received|tip received|ticket sale|affiliate commission/.test(
+    /bank transfer top-up|wallet top-?up|received Ƀu|received bu|bu received|tip received|event spray (from|received)|ticket sale|affiliate commission|pos sale|vendor commission|business pos/.test(
       desc,
     )
   ) {
     return 'credit'
   }
   if (
-    /withdraw|send to bank|sent Ƀu|sent bu|^sent |purchase|bought ticket|tip to |tip sent|^airtime |^data /.test(
+    /withdraw|send to bank|sent Ƀu|sent bu|^sent |purchase|bought ticket|tip to |tip sent|event spray to|^airtime |^data |pos payment|pos ·/.test(
       desc,
     )
   ) {
@@ -105,7 +106,6 @@ export function historyBucket(input: {
   ) {
     return 'purchase'
   }
-  if (/event spray credit/.test(desc)) return 'topup'
 
   // Bank sends first — "Sent to GTBank" must not be treated as a peer ɃU transfer
   if (
@@ -114,8 +114,13 @@ export function historyBucket(input: {
     metaKind === 'withdrawal' ||
     /withdraw|send to bank|^sent to\s+|^withdrawal to\s+/.test(desc)
   ) {
-    // Peer transfer descriptions that were stored with type=withdrawal still count as transfers
-    if (/bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b/.test(desc)) {
+    // Peer transfer / tip / spray descriptions that were stored with type=withdrawal still count as transfers
+    if (
+      /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b|event spray|spray/.test(desc) ||
+      metaKind === 'tip' ||
+      metaKind === 'spray' ||
+      metaKind === 'transfer'
+    ) {
       return 'bu_transfer'
     }
     return 'withdrawal'
@@ -127,10 +132,14 @@ export function historyBucket(input: {
     type === 'bu_transfer' ||
     type === 'wallet_debit' ||
     type === 'wallet_credit' ||
+    type === 'pos_sale' ||
+    type === 'vendor_commission' ||
     metaKind === 'transfer' ||
     metaKind === 'tip' ||
     metaKind === 'spray' ||
-    /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b|tip to |tip received|tip sent/.test(
+    metaKind === 'pos_sale' ||
+    metaKind === 'business_pos_terminal' ||
+    /bu transfer|bu received|sent Ƀu|sent bu|received Ƀu|received bu|^tip\b|tip to |tip received|tip sent|event spray|\bspray\b|pos sale|pos payment|vendor commission|business pos|pos ·/.test(
       desc,
     )
   ) {
@@ -182,15 +191,30 @@ export function historyLabel(input: {
       .trim()
     return who ? `Received ɃU from ${who}` : 'Received ɃU'
   }
-  if (/^tip received/i.test(desc)) return desc.replace(/^tip received/i, 'Tip received')
+  if (/^tip received/i.test(desc)) return 'Tip received'
   if (/^tip to /i.test(desc) || /^tip$/i.test(desc)) {
     return credit ? 'Tip received' : desc.replace(/^tip to /i, 'Tip sent to ') || 'Tip sent'
+  }
+  if (/^event spray/i.test(desc)) {
+    if (credit) {
+      return /^event spray received$/i.test(desc) ? 'Event spray received' : desc
+    }
+    return desc.replace(/^event spray to /i, 'Event spray to ') || 'Event spray'
+  }
+  if (type === 'vendor_commission' || /^vendor commission/i.test(desc)) {
+    return desc || 'Vendor commission'
+  }
+  if (type === 'pos_sale' || /^pos\b/i.test(desc) || /^business pos/i.test(desc)) {
+    if (credit) return desc || 'POS sale'
+    return desc || 'POS payment'
   }
   if (!desc) {
     if (type === 'deposit') return 'Bank transfer top-up'
     if (type === 'withdrawal') return 'Send to bank'
     if (type === 'spray') return credit ? 'Received ɃU' : 'Sent ɃU'
     if (type === 'spray_credit') return 'Received ɃU'
+    if (type === 'pos_sale') return credit ? 'POS sale' : 'POS payment'
+    if (type === 'vendor_commission') return 'Vendor commission'
     return credit ? 'Received ɃU' : 'Sent ɃU'
   }
   if (lower === 'bu movement') return credit ? 'Received ɃU' : 'Sent ɃU'

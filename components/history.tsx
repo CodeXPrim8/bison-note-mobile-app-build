@@ -43,7 +43,7 @@ interface HistoryTicket extends TicketRecord {
 
 const FILTERS: Array<{ id: 'all' | HistoryBucket; label: string }> = [
   { id: 'all', label: 'All' },
-  { id: 'bu_transfer', label: 'Transfers' },
+  { id: 'bu_transfer', label: 'Transfers & tips' },
   { id: 'topup', label: 'Top-ups' },
   { id: 'purchase', label: 'Tickets' },
   { id: 'withdrawal', label: 'Withdrawals' },
@@ -76,6 +76,7 @@ function partyFromLabel(description: string) {
   if (from?.[1]) return from[1].trim()
   const to = text.match(/^(?:sent Ƀu|sent bu|bu transfer)(?: to)?\s+(.+)$/i)
   if (to?.[1] && !/^bu transfer$/i.test(to[1].trim())) return to[1].trim()
+  if (/^tip received/i.test(text)) return null
   const tip = text.match(/^tip (?:sent to|to)\s+(.+)$/i)
   if (tip?.[1]) return tip[1].trim()
   return null
@@ -98,18 +99,20 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
   const createdAt = new Date(String(tx.created_at ?? '')).getTime() || 0
   const statusRaw = String(tx.status ?? 'completed')
   const labeled = historyLabel({ type, description: rawDescription, direction })
-  const counterparty =
-    (typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null) ||
-    partyFromMeta(meta, direction) ||
-    partyFromLabel(rawDescription) ||
-    partyFromLabel(labeled)
+  const tipCredit = direction === 'credit' && (/^tip received/i.test(rawDescription) || meta.kind === 'tip')
+  const counterparty = tipCredit
+    ? null
+    : (typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null) ||
+      partyFromMeta(meta, direction) ||
+      partyFromLabel(rawDescription) ||
+      partyFromLabel(labeled)
   return {
     id: String(tx.id ?? `${createdAt}-${rawDescription}`),
     type,
     amount: Math.abs(Number(tx.amount ?? 0)),
     date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
     createdAt,
-    description: labeled,
+    description: tipCredit ? 'Tip received' : labeled,
     status: statusRaw,
     direction,
     bucket:
@@ -128,11 +131,12 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
     : /spray/i.test(tx.type) && tx.direction === 'debit'
       ? 'spray'
       : 'transfer'
+  const tipCredit = kind === 'tip' && credit
   return {
     number: invoiceNumberFromId(tx.reference || tx.id),
     issuedAt: new Date(tx.createdAt || Date.now()).toISOString(),
     kind,
-    fromName: credit ? tx.counterparty || 'Sender' : senderName || 'You',
+    fromName: tipCredit ? 'Anonymous' : credit ? tx.counterparty || 'Sender' : senderName || 'You',
     toName: credit ? senderName || 'You' : tx.counterparty || tx.description,
     amountBu: buFromNaira(tx.amount),
     amountNaira: tx.amount,
@@ -142,18 +146,26 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
 }
 
 function activityTitle(tx: Transaction) {
-  if (tx.bucket === 'withdrawal') {
-    return tx.description || (tx.counterparty ? `Sent to ${tx.counterparty}` : 'Send to bank')
+  const desc = String(tx.description || '')
+  if (tx.bucket === 'withdrawal' && !/tip|spray|sent Ƀu|received Ƀu|pos|commission/i.test(desc)) {
+    return desc || (tx.counterparty ? `Sent to ${tx.counterparty}` : 'Send to bank')
+  }
+  // Keep tip / spray / event spray / POS labels intact.
+  if (/^tip received|^tip to |^tip sent|^event spray|^pos\b|^business pos|vendor commission|pos sale|pos payment/i.test(desc)) {
+    return desc
+  }
+  if (tx.direction === 'credit' && /^tip received/i.test(desc)) {
+    return 'Tip received'
   }
   if (tx.counterparty) {
     if (tx.direction === 'credit') {
-      if (/^received Ƀu|^tip received/i.test(tx.description)) return tx.description
+      if (/^received Ƀu|^tip received|^event spray/i.test(desc)) return desc
       return `Received ɃU from ${tx.counterparty}`
     }
-    if (/^sent Ƀu|^tip (sent )?to/i.test(tx.description)) return tx.description
+    if (/^sent Ƀu|^tip (sent )?to|^event spray/i.test(desc)) return desc
     return `Sent ɃU to ${tx.counterparty}`
   }
-  return tx.description || 'ɃU movement'
+  return desc || 'ɃU movement'
 }
 
 function normalizeRows(rows: Transaction[]) {
@@ -328,7 +340,7 @@ export default function History() {
                 <HistoryIcon className="mx-auto mb-3 h-8 w-8 text-muted-foreground/70" />
                 <p className="font-medium">No activity yet</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Transfers, top-ups, ticket sales, and withdrawals show here.
+                  Tips, sprays, event sprays, transfers, POS, top-ups, tickets, and withdrawals show here.
                 </p>
               </div>
             ) : (

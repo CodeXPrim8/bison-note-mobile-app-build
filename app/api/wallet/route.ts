@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     const includeHistory = url.searchParams.get('history') !== '0'
     const rawLimit = Number(url.searchParams.get('limit') || (includeHistory ? 40 : 0))
     const limit = Math.min(200, Math.max(0, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 40))
-    const fullHistory = url.searchParams.get('full') === '1' || limit >= 100
+    // Always merge ledger sources so tips / sprays / event sprays / POS appear.
+    const fullHistory = includeHistory
 
     const session = await readBuSession()
     const liveId =

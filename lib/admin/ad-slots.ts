@@ -41,6 +41,17 @@ export const AD_SLOTS = [
     hint: 'In-app card on ɃU home. Sized for a phone screen.',
   },
   {
+    id: 'app_campaign',
+    label: 'Campaign Updates card',
+    surface: 'App',
+    width: 390,
+    height: 192,
+    maxSeconds: 20,
+    fit: 'box',
+    ratio: '65:32',
+    hint: 'Smart campaign card on ɃU home. Upload exactly 390 × 192 px (or 780 × 384 for retina) so the image fills the card.',
+  },
+  {
     id: 'app_wallet',
     label: 'ɃU wallet',
     surface: 'App',

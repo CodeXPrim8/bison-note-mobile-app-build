@@ -184,6 +184,28 @@ export async function createPayoutRecipient(row: Record<string, unknown>) {
   throw lastError instanceof Error ? lastError : new Error('Bank is invalid')
 }
 
+async function payoutSenderLabel(userId: string, db: SupabaseClient) {
+  const { data } = await db
+    .from('users')
+    .select('first_name, last_name, account_name, phone_number')
+    .eq('id', userId)
+    .maybeSingle()
+  const row = (data ?? {}) as Record<string, unknown>
+  const first = typeof row.first_name === 'string' ? row.first_name.trim() : ''
+  const last = typeof row.last_name === 'string' ? row.last_name.trim() : ''
+  const full = [first, last].filter(Boolean).join(' ').trim()
+  const accountName = typeof row.account_name === 'string' ? row.account_name.trim() : ''
+  const phone = typeof row.phone_number === 'string' ? row.phone_number.trim() : ''
+  const who = (full || accountName || phone || 'Customer')
+    .replace(/Ƀucks/gi, 'BUCKS')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+  // Paystack transfer `reason` → bank narration on many NGN statements.
+  return `Sent from BUCKS/${who || 'Customer'}`.slice(0, 80)
+}
+
 export async function sendWithdrawalPayout(row: Record<string, unknown>, db: SupabaseClient) {
   if (!isPaystackConfigured()) {
     throw new Error('Bank payouts are not available right now.')
@@ -205,11 +227,20 @@ export async function sendWithdrawalPayout(row: Record<string, unknown>, db: Sup
     account_name: ready.accountName || row.account_name,
     paystack_recipient: ready.recipient.recipient_code,
   })
+  // Always pay the face bank amount. Fees were already taken from the sender's wallet.
+  const bankNaira = Number(row.bank_naira ?? row.naira)
+  if (!Number.isFinite(bankNaira) || bankNaira <= 0) {
+    throw new Error('Invalid bank send amount.')
+  }
+  const senderUserId = String(row.user_id || '')
+  const narration = senderUserId
+    ? await payoutSenderLabel(senderUserId, db)
+    : 'Sent from BUCKS'
   const transfer = await initiateTransfer({
-    amountKobo: nairaToKobo(Number(row.naira)),
+    amountKobo: nairaToKobo(bankNaira),
     recipient: ready.recipient.recipient_code,
     reference: transferReference(id),
-    reason: 'ɃU wallet withdrawal',
+    reason: narration,
   })
   const success = /success/i.test(transfer.status || '')
   const inFlight = /otp|pending|received|queued/i.test(transfer.status || '')

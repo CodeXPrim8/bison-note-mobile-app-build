@@ -69,6 +69,7 @@ export interface EventRecord {
   capacity: number | null
   affiliate_enabled: boolean
   affiliate_commission_pct: number
+  vendors_invite_enabled: boolean
   created_at: string
   updated_at: string
 }

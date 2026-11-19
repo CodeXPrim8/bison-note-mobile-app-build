@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { BalanceSparkline, useBalanceSpark } from '@/components/balance-sparkline'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,7 +19,6 @@ import {
   quotePeerMoveBu,
 } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
-import { WalletPageSummary } from '@/components/wallet-summary'
 import { BuInvoiceActions } from '@/components/bu-invoice'
 import { PinPadModal } from '@/components/pin-pad-modal'
 import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
@@ -96,8 +96,15 @@ function writeFavorites(rows: SavedParty[]) {
   window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(rows.slice(0, 40)))
 }
 
-export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'transfer' } = {}) {
-  const { applySpendBu, refreshWallet, userId, displayName } = useAccount()
+export default function SendBU({
+  initialIntent,
+  onNavigate,
+}: {
+  initialIntent?: 'tip' | 'transfer'
+  onNavigate?: (page: string, data?: unknown) => void
+} = {}) {
+  const { applySpendBu, refreshWallet, userId, displayName, buBalance } = useAccount()
+  const spark = useBalanceSpark(userId, buBalance)
   const homeStep = initialIntent === 'tip' ? 'tip-scan' : 'search'
   const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history'>(
     homeStep,
@@ -526,22 +533,52 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
     }
   }
 
-  const handleTipScan = (raw: string) => {
+  function handlePosOrReceiveScan(raw: string, mode: 'tip' | 'pay') {
+    try {
+      const asPos = JSON.parse(raw) as { type?: string }
+      if (String(asPos.type ?? '') === 'pos') {
+        try {
+          sessionStorage.setItem('bu_pos_qr', raw)
+        } catch {
+          // ignore
+        }
+        if (onNavigate) {
+          onNavigate('pos-pay')
+          return
+        }
+        window.location.assign('/app?page=pos-pay')
+        return
+      }
+    } catch {
+      // not JSON / not POS
+    }
     const parsed = parseReceiveQr(raw)
     if (!parsed) {
-      setMessage('Scan a live receive-ɃU QR, or paste the payload.')
+      setMessage('Scan a live receive-ɃU or pay QR, or paste the payload.')
       return
     }
     if (isSelfAccount(parsed.userId)) {
-      setMessage('That’s your own QR. You can’t tip yourself.')
+      setMessage(mode === 'tip' ? 'That’s your own QR. You can’t tip yourself.' : 'That’s your own QR.')
       setCameraActive(false)
+      return
+    }
+    setCameraActive(false)
+    setMessage(null)
+    if (mode === 'pay') {
+      handleSelectUser({
+        id: parsed.userId,
+        username: parsed.username,
+        fullName: parsed.username,
+        verified: true,
+      })
       return
     }
     setScannedQRData(parsed)
     setStep('tip-confirm')
-    setCameraActive(false)
-    setMessage(null)
   }
+
+  const handleTipScan = (raw: string) => handlePosOrReceiveScan(raw, 'tip')
+  const handlePayScan = (raw: string) => handlePosOrReceiveScan(raw, 'pay')
 
 
   return (
@@ -700,88 +737,171 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
 
       {step === 'search' && (
         <>
-          <div className="px-4">
-            <WalletPageSummary
-              kicker=""
-              title="Send ɃU"
-              detail="Enter the account number and confirm the name of the person you want to send ɃU to."
-            />
-            <h2 className="sr-only">Send ɃU</h2>
+          <div className="px-4 pb-6">
+            <div
+              className="relative overflow-hidden rounded-[30px] p-5 text-white shadow-[0_18px_40px_rgba(11,23,51,0.26)]"
+              style={{
+                background:
+                  'linear-gradient(165deg, #2a6fe0 0%, #1f5fd0 42%, #174db8 100%)',
+                boxShadow:
+                  '0 18px 40px rgba(11,23,51,0.26), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.12)',
+              }}
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/35" />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_34%)]" />
+              <div className="relative">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/55">To Ƀucks</p>
+                  <h1 className="mt-1 text-2xl font-semibold tracking-tight">Send ɃU</h1>
+                </div>
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-white/65">Available</p>
+                    <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums">
+                      {buBalance == null ? '…' : `Ƀ ${formatBu(buBalance)}`}
+                    </p>
+                  </div>
+                  <p className="max-w-[9.5rem] pb-1 text-right text-[11px] leading-snug text-white/55">
+                    Enter account number, then confirm the name
+                  </p>
+                </div>
+                <div className="bu-glass-dark mt-4 rounded-2xl px-3 pb-1 pt-2">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-white/50">Balance trend</p>
+                  <BalanceSparkline
+                    gradientId="bu-send-balance-fill"
+                    ready={spark.ready}
+                    values={spark.values}
+                  />
+                </div>
+              </div>
+            </div>
 
-            <div className="mt-5 rounded-[24px] border-2 border-neutral-950 bg-neutral-50 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-              <label htmlFor="bu-account-number" className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-neutral-600">
+            <div className="bu-glass mt-4 overflow-hidden rounded-[26px] p-4">
+              <label
+                htmlFor="bu-account-number"
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500"
+              >
                 Account number
               </label>
-              <div className="flex items-center gap-3 rounded-2xl border border-neutral-300 bg-white px-4 py-3 focus-within:border-neutral-950 focus-within:ring-2 focus-within:ring-neutral-950/15">
-                <Search className="h-5 w-5 shrink-0 text-neutral-950" />
+              <div className="mt-2 flex items-center gap-2.5 rounded-2xl border border-white/70 bg-white/55 px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus-within:border-primary/40 focus-within:bg-white/75">
+                <Search className="h-4 w-4 shrink-0 text-neutral-500" />
                 <Input
                   id="bu-account-number"
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel"
-                  placeholder=""
+                  placeholder="Phone used as ɃU account"
                   value={searchQuery}
                   onChange={(e) => void handleSearch(e.target.value)}
-                  className="h-auto border-0 bg-transparent px-0 text-base font-medium text-neutral-950 shadow-none placeholder:text-neutral-400 focus-visible:ring-0"
+                  className="h-11 border-0 bg-transparent px-0 text-sm font-medium text-neutral-950 shadow-none placeholder:text-neutral-400 focus-visible:ring-0"
                 />
               </div>
             </div>
+
+            <div className="bu-glass-soft mt-3 space-y-3 rounded-[26px] p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white shadow-[0_8px_18px_rgba(11,23,51,0.22)]">
+                  <QrCode className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">Scan to pay</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Scan a receive ɃU QR or a vendor pay QR
+                  </p>
+                </div>
+              </div>
+              {cameraActive && step === 'search' ? (
+                <TicketQrScanner
+                  readerId="bu-send-pay-reader"
+                  active={cameraActive}
+                  onScan={handlePayScan}
+                />
+              ) : null}
+              <Button
+                type="button"
+                className="bu-press h-11 w-full rounded-2xl bg-neutral-950 font-semibold text-white shadow-[0_12px_28px_rgba(11,23,51,0.22)] hover:bg-neutral-900"
+                onClick={() => {
+                  setMessage(null)
+                  setCameraActive((open) => !open)
+                }}
+              >
+                {cameraActive && step === 'search' ? 'Stop scanner' : 'Scan to pay'}
+              </Button>
+              {cameraActive && step === 'search' ? (
+                <>
+                  <Input
+                    placeholder="Or paste QR payload"
+                    value={pastedQr}
+                    onChange={(e) => setPastedQr(e.target.value)}
+                    className="h-11 rounded-2xl border-white/70 bg-white/55"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-2xl"
+                    onClick={() => handlePayScan(pastedQr)}
+                  >
+                    Load from paste
+                  </Button>
+                </>
+              ) : null}
+            </div>
+
             {message && step === 'search' && (
               <p className="mt-3 text-sm text-destructive">{message}</p>
             )}
 
             {searchQuery.replace(/[^\d]/g, '').length >= 10 && (
-              <div className="mt-5 space-y-2">
+              <div className="mt-4 space-y-2">
                 {lookingUp ? (
-                  <Card className="border-border/50 bg-card/50 p-8 text-center">
-                    <p className="text-muted-foreground">Looking up that account number…</p>
-                  </Card>
+                  <div className="bu-glass-soft rounded-2xl px-5 py-8 text-center">
+                    <p className="text-sm text-muted-foreground">Looking up that account…</p>
+                  </div>
                 ) : searchResults.length === 0 ? (
-                  <Card className="border-border/50 bg-card/50 p-8 text-center">
-                    <p className="text-muted-foreground">No matching account</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Enter the full phone number used as their ɃU account number.
+                  <div className="bu-glass-soft rounded-2xl px-5 py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No matching account</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Use the full phone number for their ɃU account.
                     </p>
-                  </Card>
+                  </div>
                 ) : (
                   searchResults.map((user) => (
-                    <Card
+                    <button
                       key={user.id}
+                      type="button"
                       onClick={() => handleSelectUser(user)}
-                      className="cursor-pointer border-neutral-200 bg-white p-4 transition hover:border-neutral-400"
+                      className="bu-press bu-glass-soft flex w-full items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left"
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-950 text-white">
-                            <User className="h-6 w-6" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="truncate font-semibold">{user.fullName}</h3>
-                              {user.verified && <span className="text-xs text-green-500">✓</span>}
-                            </div>
-                            <p className="text-sm text-muted-foreground">{user.username}</p>
-                          </div>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-950 text-white">
+                          <User className="h-5 w-5" />
                         </div>
-                        <Button size="sm" className="shrink-0 bg-neutral-950 text-white hover:bg-neutral-800">
-                          Select
-                        </Button>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="truncate text-sm font-semibold">{user.fullName}</h3>
+                            {user.verified ? <span className="text-xs text-emerald-500">✓</span> : null}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">{user.username}</p>
+                        </div>
                       </div>
-                    </Card>
+                      <span className="shrink-0 rounded-full bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white">
+                        Select
+                      </span>
+                    </button>
                   ))
                 )}
               </div>
             )}
 
             {searchQuery.replace(/[^\d]/g, '').length < 10 && (
-              <div className="mt-6">
-                <div className="mb-4 grid grid-cols-2 rounded-2xl bg-neutral-100 p-1">
+              <div className="mt-5">
+                <div className="bu-glass mb-3 grid grid-cols-2 rounded-[20px] p-1">
                   <button
                     type="button"
                     onClick={() => setPartyTab('beneficiaries')}
-                    className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                    className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
                       partyTab === 'beneficiaries'
-                        ? 'bg-white text-neutral-950 shadow-sm'
+                        ? 'bg-neutral-950 text-white shadow-[0_8px_18px_rgba(11,23,51,0.2)]'
                         : 'text-neutral-500'
                     }`}
                   >
@@ -790,9 +910,9 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
                   <button
                     type="button"
                     onClick={() => setPartyTab('favorites')}
-                    className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                    className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
                       partyTab === 'favorites'
-                        ? 'bg-white text-neutral-950 shadow-sm'
+                        ? 'bg-neutral-950 text-white shadow-[0_8px_18px_rgba(11,23,51,0.2)]'
                         : 'text-neutral-500'
                     }`}
                   >
@@ -802,30 +922,35 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
 
                 {partyTab === 'beneficiaries' ? (
                   <div>
-                    <div className="mb-3 flex items-center justify-end">
-                      <Button onClick={() => setStep('history')} variant="outline" size="sm">
-                        View All
-                      </Button>
+                    <div className="mb-2.5 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold">Recent people</p>
+                      <button
+                        type="button"
+                        onClick={() => setStep('history')}
+                        className="bu-glass-soft rounded-full px-3 py-1 text-xs font-semibold text-neutral-700"
+                      >
+                        View all
+                      </button>
                     </div>
                     {beneficiaries.length === 0 ? (
-                      <p className="rounded-2xl bg-neutral-100 px-4 py-5 text-sm text-neutral-500">
+                      <div className="bu-glass-soft rounded-2xl px-4 py-5 text-sm text-muted-foreground">
                         People you send ɃU to will show up here.
-                      </p>
+                      </div>
                     ) : (
                       <div className="space-y-2">
                         {beneficiaries.slice(0, 6).map((party) => (
-                          <Card key={party.id} className="border-neutral-200 bg-white p-3">
-                            <div className="flex items-center gap-3">
+                          <div key={party.id} className="bu-glass-soft rounded-2xl px-3 py-2.5">
+                            <div className="flex items-center gap-2.5">
                               <button
                                 type="button"
                                 onClick={() => void openSavedParty(party)}
-                                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                className="bu-press flex min-w-0 flex-1 items-center gap-3 text-left"
                               >
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-700">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-950/5 text-neutral-700">
                                   <User className="h-4 w-4" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium">{party.fullName}</p>
+                                  <p className="truncate text-sm font-semibold">{party.fullName}</p>
                                   <p className="truncate text-xs text-muted-foreground">
                                     {party.lastAmount
                                       ? `Last sent Ƀ ${formatBu(party.lastAmount)}`
@@ -842,7 +967,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
                                 <Star className={`h-4 w-4 ${isFavorite(party.id) ? 'fill-current' : ''}`} />
                               </button>
                             </div>
-                          </Card>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -850,24 +975,24 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
                 ) : (
                   <div>
                     {favorites.length === 0 ? (
-                      <p className="rounded-2xl bg-neutral-100 px-4 py-5 text-sm text-neutral-500">
+                      <div className="bu-glass-soft rounded-2xl px-4 py-5 text-sm text-muted-foreground">
                         No favorites yet. Star a beneficiary to add them.
-                      </p>
+                      </div>
                     ) : (
                       <div className="space-y-2">
                         {favorites.map((party) => (
-                          <Card key={party.id} className="border-neutral-200 bg-white p-3">
-                            <div className="flex items-center gap-3">
+                          <div key={party.id} className="bu-glass-soft rounded-2xl px-3 py-2.5">
+                            <div className="flex items-center gap-2.5">
                               <button
                                 type="button"
                                 onClick={() => void openSavedParty(party)}
-                                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                className="bu-press flex min-w-0 flex-1 items-center gap-3 text-left"
                               >
                                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
                                   <Star className="h-4 w-4 fill-current" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium">{party.fullName}</p>
+                                  <p className="truncate text-sm font-semibold">{party.fullName}</p>
                                   <p className="truncate text-xs text-muted-foreground">{party.username}</p>
                                 </div>
                               </button>
@@ -880,7 +1005,7 @@ export default function SendBU({ initialIntent }: { initialIntent?: 'tip' | 'tra
                                 <Star className="h-4 w-4 fill-current" />
                               </button>
                             </div>
-                          </Card>
+                          </div>
                         ))}
                       </div>
                     )}

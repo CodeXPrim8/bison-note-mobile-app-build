@@ -3,6 +3,10 @@ import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
 import { fulfillDepositReference } from '@/lib/payments/verify'
 import { fulfillDedicatedNubanCharge, isDedicatedNubanCharge, type PaystackChargeData } from '@/lib/payments/dva-credit'
+import {
+  fulfillBusinessPosTerminalCharge,
+  isBusinessPosTerminalCharge,
+} from '@/lib/pos/terminal'
 import { isServiceRoleConfigured } from '@/lib/env'
 import { errorResponse, successResponse } from '@/lib/api/errors'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
@@ -34,6 +38,29 @@ export async function POST(request: Request) {
     const db = tryCreateAdminClient() ?? createDataClient()
     const result = await applyPaystackTransferEvent(event, db)
     return successResponse(result, result.ok ? 'Transfer updated' : 'Transfer ignored')
+  }
+
+  // Business POS Terminal (card / NFC) — paymentrequest may omit transaction reference.
+  if (event.event === 'charge.success' || event.event === 'paymentrequest.success') {
+    const payload = (event.data ?? {}) as Record<string, unknown>
+    if (isBusinessPosTerminalCharge(payload) || event.event === 'paymentrequest.success') {
+      const pos = await fulfillBusinessPosTerminalCharge(payload)
+      if (pos.matched) {
+        return successResponse(
+          {
+            reference: String(payload.reference ?? pos.charge.reference),
+            tickets: 0,
+            channel: 'business_pos_terminal',
+            amount: pos.amount_naira ?? pos.charge.amount_naira,
+            already_credited: pos.already_credited,
+          },
+          'Fulfilled',
+        )
+      }
+    }
+    if (event.event === 'paymentrequest.success') {
+      return successResponse({ ignored: true }, 'Ignored')
+    }
   }
 
   const reference = event.data?.reference

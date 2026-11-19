@@ -8,10 +8,14 @@ const LEDGER_TYPES = new Set([
   'withdrawal',
   'spray_credit',
   'refund',
+  'pos_sale',
+  'vendor_commission',
 ])
 
 function ledgerType(type: string, direction: 'debit' | 'credit') {
   if (LEDGER_TYPES.has(type)) return type
+  // Keep peer sprays/tips as spray* even if a caller passes a custom alias.
+  if (/tip|spray|transfer/i.test(type)) return direction === 'debit' ? 'spray' : 'spray_credit'
   return direction === 'debit' ? 'withdrawal' : 'refund'
 }
 

@@ -389,6 +389,95 @@ export async function getPaystackBalances(): Promise<PaystackBalanceRow[]> {
   })
 }
 
+export type PaystackTerminal = {
+  id: number
+  serial_number?: string | null
+  terminal_id: string
+  name?: string | null
+  status?: string | null
+  address?: string | null
+}
+
+export type PaystackPaymentRequest = {
+  id: number
+  request_code?: string
+  offline_reference: string
+  amount: number
+  status?: string
+  paid?: boolean
+  description?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+export async function listPaystackTerminals(): Promise<PaystackTerminal[]> {
+  const data = await paystackFetch<PaystackTerminal[] | { data?: PaystackTerminal[] }>('/terminal')
+  if (Array.isArray(data)) return data
+  if (data && typeof data === 'object' && Array.isArray((data as { data?: PaystackTerminal[] }).data)) {
+    return (data as { data: PaystackTerminal[] }).data
+  }
+  return []
+}
+
+export async function fetchPaystackTerminal(terminalId: string): Promise<PaystackTerminal> {
+  return paystackFetch<PaystackTerminal>(`/terminal/${encodeURIComponent(terminalId)}`)
+}
+
+export async function fetchPaystackTerminalPresence(terminalId: string): Promise<{
+  online: boolean
+  available: boolean
+}> {
+  return paystackFetch(`/terminal/${encodeURIComponent(terminalId)}/presence`)
+}
+
+export async function createPaystackPaymentRequest(input: {
+  customer: string
+  description: string
+  amountKobo: number
+  lineItemName?: string
+  metadata?: Record<string, unknown>
+}): Promise<PaystackPaymentRequest> {
+  return paystackFetch<PaystackPaymentRequest>('/paymentrequest', {
+    method: 'POST',
+    body: JSON.stringify({
+      customer: input.customer,
+      description: input.description,
+      line_items: [
+        {
+          name: input.lineItemName || 'Business POS',
+          amount: String(input.amountKobo),
+          quantity: 1,
+        },
+      ],
+      metadata: input.metadata ?? {},
+    }),
+  })
+}
+
+export async function pushPaystackTerminalInvoice(input: {
+  terminalId: string
+  paymentRequestId: number
+  offlineReference: string
+}): Promise<{ id: string }> {
+  return paystackFetch(`/terminal/${encodeURIComponent(input.terminalId)}/event`, {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'invoice',
+      action: 'process',
+      data: {
+        id: input.paymentRequestId,
+        reference: input.offlineReference,
+      },
+    }),
+  })
+}
+
+export async function fetchPaystackTerminalEventStatus(
+  terminalId: string,
+  eventId: string,
+): Promise<{ delivered: boolean }> {
+  return paystackFetch(`/terminal/${encodeURIComponent(terminalId)}/event/${encodeURIComponent(eventId)}`)
+}
+
 export async function adminPaystackSnapshot(): Promise<AdminPaystackSnapshot> {
   if (balanceCache && Date.now() - balanceCache.at < 20_000) return balanceCache.value
   if (!isPaystackConfigured()) {
