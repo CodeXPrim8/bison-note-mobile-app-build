@@ -132,7 +132,7 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
     {
       Icon: Gift,
       title: 'Refer & earn',
-      desc: 'Invite friends · earn Ƀ1,000',
+      desc: 'Invite friends · earn Ƀ1,000 after they fund/spend Ƀ3,000',
       onClick: () => onNavigate('refer'),
     },
     {

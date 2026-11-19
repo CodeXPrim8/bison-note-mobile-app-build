@@ -1,7 +1,7 @@
 import { verifyPaystackSignature, isPaystackConfigured } from '@/lib/payments/paystack'
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
-import { fulfillDepositReference } from '@/lib/payments/verify'
+import { fulfillDepositReference, fulfillSettlementTopupReference } from '@/lib/payments/verify'
 import { fulfillDedicatedNubanCharge, isDedicatedNubanCharge, type PaystackChargeData } from '@/lib/payments/dva-credit'
 import {
   fulfillBusinessPosTerminalCharge,
@@ -75,6 +75,18 @@ export async function POST(request: Request) {
         { reference, tickets: 0, channel: 'dedicated_nuban', amount: result.payment.amount },
         'Fulfilled',
       )
+    }
+    if (reference.startsWith('SETTLE_')) {
+      try {
+        if (isServiceRoleConfigured()) {
+          const result = await fulfillSuccessfulPayment(reference)
+          return successResponse({ reference, tickets: result.tickets.length, channel: 'settlement_topup' }, 'Fulfilled')
+        }
+      } catch {
+        /* payments table may be missing */
+      }
+      await fulfillSettlementTopupReference(reference)
+      return successResponse({ reference, tickets: 0, channel: 'settlement_topup' }, 'Fulfilled')
     }
     if (reference.startsWith('DEPOSIT_')) {
       if (isServiceRoleConfigured()) {

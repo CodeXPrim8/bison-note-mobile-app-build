@@ -84,6 +84,7 @@ export async function moveLiveWallet(
     }
     if (payload?.ok === true) {
       await recordWalletLedger(db, stamped)
+      await settleReferralAfterMove(db, input)
       return
     }
   } else if (!/could not find|schema cache|does not exist/i.test(rpc.error.message)) {
@@ -100,6 +101,7 @@ export async function moveLiveWallet(
   })
   if (!fallback.error) {
     await recordWalletLedger(db, stamped)
+    await settleReferralAfterMove(db, input)
     return
   }
   if (/INSUFFICIENT_FUNDS/i.test(fallback.error.message)) {
@@ -111,4 +113,19 @@ export async function moveLiveWallet(
 
   await applyDirect(db, input.userId, input.naira, input.direction)
   await recordWalletLedger(db, stamped)
+  await settleReferralAfterMove(db, input)
+}
+
+async function settleReferralAfterMove(
+  db: SupabaseClient,
+  input: { userId: string; type: string },
+) {
+  // Avoid re-entry while crediting the referrer bonus itself.
+  if (input.type === 'referral_bonus') return
+  try {
+    const { maybeSettleReferralReward } = await import('@/lib/referrals')
+    await maybeSettleReferralReward(db, input.userId)
+  } catch (error) {
+    console.error('referral settle after wallet move failed', error)
+  }
 }

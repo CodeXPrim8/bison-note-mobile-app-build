@@ -44,7 +44,10 @@ export async function POST(request: Request) {
     const db = tryCreateAdminClient() ?? createDataClient()
     const result = await applyReferralCode(db, userId, code)
     const stats = await getReferralStats(db, userId)
-    return successResponse({ ...stats, applied: result }, 'Referral applied. Your friend earned Ƀ1,000.')
+    return successResponse(
+      { ...stats, applied: result },
+      'Referral applied. Your friend earns Ƀ1,000 after you fund or spend Ƀ3,000.',
+    )
   } catch (error) {
     return handleRouteError(error)
   }

@@ -43,7 +43,10 @@ function splitName(displayName: string): { firstName: string; lastName: string }
   const parts = displayName
     .trim()
     .replace(/Ƀucks/gi, BRAND_ASCII)
+    .replace(/efucks/gi, BRAND_ASCII)
+    .replace(/[^\x00-\x7F]+ucks/gi, BRAND_ASCII)
     .replace(/^ucks\b/gi, BRAND_ASCII)
+    .replace(/[^\x20-\x7E]/g, '')
     .split(/\s+/)
     .filter(Boolean)
   if (parts.length === 0) return { firstName: BRAND_ASCII, lastName: 'User' }
@@ -181,8 +184,14 @@ export async function getStoredVirtualAccount(userId: string): Promise<VirtualAc
 export function virtualAccountNeedsBrandRefresh(accountName: string | null | undefined) {
   const name = (accountName || '').trim()
   if (!name) return false
-  // Old trading name, or Ƀ stripped by banks from "Ƀucks" → "UCKS/..."
-  return /protectorng/i.test(name) || /^ucks(\s*\/|\b)/i.test(name)
+  // Old trading name, or Ƀ mangled/stripped by banks from "Ƀucks" → "UCKS" / "EFUCKS" / "ÉƒUCKS"
+  return (
+    /protectorng/i.test(name) ||
+    /^ucks(\s*\/|\b)/i.test(name) ||
+    /\befucks\b/i.test(name) ||
+    /[^\x00-\x7F].*ucks/i.test(name) ||
+    /^[^b]*ucks\b/i.test(name)
+  )
 }
 
 async function resolvePaystackCustomerForUser(input: {

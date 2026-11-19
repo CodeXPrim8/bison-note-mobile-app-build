@@ -306,7 +306,6 @@ function MobileAppShell() {
                 <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
               )}
               {currentPage === 'refer' && <Refer />}
-              <ReferCampaignPopup onOpenRefer={() => handleNavigate('refer')} />
             </>
           ) : mode === 'celebrant' ? (
             <>
@@ -377,7 +376,16 @@ function MobileAppShell() {
           )}
         </div>
 
-        <Navigation currentPage={currentPage} onNavigate={handleNavigate} mode={mode} />
+        <Navigation
+          currentPage={currentPage}
+          onNavigate={handleNavigate}
+          mode={mode}
+          tipFlow={
+            (currentPage === 'send-bu' || currentPage === 'receive-bu') &&
+            intentFromPageData(pageData) === 'tip'
+          }
+        />
+        <ReferCampaignPopup onOpenRefer={() => handleNavigate('refer')} />
       </div>
     </div>
   )

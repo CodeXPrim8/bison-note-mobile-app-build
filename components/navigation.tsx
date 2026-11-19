@@ -7,6 +7,8 @@ interface NavigationProps {
   currentPage: string
   onNavigate: (page: string, data?: unknown) => void
   mode?: 'user' | 'celebrant' | 'vendor'
+  /** Keep Spray highlighted during tip / receive-tip flows. */
+  tipFlow?: boolean
 }
 
 type NavTab = {
@@ -59,22 +61,31 @@ const vendorTabs: NavTab[] = [
   { id: 'profile', label: 'Menu', Icon: UserRound },
 ]
 
-function isActiveTab(tab: NavTab, currentPage: string) {
+function isActiveTab(tab: NavTab, currentPage: string, tipFlow?: boolean) {
+  if (tipFlow && (currentPage === 'send-bu' || currentPage === 'receive-bu')) {
+    return tab.id === 'spraying'
+  }
   if (currentPage === tab.id) return true
+  if (tipFlow && tab.matches?.includes(currentPage)) return false
   return Boolean(tab.matches?.includes(currentPage))
 }
 
-export default function Navigation({ currentPage, onNavigate, mode = 'user' }: NavigationProps) {
+export default function Navigation({
+  currentPage,
+  onNavigate,
+  mode = 'user',
+  tipFlow = false,
+}: NavigationProps) {
   const tabs = mode === 'user' ? userTabs : mode === 'celebrant' ? celebrantTabs : vendorTabs
 
   return (
-    <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 px-4 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
       <nav
         aria-label="Main"
-        className="bu-glass pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[28px] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_18px_50px_rgba(11,23,51,0.14)]"
+        className="bu-glass pointer-events-auto mx-auto flex max-w-md items-center gap-0.5 rounded-full p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_14px_40px_rgba(11,23,51,0.12)]"
       >
         {tabs.map((tab) => {
-          const active = isActiveTab(tab, currentPage)
+          const active = isActiveTab(tab, currentPage, tipFlow)
           const Icon = tab.Icon
           return (
             <button
@@ -83,26 +94,22 @@ export default function Navigation({ currentPage, onNavigate, mode = 'user' }: N
               onClick={() => onNavigate(tab.id)}
               aria-label={tab.label}
               aria-current={active ? 'page' : undefined}
-              className={`bu-nav-btn group relative flex h-12 items-center justify-center overflow-hidden rounded-full transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              className={`bu-nav-btn group relative flex h-11 items-center justify-center overflow-hidden rounded-full transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                 active
-                  ? 'bu-nav-active flex-[1.35]'
-                  : 'flex-1 text-neutral-500 hover:bg-white/50 hover:text-[color:var(--bu-navy)]'
+                  ? 'bu-nav-active min-w-[5.5rem] flex-[1.2] px-3'
+                  : 'flex-1 text-neutral-500 hover:bg-white/55 hover:text-[color:var(--bu-navy)]'
               }`}
             >
-              <span
-                className={`flex items-center gap-2 transition-transform duration-300 ${
-                  active ? 'scale-100' : 'scale-100 group-active:scale-95'
-                }`}
-              >
+              <span className="flex items-center gap-1.5">
                 <Icon
-                  className={`h-[18px] w-[18px] shrink-0 transition-transform duration-300 ${
-                    active ? 'scale-110' : ''
+                  className={`h-[17px] w-[17px] shrink-0 transition-transform duration-300 ${
+                    active ? 'scale-105' : 'group-active:scale-95'
                   }`}
-                  strokeWidth={active ? 2.4 : 2}
+                  strokeWidth={active ? 2.35 : 2}
                 />
                 <span
                   className={`overflow-hidden whitespace-nowrap text-[11px] font-semibold tracking-wide transition-all duration-300 ${
-                    active ? 'max-w-[4.5rem] opacity-100' : 'max-w-0 opacity-0'
+                    active ? 'max-w-[3.25rem] opacity-100' : 'max-w-0 opacity-0'
                   }`}
                 >
                   {tab.label}

@@ -164,6 +164,29 @@ export function nairaToKobo(naira: number): number {
   return Math.round(naira * 100)
 }
 
+/** Refund a successful charge (e.g. mistaken settlement “top-up” via checkout). */
+export async function createPaystackRefund(input: {
+  reference?: string
+  transaction?: number | string
+  amountKobo?: number
+  merchantNote?: string
+}): Promise<{
+  id: number
+  status: string
+  amount: number
+  transaction: { reference?: string; id?: number }
+}> {
+  const body: Record<string, unknown> = {}
+  if (input.reference) body.transaction = input.reference
+  else if (input.transaction != null) body.transaction = input.transaction
+  if (typeof input.amountKobo === 'number' && input.amountKobo > 0) body.amount = input.amountKobo
+  if (input.merchantNote) body.merchant_note = input.merchantNote
+  return paystackFetch('/refund', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export type PaystackCustomer = {
   id: number
   customer_code: string
@@ -372,6 +395,10 @@ export type AdminPaystackSnapshot = {
 }
 
 let balanceCache: { at: number; value: AdminPaystackSnapshot } | null = null
+
+export function clearPaystackBalanceCache() {
+  balanceCache = null
+}
 
 export async function getPaystackBalances(): Promise<PaystackBalanceRow[]> {
   const data = await paystackFetch<

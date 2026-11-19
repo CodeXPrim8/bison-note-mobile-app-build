@@ -584,155 +584,236 @@ export default function SendBU({
   return (
     <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
       {step === 'tip-scan' && (
-        <>
-          <div className="px-4">
-            {initialIntent !== 'tip' ? (
-              <div className="mb-4">
-                <Button
-                  onClick={() => setStep('search')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  ← Back
-                </Button>
-              </div>
-            ) : null}
-            <h2 className="text-xl font-bold mb-4">Give Tip</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Scan the recipient's QR code to send a tip instantly. Perfect for performers, and gifters - digital instead of cash!
+        <div className="space-y-4 px-4">
+          {initialIntent !== 'tip' ? (
+            <button
+              type="button"
+              onClick={() => setStep('search')}
+              className="bu-press inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-white/70 hover:text-neutral-950"
+            >
+              ← Back
+            </button>
+          ) : null}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8b5cf6]">Instant tip</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[color:var(--bu-navy)]">Give Tip</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">
+              Scan the recipient’s QR to tip instantly — performers, hosts, and gifters, digital instead of cash.
             </p>
-
-            <Card className="border-yellow-400/20 bg-yellow-400/5 p-6 mb-4 space-y-4">
-              {cameraActive ? (
-                <TicketQrScanner
-                  readerId="bu-tip-reader"
-                  active={cameraActive}
-                  onScan={handleTipScan}
-                />
-              ) : (
-                <div className="flex flex-col items-center">
-                  <QrCode className="h-24 w-24 text-yellow-400/30 mb-3" />
-                  <p className="text-xs text-muted-foreground mb-3">Point the camera at a live receive-ɃU QR</p>
-                </div>
-              )}
-              <Button
-                onClick={() => setCameraActive((open) => !open)}
-                className="w-full bg-yellow-400 text-yellow-900 hover:bg-yellow-400/90"
-              >
-                {cameraActive ? 'Stop scanner' : 'Scan QR Code'}
-              </Button>
-              <Input
-                placeholder="Or paste receive QR payload"
-                value={pastedQr}
-                onChange={(e) => setPastedQr(e.target.value)}
-                className="bg-secondary text-foreground placeholder:text-muted-foreground"
-              />
-              <Button variant="outline" className="w-full" onClick={() => handleTipScan(pastedQr)}>
-                Load recipient
-              </Button>
-              {message && <p className="text-sm text-destructive">{message}</p>}
-            </Card>
-
-            <Card className="border-border/50 bg-card/50 p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-muted-foreground">
-                  <p className="font-semibold mb-1">How it works:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>You enter tip amount</li>
-                    <li>Recipient shows their QR code</li>
-                    <li>Tip is sent instantly</li>
-                  </ul>
-                </div>
-              </div>
-            </Card>
           </div>
-        </>
+
+          <div
+            className="space-y-4 overflow-hidden rounded-[28px] p-5"
+            style={{
+              background: 'linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%)',
+              border: '1px solid rgba(47,123,255,0.16)',
+              boxShadow: '0 18px 40px rgba(47,123,255,0.1), inset 0 1px 0 rgba(255,255,255,1)',
+            }}
+          >
+            {cameraActive ? (
+              <div className="overflow-hidden rounded-2xl ring-1 ring-[#2f7bff]/25">
+                <TicketQrScanner readerId="bu-tip-reader" active={cameraActive} onScan={handleTipScan} />
+              </div>
+            ) : (
+              <div
+                className="relative mx-auto flex aspect-square w-full max-w-[220px] flex-col items-center justify-center overflow-hidden rounded-[24px]"
+                style={{
+                  background:
+                    'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
+                  border: '1.5px dashed rgba(47,123,255,0.35)',
+                }}
+              >
+                <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
+                <p className="relative mt-3 px-4 text-center text-xs text-neutral-500">
+                  Point the camera at a live receive-ɃU QR
+                </p>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setCameraActive((open) => !open)}
+              className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white"
+              style={{
+                background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)',
+                boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
+              }}
+            >
+              {cameraActive ? 'Stop scanner' : 'Scan QR Code'}
+            </button>
+            <div className="relative flex items-center gap-3 py-0.5">
+              <div className="h-px flex-1 bg-neutral-200/80" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">or paste</span>
+              <div className="h-px flex-1 bg-neutral-200/80" />
+            </div>
+            <Input
+              placeholder="Or paste receive QR payload"
+              value={pastedQr}
+              onChange={(e) => setPastedQr(e.target.value)}
+              className="h-12 rounded-2xl border-white/70 bg-white/70 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-muted-foreground focus-visible:border-[#2f7bff]/40 focus-visible:ring-[#2f7bff]/20"
+            />
+            <button
+              type="button"
+              onClick={() => handleTipScan(pastedQr)}
+              className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-[color:var(--bu-navy)]"
+              style={{
+                background: 'rgba(255,255,255,0.9)',
+                border: '1px solid rgba(47,123,255,0.2)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,1)',
+              }}
+            >
+              Load recipient
+            </button>
+            {message ? <p className="text-sm text-destructive">{message}</p> : null}
+          </div>
+
+          <div
+            className="rounded-[24px] p-4"
+            style={{
+              background: 'linear-gradient(165deg, rgba(255,255,255,0.95), rgba(239,244,255,0.9))',
+              border: '1px solid rgba(47,123,255,0.14)',
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+                style={{ background: 'linear-gradient(120deg, #2f7bff, #8b5cf6)' }}
+              >
+                <AlertCircle className="h-4 w-4" />
+              </span>
+              <div className="text-sm text-neutral-600">
+                <p className="font-semibold text-[color:var(--bu-navy)]">How it works</p>
+                <ul className="mt-1.5 space-y-1 text-neutral-500">
+                  <li>· Recipient shows their QR code</li>
+                  <li>· You scan and enter a tip amount</li>
+                  <li>· Tip lands in their wallet instantly</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {step === 'tip-confirm' && scannedQRData && (
-        <>
-          <div className="px-4">
-            <div className="mb-4">
-              <Button
-                onClick={() => {
-                  setStep('tip-scan')
-                  setScannedQRData(null)
-                  setTipAmount('')
-                }}
-                variant="outline"
-                className="w-full"
-              >
-                ← Back
-              </Button>
+        <div className="space-y-4 px-4">
+          <button
+            type="button"
+            onClick={() => {
+              setStep('tip-scan')
+              setScannedQRData(null)
+              setTipAmount('')
+            }}
+            className="bu-press inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-white/70 hover:text-neutral-950"
+          >
+            ← Back
+          </button>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8b5cf6]">Confirm</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[color:var(--bu-navy)]">Confirm Tip</h2>
+          </div>
+
+          <div
+            className="flex items-center gap-3 rounded-[24px] p-4"
+            style={{
+              background: 'linear-gradient(120deg, rgba(47,123,255,0.12), rgba(139,92,246,0.12))',
+              border: '1px solid rgba(47,123,255,0.2)',
+            }}
+          >
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+              style={{ background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)' }}
+            >
+              <Sparkles className="h-7 w-7" />
             </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate font-semibold text-[color:var(--bu-navy)]">{scannedQRData.username}</h3>
+              <p className="mt-0.5 text-sm text-neutral-500">QR scanned — ready to tip</p>
+            </div>
+          </div>
 
-            <h2 className="text-xl font-bold mb-4">Confirm Tip</h2>
-
-            <Card className="border-yellow-400/20 bg-yellow-400/5 p-4 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-yellow-400/20">
-                  <Sparkles className="h-8 w-8 text-yellow-400" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold">{scannedQRData.username}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">QR Code scanned successfully</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="border-primary/20 space-y-4 bg-card p-6">
-              <div>
-                <label className="text-sm font-semibold">Tip Amount (Ƀ)</label>
-                <Input
-                  type="number"
-                  min={BU_MIN_SPRAY}
-                  step="1"
-                  placeholder={`Minimum ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`}
-                  value={tipAmount}
-                  onChange={(e) => setTipAmount(e.target.value)}
-                  className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {BU_SPRAY_NOTES.map((note) => (
-                    <Button
+          <div
+            className="space-y-4 rounded-[28px] p-5"
+            style={{
+              background: 'linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%)',
+              border: '1px solid rgba(47,123,255,0.16)',
+              boxShadow: '0 18px 40px rgba(47,123,255,0.08), inset 0 1px 0 rgba(255,255,255,1)',
+            }}
+          >
+            <div>
+              <label className="text-sm font-semibold text-[color:var(--bu-navy)]">Tip Amount (Ƀ)</label>
+              <Input
+                type="number"
+                min={BU_MIN_SPRAY}
+                step="1"
+                placeholder={`Minimum ${BU_MIN_SPRAY.toLocaleString('en-NG')} ɃU`}
+                value={tipAmount}
+                onChange={(e) => setTipAmount(e.target.value)}
+                className="mt-2 h-12 rounded-2xl border-white/70 bg-white/70 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-muted-foreground focus-visible:border-[#2f7bff]/40 focus-visible:ring-[#2f7bff]/20"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {BU_SPRAY_NOTES.map((note) => {
+                  const selected = tipAmount === String(note)
+                  return (
+                    <button
                       key={note}
                       type="button"
-                      size="sm"
-                      variant={tipAmount === String(note) ? 'default' : 'outline'}
                       onClick={() => setTipAmount(String(note))}
+                      className="bu-press rounded-full px-3 py-1.5 text-xs font-semibold"
+                      style={
+                        selected
+                          ? {
+                              background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)',
+                              color: '#fff',
+                              boxShadow: '0 8px 18px rgba(47,123,255,0.28)',
+                            }
+                          : {
+                              background: 'rgba(255,255,255,0.9)',
+                              border: '1px solid rgba(47,123,255,0.2)',
+                              color: 'var(--bu-navy)',
+                            }
+                      }
                     >
                       Ƀ {note.toLocaleString('en-NG')}
-                    </Button>
-                  ))}
-                </div>
-                {tipAmount && !isNaN(Number(tipAmount)) && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Equivalent: ₦{formatNairaPlain(nairaFromBu(Number(tipAmount)))}
-                  </p>
-                )}
+                    </button>
+                  )
+                })}
               </div>
+              {tipAmount && !isNaN(Number(tipAmount)) ? (
+                <p className="mt-1 text-xs text-neutral-500">
+                  Equivalent: ₦{formatNairaPlain(nairaFromBu(Number(tipAmount)))}
+                </p>
+              ) : null}
+            </div>
 
-              <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
-                    Tip will be sent instantly to {scannedQRData.username}'s wallet. This is a peer-to-peer tip transfer.
-                  </p>
-                </div>
+            <div
+              className="rounded-2xl p-3"
+              style={{
+                background: 'rgba(47,123,255,0.06)',
+                border: '1px solid rgba(47,123,255,0.14)',
+              }}
+            >
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#2f7bff]" />
+                <p className="text-xs text-neutral-600">
+                  Tip will be sent instantly to {scannedQRData.username}&apos;s wallet. Peer-to-peer — no cash needed.
+                </p>
               </div>
+            </div>
 
-              {message && <p className="text-sm text-destructive">{message}</p>}
-              <Button
-                onClick={openTipPin}
-                disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) + 1e-9 < BU_MIN_SPRAY}
-                className="w-full bg-yellow-400 py-3 text-yellow-900 hover:bg-yellow-400/90"
-              >
-                {busy ? 'Sending…' : 'Give Tip'}
-              </Button>
-            </Card>
+            {message ? <p className="text-sm text-destructive">{message}</p> : null}
+            <button
+              type="button"
+              onClick={openTipPin}
+              disabled={busy || !tipAmount || isNaN(Number(tipAmount)) || Number(tipAmount) + 1e-9 < BU_MIN_SPRAY}
+              className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white disabled:opacity-50"
+              style={{
+                background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)',
+                boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
+              }}
+            >
+              {busy ? 'Sending…' : 'Give Tip'}
+            </button>
           </div>
-        </>
+        </div>
       )}
 
       {step === 'search' && (

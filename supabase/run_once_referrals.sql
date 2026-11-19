@@ -12,7 +12,7 @@ create table if not exists public.bu_referrals (
   referee_id uuid not null unique,
   code text not null,
   reward_bu numeric not null default 1000,
-  status text not null default 'paid',
+  status text not null default 'pending',
   created_at timestamptz not null default now()
 );
 
@@ -21,3 +21,6 @@ create index if not exists bu_referrals_referrer_idx on public.bu_referrals (ref
 
 alter table public.bu_referral_codes enable row level security;
 alter table public.bu_referrals enable row level security;
+
+-- Existing installs: new referrals stay pending until friend funds/spends Ƀ3,000.
+alter table public.bu_referrals alter column status set default 'pending';

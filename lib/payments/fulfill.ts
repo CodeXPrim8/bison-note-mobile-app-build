@@ -59,6 +59,24 @@ export async function fulfillSuccessfulPayment(reference: string): Promise<{
 
   const meta = payment.metadata ?? {}
   const sprayBu = Number(meta.spray_bu_amount ?? 0)
+  const metaKind = String(meta.kind ?? payment.kind ?? '').toLowerCase()
+
+  // Admin Paystack settlement funding — money stays in Transfers balance, no wallet credit.
+  if (metaKind === 'settlement_topup') {
+    const { data: updated } = await admin
+      .from('payments')
+      .update({ status: 'success', fulfilled_at: new Date().toISOString() })
+      .eq('id', payment.id)
+      .select('*')
+      .single()
+    try {
+      const { clearPaystackBalanceCache } = await import('@/lib/payments/paystack')
+      clearPaystackBalanceCache()
+    } catch {
+      /* ignore */
+    }
+    return { payment: updated as Payment, tickets: [] }
+  }
 
   const depositUserId =
     payment.user_id || (typeof meta.user_id === 'string' ? meta.user_id : null)

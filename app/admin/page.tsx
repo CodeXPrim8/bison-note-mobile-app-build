@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Users, Wallet, Ticket, Landmark, TrendingUp, Banknote } from 'lucide-react'
+import { Users, Wallet, Ticket, Landmark, TrendingUp, Banknote, TrendingDown } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
@@ -34,6 +34,9 @@ type Overview = {
     organiser_naira: number
     affiliate_naira: number
     ticket_naira: number
+    earned: number
+    costs: number
+    net: number
   }
   series: {
     days: string[]
@@ -42,6 +45,9 @@ type Overview = {
     tickets: number[]
     organiser: number[]
     affiliate: number[]
+    earned: number[]
+    costs: number[]
+    net: number[]
   }
 }
 
@@ -51,7 +57,7 @@ const LINKS = [
   { href: '/admin/withdrawals', label: 'Withdrawals', hint: 'Approve, reject, auto or manual' },
   { href: '/admin/ads', label: 'Adverts', hint: 'App and website placements' },
   { href: '/admin/rates', label: 'ɃU rate', hint: 'Raise or cut ɃU to naira' },
-  { href: '/admin/money', label: 'Money', hint: 'Circulation, tickets, wallets' },
+  { href: '/admin/money', label: 'Money', hint: 'Making, losing, circulation' },
 ]
 
 export default function SuperAdminPage() {
@@ -75,6 +81,12 @@ export default function SuperAdminPage() {
 
   if (!data) return <p className="text-muted-foreground">Loading command center…</p>
 
+  const earned = data.totals.earned ?? 0
+  const costs = data.totals.costs ?? 0
+  const net = data.totals.net ?? earned - costs
+  const earnedSeries = data.series.earned ?? []
+  const costsSeries = data.series.costs ?? []
+
   const kpis = [
     { label: 'Money in circulation', value: formatNaira(data.totals.circulation), hint: `${Math.round(data.totals.circulation_bu).toLocaleString()} ɃU`, icon: Wallet },
     {
@@ -83,9 +95,14 @@ export default function SuperAdminPage() {
       hint: data.paystack?.error ?? 'Live Transfers wallet',
       icon: Banknote,
     },
-    { label: 'Users', value: data.totals.users.toLocaleString(), hint: `${data.totals.suspended} suspended`, icon: Users },
-    { label: 'Ticket volume', value: formatNaira(data.totals.ticket_naira), hint: 'Organiser + affiliate credits', icon: Ticket },
-    { label: 'Pending payouts', value: String(data.totals.pending_withdrawals), hint: formatNaira(data.totals.pending_naira), icon: Landmark },
+    { label: 'Making (14d)', value: formatNaira(earned), hint: 'Fees · spread · ticket take', icon: TrendingUp },
+    { label: 'Losing (14d)', value: formatNaira(costs), hint: 'Paystack transfer + stamp', icon: TrendingDown },
+    {
+      label: 'Net P&L (14d)',
+      value: formatNaira(net),
+      hint: net >= 0 ? 'Ahead after costs' : 'Behind after costs',
+      icon: Landmark,
+    },
   ]
 
   return (
@@ -123,27 +140,50 @@ export default function SuperAdminPage() {
         <Card className="border-white/10 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Deposits vs withdrawals</p>
-              <h2 className="text-lg font-semibold">Last 14 days</h2>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Making vs losing</p>
+              <h2 className="text-lg font-semibold">Platform P&L · last 14 days</h2>
             </div>
             <TrendingUp className="h-4 w-4 text-emerald-300" />
+          </div>
+          <div className="mt-4">
+            <AreaChart
+              points={earnedSeries.length ? earnedSeries : [0]}
+              secondary={costsSeries.length ? costsSeries : [0]}
+              accent="#34d399"
+              secondaryAccent="#f43f5e"
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Green = making (fees & spread) · Rose = losing (Paystack costs) · Net {formatNaira(net)}
+          </p>
+        </Card>
+        <Card className="border-white/10 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Deposits vs withdrawals</p>
+              <h2 className="text-lg font-semibold">Cash movement · last 14 days</h2>
+            </div>
+            <Users className="h-4 w-4 text-amber-300" />
           </div>
           <div className="mt-4">
             <AreaChart points={data.series.deposits} secondary={data.series.withdrawals} accent="#34d399" secondaryAccent="#f43f5e" />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Green = deposits · Rose = withdrawals</p>
         </Card>
-        <Card className="border-white/10 p-5">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">Ticket split</p>
-          <h2 className="text-lg font-semibold">Organiser vs affiliate</h2>
-          <div className="mt-4">
-            <AreaChart points={data.series.organiser} secondary={data.series.affiliate} accent="#f59e0b" secondaryAccent="#34d399" />
-          </div>
-          <div className="mt-4">
-            <BarChart values={data.series.tickets} accent="#f59e0b" />
-          </div>
-        </Card>
       </div>
+
+      <Card className="border-white/10 p-5">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Ticket split</p>
+        <h2 className="text-lg font-semibold">Organiser vs affiliate</h2>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <AreaChart points={data.series.organiser} secondary={data.series.affiliate} accent="#f59e0b" secondaryAccent="#34d399" />
+          <BarChart values={data.series.tickets} accent="#f59e0b" />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Volume {formatNaira(data.totals.ticket_naira)} · Users {data.totals.users.toLocaleString()} · Pending payouts{' '}
+          {formatNaira(data.totals.pending_naira)}
+        </p>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="p-5">

@@ -1,4 +1,4 @@
--- Peer referral codes + signup rewards (Ƀ1,000 to referrer).
+-- Peer referral codes + signup rewards (Ƀ1,000 to referrer after friend funds/spends Ƀ3,000).
 
 create table if not exists public.bu_referral_codes (
   user_id uuid primary key,
@@ -12,7 +12,7 @@ create table if not exists public.bu_referrals (
   referee_id uuid not null unique,
   code text not null,
   reward_bu numeric not null default 1000,
-  status text not null default 'paid',
+  status text not null default 'pending',
   created_at timestamptz not null default now()
 );
 

@@ -176,57 +176,114 @@ export default function SprayingQR() {
     }
   }
 
+  const brandGradient = 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)'
+
   return (
-    <div className="space-y-6 pb-24 pt-4">
+    <div className="space-y-6 pb-28 pt-2">
       {mode === 'scan' && (
-        <>
-          <div className="px-4">
-            <h2 className="text-xl font-bold mb-4">Scan Event QR Code</h2>
-            <p className="text-sm text-muted-foreground mb-4">
+        <div className="space-y-4 px-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8b5cf6]" data-spray-ui="v2">
+              Live spray
+            </p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[color:var(--bu-navy)]">
+              Scan Event QR Code
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">
               Scan the live event QR, or paste the event ID, to send ɃU to the celebrant.
             </p>
+          </div>
 
-            <Card className="border-primary/20 bg-card p-6 mb-4">
-              {!cameraActive ? (
-                <div className="space-y-4">
-                  <div className="flex justify-center">
-                    <div className="rounded-lg bg-foreground/5 p-8 border-2 border-dashed border-primary/30">
-                      <QrCode className="h-24 w-24 text-primary/50 mx-auto" />
-                    </div>
-                  </div>
-                  <Button
-                    onClick={() => setCameraActive(true)}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    Start QR Scanner
-                  </Button>
-                  <Input
-                    placeholder="Paste event ID or QR payload"
-                    value={pasted}
-                    onChange={(e) => setPasted(e.target.value)}
-                    className="bg-secondary text-foreground placeholder:text-muted-foreground"
+          <div
+            className="overflow-hidden rounded-[28px] p-5"
+            style={{
+              background: 'linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%)',
+              border: '1px solid rgba(47,123,255,0.16)',
+              boxShadow:
+                '0 18px 40px rgba(47,123,255,0.1), inset 0 1px 0 rgba(255,255,255,1)',
+            }}
+          >
+            {!cameraActive ? (
+              <div className="space-y-4">
+                <div
+                  className="relative mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center overflow-hidden rounded-[24px]"
+                  style={{
+                    background:
+                      'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
+                    border: '1.5px dashed rgba(47,123,255,0.35)',
+                  }}
+                >
+                  <div
+                    className="absolute inset-3 rounded-[18px]"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, rgba(47,123,255,0.08), rgba(139,92,246,0.08))',
+                    }}
                   />
-                  <Button variant="outline" className="w-full" onClick={() => void loadEvent(pasted)}>
-                    Load event
-                  </Button>
-                  {message && <p className="text-sm text-destructive">{message}</p>}
+                  <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
                 </div>
-              ) : (
-                <div className="space-y-4">
+
+                <button
+                  type="button"
+                  onClick={() => setCameraActive(true)}
+                  className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white"
+                  style={{
+                    background: brandGradient,
+                    boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
+                  }}
+                >
+                  Start QR Scanner
+                </button>
+
+                <div className="relative flex items-center gap-3 py-0.5">
+                  <div className="h-px flex-1 bg-neutral-200/80" />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                    or paste
+                  </span>
+                  <div className="h-px flex-1 bg-neutral-200/80" />
+                </div>
+
+                <Input
+                  placeholder="Paste event ID or QR payload"
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  className="h-12 rounded-2xl border-white/70 bg-white/70 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-muted-foreground focus-visible:border-[#2f7bff]/40 focus-visible:ring-[#2f7bff]/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => void loadEvent(pasted)}
+                  className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-[color:var(--bu-navy)]"
+                  style={{
+                    background: 'rgba(255,255,255,0.9)',
+                    border: '1px solid rgba(47,123,255,0.2)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,1)',
+                  }}
+                >
+                  Load event
+                </button>
+                {message ? <p className="text-sm text-destructive">{message}</p> : null}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="overflow-hidden rounded-2xl ring-1 ring-[#2f7bff]/25">
                   <TicketQrScanner
                     readerId="bu-spray-reader"
                     active={cameraActive}
                     onScan={(text) => void loadEvent(text)}
                   />
-                  <Button onClick={() => setCameraActive(false)} variant="outline" className="w-full">
-                    Cancel scanner
-                  </Button>
-                  {message && <p className="text-sm text-destructive">{message}</p>}
                 </div>
-              )}
-            </Card>
+                <button
+                  type="button"
+                  onClick={() => setCameraActive(false)}
+                  className="bu-press flex h-11 w-full items-center justify-center rounded-2xl border border-neutral-200 bg-white text-sm font-semibold text-neutral-700"
+                >
+                  Cancel scanner
+                </button>
+                {message ? <p className="text-sm text-destructive">{message}</p> : null}
+              </div>
+            )}
           </div>
-        </>
+        </div>
       )}
 
       {mode === 'details' && eventDetails && (

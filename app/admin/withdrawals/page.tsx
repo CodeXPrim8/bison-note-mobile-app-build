@@ -111,9 +111,19 @@ export default function AdminWithdrawalsPage() {
             .filter((row) => row.status === 'pending' || row.status === 'payout_failed' || row.status === 'approved')
             .reduce((sum, row) => sum + Number(row.naira || 0), 0) > paystack.naira && (
             <p className="mt-2 text-xs text-destructive">
-              Pending payouts exceed this balance. Top up settlement before paying.
+              Pending payouts exceed this balance. Fund Transfers via Paystack Dashboard → Topup.
             </p>
           )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button asChild disabled={!paystackReady}>
+            <a href="https://dashboard.paystack.com/#/balance" target="_blank" rel="noreferrer">
+              Top up on Paystack
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <a href="/admin/money">Money</a>
+          </Button>
+        </div>
       </Card>
       {error && (
         <div className="flex items-start justify-between gap-3">

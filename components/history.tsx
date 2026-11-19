@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { History as HistoryIcon, RefreshCw, Ticket } from 'lucide-react'
+import { Download, FileText, History as HistoryIcon, Mail, RefreshCw, Ticket } from 'lucide-react'
 import { isEventPast } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatNairaPlain } from '@/lib/bu-rate'
@@ -19,6 +19,22 @@ import {
   type HistoryBucket,
   type WalletDirection,
 } from '@/lib/wallet/direction'
+import {
+  downloadBlob,
+  statementCsvBlob,
+  statementFileStamp,
+  statementPdfBlob,
+  summarizeStatement,
+  type StatementLine,
+} from '@/lib/wallet/statement'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 
 interface Transaction {
   id: string
@@ -182,7 +198,7 @@ function normalizeRows(rows: Transaction[]) {
 }
 
 export default function History() {
-  const { userId, displayName, refreshWallet } = useAccount()
+  const { userId, displayName, nairaBalance, refreshWallet } = useAccount()
   const [tab, setTab] = useState<'activity' | 'events'>('activity')
   const [filter, setFilter] = useState<'all' | HistoryBucket>('all')
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -191,6 +207,11 @@ export default function History() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openInvoice, setOpenInvoice] = useState<BuInvoice | null>(null)
+  const [statementOpen, setStatementOpen] = useState(false)
+  const [statementEmail, setStatementEmail] = useState('')
+  const [statementBusy, setStatementBusy] = useState<'pdf' | 'csv' | 'email' | null>(null)
+  const [statementMessage, setStatementMessage] = useState<string | null>(null)
+  const [statementOk, setStatementOk] = useState(false)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     bindAccountSnapshots(userId || null)
@@ -269,6 +290,84 @@ export default function History() {
     .slice()
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 
+  function statementLinesFromActivity(): StatementLine[] {
+    return filteredTransactions.map((tx) => ({
+      when: tx.date,
+      createdAt: tx.createdAt,
+      description: activityTitle(tx),
+      direction: tx.direction,
+      amountNaira: tx.amount,
+      status: tx.status,
+      reference: tx.reference,
+    }))
+  }
+
+  async function openStatement() {
+    setStatementMessage(null)
+    setStatementOk(false)
+    setStatementOpen(true)
+    try {
+      const res = await fetch('/api/me', { credentials: 'include', cache: 'no-store' })
+      const json = await res.json()
+      const email = String(json.data?.email || json.data?.user?.email || json.data?.profile?.email || '')
+      if (email) setStatementEmail(email)
+    } catch {
+      // Keep whatever the user already typed.
+    }
+  }
+
+  function downloadStatement(kind: 'pdf' | 'csv') {
+    const lines = statementLinesFromActivity()
+    const account = { name: displayName || 'Bucks member', email: statementEmail || null }
+    // Closing = live wallet when viewing all activity; otherwise net of the filtered rows only.
+    const closing = filter === 'all' && typeof nairaBalance === 'number' ? nairaBalance : null
+    const summary = summarizeStatement(lines, closing)
+    const stamp = statementFileStamp()
+    setStatementBusy(kind)
+    try {
+      if (kind === 'pdf') {
+        downloadBlob(statementPdfBlob(account, lines, summary), `bucks-statement-${stamp}.pdf`)
+      } else {
+        downloadBlob(statementCsvBlob(account, lines, summary), `bucks-statement-${stamp}.csv`)
+      }
+      setStatementOk(true)
+      setStatementMessage(
+        lines.length
+          ? `Downloaded ${lines.length} transaction${lines.length === 1 ? '' : 's'} (${filter === 'all' ? 'all activity' : 'current filter'}).`
+          : 'Downloaded an empty statement for this filter.',
+      )
+    } finally {
+      setStatementBusy(null)
+    }
+  }
+
+  async function emailStatement() {
+    setStatementBusy('email')
+    setStatementMessage(null)
+    setStatementOk(false)
+    try {
+      const res = await fetch('/api/wallet/statement', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: statementEmail.trim() || undefined, limit: 100 }),
+      })
+      const json = await res.json()
+      if (!json.status) {
+        setStatementOk(false)
+        setStatementMessage(json.message || 'Could not email statement.')
+        return
+      }
+      setStatementOk(true)
+      setStatementMessage(json.message || `Statement sent to ${json.data?.to || statementEmail}`)
+    } catch {
+      setStatementOk(false)
+      setStatementMessage('Could not reach Bucks to email your statement.')
+    } finally {
+      setStatementBusy(null)
+    }
+  }
+
   return (
     <div className="pb-24 pt-2">
       <div className="border-b border-border/60 bg-background/95 px-4 pb-4 pt-2 backdrop-blur">
@@ -293,15 +392,27 @@ export default function History() {
               Events
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={refreshing}
-            className="inline-flex items-center gap-1 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-1.5">
+            {tab === 'activity' ? (
+              <button
+                type="button"
+                onClick={() => void openStatement()}
+                className="inline-flex items-center gap-1 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Statement
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {tab === 'activity' && (
@@ -398,6 +509,164 @@ export default function History() {
                 if (!open) setOpenInvoice(null)
               }}
             />
+
+            <Dialog
+              open={statementOpen}
+              onOpenChange={(open) => {
+                setStatementOpen(open)
+                if (!open) {
+                  setStatementMessage(null)
+                  setStatementOk(false)
+                }
+              }}
+            >
+              <DialogContent className="max-w-md rounded-[28px] border-white/70 bg-white p-0 text-neutral-950 sm:rounded-[28px]">
+                <div className="space-y-4 p-5">
+                  <DialogHeader className="space-y-1 text-left">
+                    <DialogTitle className="text-xl font-bold tracking-tight text-[color:var(--bu-navy)]">
+                      Statement of account
+                    </DialogTitle>
+                    <DialogDescription className="text-sm text-neutral-500">
+                      Download your wallet activity, or email a PDF to yourself. Uses the current filter (
+                      {filter === 'all' ? 'all activity' : FILTERS.find((f) => f.id === filter)?.label || filter}).
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {(() => {
+                    const preview = summarizeStatement(
+                      statementLinesFromActivity(),
+                      filter === 'all' && typeof nairaBalance === 'number' ? nairaBalance : null,
+                    )
+                    const fmt = (n: number) =>
+                      buFromNaira(n).toLocaleString('en-NG', { maximumFractionDigits: 2 })
+                    return (
+                      <div
+                        className="grid grid-cols-2 gap-2 rounded-[22px] p-3.5 text-sm"
+                        style={{
+                          background: 'linear-gradient(165deg, rgba(255,255,255,0.95), rgba(239,244,255,0.9))',
+                          border: '1px solid rgba(47,123,255,0.14)',
+                        }}
+                      >
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                            Opening
+                          </p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-[color:var(--bu-navy)]">
+                            Ƀ {fmt(preview.openingBalance)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                            Closing
+                          </p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-[color:var(--bu-navy)]">
+                            Ƀ {fmt(preview.closingBalance)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                            Money in
+                          </p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-emerald-700">
+                            +Ƀ {fmt(preview.totalIn)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                            Money out
+                          </p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-red-600">
+                            −Ƀ {fmt(preview.totalOut)}
+                          </p>
+                        </div>
+                        <div className="col-span-2 border-t border-neutral-200/80 pt-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                            Total turnover
+                          </p>
+                          <p className="mt-0.5 font-bold tabular-nums text-[color:var(--bu-navy)]">
+                            Ƀ {fmt(preview.turnover)}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(statementBusy)}
+                      onClick={() => downloadStatement('pdf')}
+                      className="bu-press flex h-11 items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold text-white disabled:opacity-50"
+                      style={{
+                        background: 'linear-gradient(160deg, #142a56, #0b1733)',
+                        boxShadow: '0 10px 22px rgba(11,23,51,0.22)',
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                      {statementBusy === 'pdf' ? 'Preparing…' : 'PDF'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(statementBusy)}
+                      onClick={() => downloadStatement('csv')}
+                      className="bu-press flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-neutral-200 bg-white text-sm font-semibold text-[color:var(--bu-navy)] disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      {statementBusy === 'csv' ? 'Preparing…' : 'CSV'}
+                    </button>
+                  </div>
+
+                  <div
+                    className="space-y-3 rounded-[22px] p-3.5"
+                    style={{
+                      background: 'linear-gradient(165deg, rgba(255,255,255,0.95), rgba(239,244,255,0.9))',
+                      border: '1px solid rgba(47,123,255,0.16)',
+                    }}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f7bff]">
+                      Email statement
+                    </p>
+                    <Input
+                      type="email"
+                      placeholder="you@email.com"
+                      value={statementEmail}
+                      onChange={(e) => setStatementEmail(e.target.value)}
+                      className="h-11 rounded-2xl border-white/70 bg-white/80"
+                    />
+                    <button
+                      type="button"
+                      disabled={Boolean(statementBusy)}
+                      onClick={() => void emailStatement()}
+                      className="bu-press flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold text-white disabled:opacity-50"
+                      style={{
+                        background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)',
+                        boxShadow: '0 12px 24px rgba(47,123,255,0.28)',
+                      }}
+                    >
+                      <Mail className="h-4 w-4" />
+                      {statementBusy === 'email' ? 'Sending…' : 'Send to email'}
+                    </button>
+                  </div>
+
+                  {statementMessage ? (
+                    <div
+                      className={
+                        statementOk
+                          ? 'rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-3 text-sm font-medium text-emerald-700'
+                          : 'rounded-2xl border border-destructive/25 bg-destructive/5 px-3.5 py-3 text-sm font-medium text-destructive'
+                      }
+                      role="status"
+                    >
+                      {statementMessage}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-neutral-400">
+                      PDF/CSV download uses what’s on this screen. Email pulls up to 100 recent transactions from your wallet.
+                    </p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           <div className="space-y-3">
