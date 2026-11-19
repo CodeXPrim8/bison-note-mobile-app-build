@@ -16,6 +16,7 @@ const patchSchema = z.object({
   role: z.enum(['guest', 'celebrant', 'vendor', 'merchant', 'organizer']).optional(),
   organizer: z.boolean().optional(),
   affiliate: z.boolean().optional(),
+  vendor: z.boolean().optional(),
   suspended: z.boolean().optional(),
   organizer_suspended: z.boolean().optional(),
   note: z.string().max(500).optional(),
@@ -83,13 +84,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
     if (body.account_name) updates.account_name = body.account_name.trim()
     if (body.email !== undefined) updates.email = body.email || null
     if (body.role) updates.role = body.role
-    if (body.phone) {
     if (body.role === 'vendor' || body.role === 'merchant') {
       await enableAccountRole(userId, 'vendor').catch(() => undefined)
     }
     if (body.role === 'organizer' || body.role === 'celebrant') {
       await enableAccountRole(userId, 'organizer').catch(() => undefined)
     }
+    if (body.phone) {
       const phone = normalizePhone(body.phone)
       if (!phone) throw new ApiError(400, 'INVALID_BU_ID', 'Enter a valid ɃU ID')
       updates.phone_number = phone
@@ -106,8 +107,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
     }
     if (body.organizer) await enableAccountRole(userId, 'organizer')
     if (body.affiliate) await enableAccountRole(userId, 'affiliate')
-    if (
     if (body.vendor !== undefined) await setAccountRoleFlag(userId, 'vendor', body.vendor)
+    if (
       body.suspended !== undefined ||
       body.organizer_suspended !== undefined ||
       body.note !== undefined
