@@ -2,7 +2,8 @@
 
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Heart, Zap } from 'lucide-react'
+import { Heart, Zap } from 'lucide-react'
+import { SprayCash } from '@/components/icons/spray-cash'
 
 interface OnboardingProps {
   onComplete: () => void
@@ -27,7 +28,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         <div className="space-y-4">
           <Card className="border-primary/20 bg-card/50 p-6 backdrop-blur">
             <div className="flex items-start gap-4">
-              <Sparkles className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+              <SprayCash className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
               <div className="text-left">
                 <h3 className="font-semibold">Spray Without Cash</h3>
                 <p className="text-sm text-muted-foreground">

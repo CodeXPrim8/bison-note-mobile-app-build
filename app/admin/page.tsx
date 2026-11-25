@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Users, Wallet, Ticket, Landmark, TrendingUp, Banknote, TrendingDown } from 'lucide-react'
+import { Users, Wallet, Landmark, TrendingUp, Banknote, TrendingDown, Activity } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
@@ -53,6 +53,7 @@ type Overview = {
 
 const LINKS = [
   { href: '/admin/users', label: 'Users', hint: 'Lookup, edit, suspend, delete' },
+  { href: '/admin/activity', label: 'Activity', hint: 'Who sends the most ɃU' },
   { href: '/admin/events', label: 'Events', hint: 'Unpublish parties, freeze organisers' },
   { href: '/admin/withdrawals', label: 'Withdrawals', hint: 'Approve, reject, auto or manual' },
   { href: '/admin/ads', label: 'Adverts', hint: 'App and website placements' },
@@ -60,14 +61,27 @@ const LINKS = [
   { href: '/admin/money', label: 'Money', hint: 'Making, losing, circulation' },
 ]
 
+type SenderPreview = {
+  user_id: string
+  name: string
+  phone: string | null
+  send_count: number
+  total_bu: number
+  active_days: number
+}
+
 export default function SuperAdminPage() {
   const [data, setData] = useState<Overview | null>(null)
+  const [senders, setSenders] = useState<SenderPreview[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     adminFetch<Overview>('/api/admin/overview')
       .then(setData)
       .catch((err: Error) => setError(err.message))
+    adminFetch<{ senders: SenderPreview[] }>('/api/admin/activity/senders?days=30&limit=5')
+      .then((payload) => setSenders(payload.senders ?? []))
+      .catch(() => setSenders([]))
   }, [])
 
   if (error && !data) {
@@ -183,6 +197,53 @@ export default function SuperAdminPage() {
           Volume {formatNaira(data.totals.ticket_naira)} · Users {data.totals.users.toLocaleString()} · Pending payouts{' '}
           {formatNaira(data.totals.pending_naira)}
         </p>
+      </Card>
+
+      <Card className="border-white/10 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Power users</p>
+            <h2 className="text-lg font-semibold">Top senders · last 30 days</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              People sending ɃU the most (transfers, tips, sprays) — not bank withdrawals.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/activity">
+              <Activity className="mr-2 h-4 w-4" />
+              Full ranking
+            </Link>
+          </Button>
+        </div>
+        {senders.length ? (
+          <div className="mt-4 divide-y divide-white/5">
+            {senders.map((row, index) => (
+              <Link
+                key={row.user_id}
+                href={`/admin/users/${row.user_id}`}
+                className="flex items-center justify-between gap-3 py-3 transition hover:text-amber-300"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    <span className="mr-2 font-mono text-xs text-muted-foreground">#{index + 1}</span>
+                    {row.name}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.phone || '—'} · {row.active_days} active day{row.active_days === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">{row.send_count} sends</p>
+                  <p className="text-xs text-muted-foreground">
+                    {row.total_bu.toLocaleString('en-NG', { maximumFractionDigits: 2 })} ɃU
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">No peer sends in the last 30 days yet.</p>
+        )}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">

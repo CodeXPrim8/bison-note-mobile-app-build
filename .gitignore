@@ -31,3 +31,17 @@ server-output.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capacitor / native build junk (keep android/ and ios/ project folders)
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+ios/App/Pods/
+ios/App/build/
+*.jks
+*.keystore
+!debug.keystore
+.vercel
+.env*

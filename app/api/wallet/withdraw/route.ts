@@ -3,14 +3,14 @@ import { randomUUID } from 'crypto'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
-import { getBuNairaValue, quoteWithdrawBu, WalletAmountError, BU_MIN_WITHDRAW } from '@/lib/bu-rate'
+import { getBuNairaValue, quoteWithdrawBu, roundMoney, WalletAmountError, BU_MIN_WITHDRAW } from '@/lib/bu-rate'
 import { getPlatformSettings, getUserControl } from '@/lib/admin/platform'
 import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { isPaystackConfigured } from '@/lib/env'
 import { NGN_BANKS, bankCodeFromName, displayBankName } from '@/lib/payments/ngn-banks'
-import { moveLiveWallet } from '@/lib/wallet/move'
+import { debitFaceThenCharge, moveLiveWallet } from '@/lib/wallet/move'
 import { pinSchema } from '@/lib/auth/pin'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
 import { resolveNuban } from '@/lib/payments/paystack'
@@ -208,13 +208,14 @@ export async function POST(request: Request) {
       kind: 'bank_send',
     }
 
-    // Debit face + fees from sender. Bank payout uses face only (quote.bankNaira / quote.naira).
-    await moveLiveWallet(db, {
+    // Send the bank amount first, then the charge. Refuse before either debit when both do not fit.
+    const sentDescription = remark ? `Sent to ${bankName} · ${remark}` : `Sent to ${bankName}`
+    await debitFaceThenCharge(db, {
       userId: liveId,
-      naira: quote.totalDebit,
-      direction: 'debit',
+      faceNaira: quote.bankNaira,
+      chargeNaira: roundMoney(quote.totalDebit - quote.bankNaira),
       type: 'withdrawal',
-      description: remark ? `Sent to ${bankName} · ${remark}` : `Sent to ${bankName}`,
+      faceDescription: sentDescription,
       metadata: meta,
     })
 

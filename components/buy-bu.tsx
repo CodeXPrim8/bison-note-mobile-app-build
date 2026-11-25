@@ -31,11 +31,14 @@ type CardStep = 'conversion' | 'checkout'
 type VirtualAccount = {
   bank_name: string | null
   bank_slug: string | null
-  account_number: string
+  account_number: string | null
   account_name: string | null
   currency: string
   active: boolean
+  provider?: string
   needs_brand_refresh?: boolean
+  needs_kyc?: boolean
+  upgrade_to_squad?: boolean
 }
 
 function formatNuban(accountNumber: string) {
@@ -59,6 +62,13 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
   const [vaError, setVaError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [syncNote, setSyncNote] = useState<string | null>(null)
+  const [kycBusy, setKycBusy] = useState(false)
+  const [kyc, setKyc] = useState<{ bvn: string; dob: string; gender: '1' | '2'; address: string }>({
+    bvn: '',
+    dob: '',
+    gender: '1',
+    address: '',
+  })
   const syncingRef = useRef(false)
   const buyRate = cardBuyRate()
 
@@ -88,6 +98,9 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
         }
         setVirtualAccount(json.data as VirtualAccount)
         setVaError(null)
+        if (json.data?.needs_kyc && !json.data?.account_number) {
+          setVaError(null)
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -180,6 +193,45 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
     }
   }
 
+  async function handleSquadKyc() {
+    const bvn = kyc.bvn.replace(/\D/g, '')
+    if (bvn.length !== 11) {
+      setVaError('Enter an 11-digit BVN')
+      return
+    }
+    if (!kyc.dob.trim() || !kyc.address.trim()) {
+      setVaError('Date of birth and address are required for bank transfer')
+      return
+    }
+    setKycBusy(true)
+    setVaError(null)
+    try {
+      const res = await fetch('/api/wallet/virtual-account', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kyc: {
+            bvn,
+            dob: kyc.dob.trim(),
+            gender: kyc.gender,
+            address: kyc.address.trim(),
+          },
+        }),
+      })
+      const json = await res.json()
+      if (!json.status) {
+        setVaError(json.message || 'Could not create Squad account')
+        return
+      }
+      setVirtualAccount(json.data as VirtualAccount)
+    } catch {
+      setVaError('Could not reach ɃU to create your bank account')
+    } finally {
+      setKycBusy(false)
+    }
+  }
+
   async function handleShareAccount() {
     if (!shareText) return
     try {
@@ -259,7 +311,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                 </div>
                 <p className="mt-3 text-center text-sm text-muted-foreground">Loading your Ƀucks account number…</p>
               </div>
-            ) : virtualAccount ? (
+            ) : virtualAccount?.account_number ? (
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bank</p>
@@ -279,6 +331,11 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                   Transfer any amount. Stay on this screen — we credit your ɃU as soon as the transfer lands.
                 </p>
                 {syncNote && <p className="text-sm font-semibold text-primary">{syncNote}</p>}
+                {virtualAccount.needs_kyc || virtualAccount.upgrade_to_squad ? (
+                  <p className="text-xs text-muted-foreground">
+                    Optional: verify BVN once to move onto the cheaper Squad bank-in rail.
+                  </p>
+                ) : null}
                 <div className="flex gap-2">
                   <Button type="button" className="flex-1" onClick={() => void handleCopyAccount()}>
                     {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
@@ -289,6 +346,65 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                     Share
                   </Button>
                 </div>
+              </div>
+            ) : virtualAccount?.needs_kyc ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold">One-time bank transfer setup</p>
+                <p className="text-xs text-muted-foreground">
+                  Squad requires BVN so your permanent funding account matches your identity. Name, phone, and date of
+                  birth must match BVN.
+                </p>
+                <Input
+                  inputMode="numeric"
+                  placeholder="BVN (11 digits)"
+                  value={kyc.bvn}
+                  onChange={(e) => setKyc((prev) => ({ ...prev, bvn: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+                />
+                <Input
+                  placeholder="Date of birth (DD/MM/YYYY)"
+                  value={kyc.dob}
+                  onChange={(e) => setKyc((prev) => ({ ...prev, dob: e.target.value }))}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={kyc.gender === '1' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setKyc((prev) => ({ ...prev, gender: '1' }))}
+                  >
+                    Male
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={kyc.gender === '2' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setKyc((prev) => ({ ...prev, gender: '2' }))}
+                  >
+                    Female
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Address"
+                  value={kyc.address}
+                  onChange={(e) => setKyc((prev) => ({ ...prev, address: e.target.value }))}
+                />
+                {vaError ? <p className="text-sm text-destructive">{vaError}</p> : null}
+                <Button type="button" className="w-full" disabled={kycBusy} onClick={() => void handleSquadKyc()}>
+                  {kycBusy ? 'Creating account…' : 'Create my funding account'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setFundMode('card')
+                    setStep('conversion')
+                  }}
+                >
+                  Fund with card instead
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">

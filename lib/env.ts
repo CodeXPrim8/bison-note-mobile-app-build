@@ -73,6 +73,43 @@ export function isPaystackConfigured(): boolean {
   return Boolean(optional('PAYSTACK_SECRET_KEY'))
 }
 
+/** Squad secret for virtual-account bank-in + webhook verification. */
+export function isSquadConfigured(): boolean {
+  return Boolean(optional('SQUAD_SECRET_KEY')?.trim())
+}
+
+export function getSquadSecret(): string {
+  const key = optional('SQUAD_SECRET_KEY')?.trim()
+  if (!key) throw new MissingEnvError('Missing SQUAD_SECRET_KEY')
+  return key
+}
+
+export function getSquadPublicKey(): string | undefined {
+  return optional('NEXT_PUBLIC_SQUAD_PUBLIC_KEY')?.trim()
+}
+
+/**
+ * Merchant GTBank NUBAN where Squad settles customer VA credits.
+ * Required to create permanent customer virtual accounts.
+ */
+export function getSquadBeneficiaryAccount(): string | undefined {
+  const digits = optional('SQUAD_BENEFICIARY_ACCOUNT')?.replace(/\D/g, '') ?? ''
+  return digits.length === 10 ? digits : undefined
+}
+
+/** Prefer Squad for bank-in when secret + beneficiary are set (Paystack remains for cards/payouts). */
+export function isSquadBankInEnabled(): boolean {
+  return isSquadConfigured() && Boolean(getSquadBeneficiaryAccount())
+}
+
+export function getSquadApiBase(): string {
+  const key = optional('SQUAD_SECRET_KEY')?.trim() ?? ''
+  if (key.startsWith('sandbox_')) return 'https://sandbox-api-d.squadco.com'
+  const explicit = optional('SQUAD_API_BASE')?.trim()
+  if (explicit) return explicit.replace(/\/$/, '')
+  return 'https://api-d.squadco.com'
+}
+
 function paystackSecretKind(key: string): 'live' | 'test' | 'unknown' {
   if (key.startsWith('sk_live_')) return 'live'
   if (key.startsWith('sk_test_')) return 'test'

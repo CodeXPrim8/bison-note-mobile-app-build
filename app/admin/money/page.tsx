@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { AreaChart, BarChart } from '@/components/web/area-chart'
 import { formatNaira } from '@/lib/money'
 import { adminFetch } from '@/components/admin/api'
@@ -37,10 +38,22 @@ type Overview = {
   }
 }
 
+type ResetResult = {
+  cancelled_withdrawals: number
+  wallets_zeroed: number
+  naira_cleared: number
+  failures: Array<{ user_id: string; error: string }>
+}
+
 export default function AdminMoneyPage() {
   const [data, setData] = useState<Overview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [adminPin, setAdminPin] = useState('')
+  const [confirmText, setConfirmText] = useState('')
+  const [resetResult, setResetResult] = useState<ResetResult | null>(null)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
 
   async function load() {
     const overview = await adminFetch<Overview>('/api/admin/overview')
@@ -65,6 +78,34 @@ export default function AdminMoneyPage() {
       setError((err as Error).message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function resetCirculation() {
+    try {
+      setResetBusy(true)
+      setError(null)
+      setResetMessage(null)
+      setResetResult(null)
+      const result = await adminFetch<ResetResult>('/api/admin/money/reset-circulation', {
+        method: 'POST',
+        body: JSON.stringify({ admin_pin: adminPin, confirm: confirmText.trim().toUpperCase() }),
+      })
+      setResetResult(result)
+      setResetMessage(
+        `Cleared ${formatNaira(result.naira_cleared)} from ${result.wallets_zeroed} wallet${
+          result.wallets_zeroed === 1 ? '' : 's'
+        }. Cancelled ${result.cancelled_withdrawals} open withdrawal${
+          result.cancelled_withdrawals === 1 ? '' : 's'
+        }.`,
+      )
+      setAdminPin('')
+      setConfirmText('')
+      await load()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setResetBusy(false)
     }
   }
 
@@ -109,6 +150,54 @@ export default function AdminMoneyPage() {
               {busy ? 'Refreshing…' : 'Refresh'}
             </Button>
           </div>
+        </div>
+      </Card>
+
+      <Card className="border-rose-400/30 bg-rose-500/5 p-5">
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-rose-300">Danger zone</p>
+            <h2 className="mt-1 text-lg font-semibold">Zero all balances</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cancels open withdrawals without refunding, then sets every user wallet to ₦0 so money in circulation is
+              clean. Use this before funding settlement for real payouts. Irreversible.
+            </p>
+            <p className="mt-2 text-sm">
+              Current circulation: <span className="font-semibold">{formatNaira(data.totals.circulation)}</span>
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Your Super Admin PIN"
+              value={adminPin}
+              onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="max-w-[200px]"
+            />
+            <Input
+              placeholder='Type ZERO to confirm'
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              className="max-w-[220px]"
+              autoComplete="off"
+            />
+            <Button
+              variant="destructive"
+              disabled={resetBusy || adminPin.length < 4 || confirmText.trim().toUpperCase() !== 'ZERO'}
+              onClick={() => void resetCirculation()}
+            >
+              {resetBusy ? 'Zeroing…' : 'Zero circulation'}
+            </Button>
+          </div>
+          {resetMessage ? <p className="text-sm text-emerald-300">{resetMessage}</p> : null}
+          {resetResult?.failures?.length ? (
+            <p className="text-xs text-destructive">
+              {resetResult.failures.length} wallet{resetResult.failures.length === 1 ? '' : 's'} failed — check audit /
+              retry.
+            </p>
+          ) : null}
         </div>
       </Card>
 

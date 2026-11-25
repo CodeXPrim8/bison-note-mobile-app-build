@@ -91,6 +91,7 @@ function isAnonymousTip(meta: Record<string, unknown>, description?: string | nu
 }
 
 function partyOf(meta: Record<string, unknown>, direction: WalletDirection, description?: string | null) {
+  if (meta.kind === 'charge' || meta.leg === 'charge' || /^charge$/i.test(String(description ?? ''))) return null
   if (direction === 'credit' && isAnonymousTip(meta, description)) return null
   if (direction === 'debit') {
     return firstName(meta.to_name, meta.recipient_name, meta.counterparty, meta.to)
@@ -366,12 +367,7 @@ function fromWithdrawal(row: Record<string, unknown>): WalletHistoryItem {
     description,
     created_at: String(row.created_at ?? row.reviewed_at ?? ''),
     status,
-    reference:
-      typeof row.paystack_reference === 'string'
-        ? row.paystack_reference
-        : typeof row.id === 'string'
-          ? row.id
-          : null,
+    reference: `wd:${String(row.id ?? row.paystack_reference ?? '')}`,
     direction: 'debit',
     bucket: 'withdrawal',
     counterparty: bank,
@@ -379,10 +375,29 @@ function fromWithdrawal(row: Record<string, unknown>): WalletHistoryItem {
   }
 }
 
-function nearDuplicate(a: WalletHistoryItem, b: WalletHistoryItem) {
-  if (a.direction !== b.direction || a.bucket !== b.bucket) return false
+function normDesc(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function isWithdrawalEcho(item: WalletHistoryItem) {
+  return item.reference?.startsWith('wd:') ?? false
+}
+
+/** Same movement written to the ledger, the transactions table, and sale credits. */
+function sameBurst(a: WalletHistoryItem, b: WalletHistoryItem) {
+  if (a.direction !== b.direction) return false
   if (Math.abs(a.amount - b.amount) > 0.05) return false
-  return Math.abs(timeMs(a.created_at) - timeMs(b.created_at)) < 3 * 60 * 1000
+  if (normDesc(a.description) !== normDesc(b.description)) return false
+  return Math.abs(timeMs(a.created_at) - timeMs(b.created_at)) < 12 * 1000
+}
+
+/** The payout row repeats the wallet debit, sometimes at the face amount and sometimes with the charge added. */
+function bankEcho(echo: WalletHistoryItem, real: WalletHistoryItem) {
+  if (!isWithdrawalEcho(echo) || isWithdrawalEcho(real)) return false
+  if (echo.direction !== 'debit' || real.direction !== 'debit') return false
+  if (normDesc(echo.description) !== normDesc(real.description)) return false
+  if (!/^sent to\s+\S/i.test(echo.description.trim())) return false
+  return Math.abs(timeMs(echo.created_at) - timeMs(real.created_at)) < 3 * 60 * 1000
 }
 
 function mergeHistory(items: WalletHistoryItem[]) {
@@ -394,17 +409,14 @@ function mergeHistory(items: WalletHistoryItem[]) {
     return String(b.id).localeCompare(String(a.id))
   })
   for (const item of sorted) {
+    const echoAt = out.findIndex((existing) => bankEcho(existing, item))
+    if (echoAt >= 0) out.splice(echoAt, 1)
+    if (out.some((existing) => sameBurst(existing, item) || bankEcho(item, existing))) continue
     const key = item.reference
-      ? `${item.reference}|${item.direction}|${item.amount}|${item.bucket}`
-      : item.id || `${item.created_at}|${item.description}|${item.amount}|${item.direction}`
-    if (seen.has(key)) continue
-    if (
-      item.bucket === 'withdrawal' &&
-      out.some((existing) => existing.bucket === 'withdrawal' && nearDuplicate(existing, item))
-    ) {
-      continue
-    }
-    seen.add(key)
+      ? `${item.reference}|${item.direction}|${item.amount.toFixed(2)}`
+      : ''
+    if (key && seen.has(key)) continue
+    if (key) seen.add(key)
     out.push(item)
   }
   return out
@@ -448,8 +460,13 @@ function fromRpcRow(row: Record<string, unknown>): WalletHistoryItem {
           metadata: row.metadata,
           amount: Number(row.amount ?? row.naira ?? 0),
         })
+  const source = String(row.source ?? '')
   const reference =
-    typeof row.reference === 'string' && row.reference ? row.reference : null
+    source === 'withdrawal'
+      ? `wd:${String(row.id ?? row.reference ?? '')}`
+      : typeof row.reference === 'string' && row.reference
+        ? row.reference
+        : null
   const anonymousTipCredit = direction === 'credit' && isAnonymousTip(meta, rawDescription)
   const counterparty = anonymousTipCredit
     ? null

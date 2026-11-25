@@ -15,6 +15,7 @@ const AFFILIATE_LINKS = [
 const ADMIN_LINKS = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/users', label: 'Users' },
+  { href: '/admin/activity', label: 'Activity' },
   { href: '/admin/events', label: 'Events' },
   { href: '/admin/money', label: 'Money' },
   { href: '/admin/withdrawals', label: 'Withdrawals' },

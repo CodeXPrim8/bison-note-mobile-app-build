@@ -1,6 +1,6 @@
 import { ApiError } from '@/lib/api/errors'
 import { contactEmail } from '@/lib/auth/pin'
-import { isPaystackConfigured } from '@/lib/env'
+import { isPaystackConfigured, isSquadBankInEnabled } from '@/lib/env'
 import {
   createDedicatedVirtualAccount,
   createPaystackCustomer,
@@ -9,6 +9,11 @@ import {
   listDedicatedVirtualAccounts,
   type PaystackDedicatedAccount,
 } from '@/lib/payments/paystack'
+import {
+  createSquadCustomerVirtualAccount,
+  getSquadVirtualAccountByCustomer,
+  type CreateSquadCustomerVaInput,
+} from '@/lib/payments/squad'
 import { createDataClient } from '@/lib/supabase/data'
 
 export type VirtualAccountRecord = {
@@ -22,6 +27,7 @@ export type VirtualAccountRecord = {
   bank_id: number | null
   currency: string
   active: boolean
+  provider?: 'paystack' | 'squad'
 }
 
 function digitsOnly(value: string) {
@@ -73,6 +79,14 @@ function rpcMissing(message: string) {
   return /schema cache|does not exist|Could not find the function/i.test(message)
 }
 
+function providerFromRaw(raw: unknown): 'paystack' | 'squad' | undefined {
+  const meta = asRecord(raw)
+  const provider = String(meta?.provider ?? '').toLowerCase()
+  if (provider === 'squad') return 'squad'
+  if (provider === 'paystack') return 'paystack'
+  return undefined
+}
+
 function mapRow(row: Record<string, unknown>): VirtualAccountRecord {
   return {
     user_id: String(row.user_id),
@@ -85,6 +99,41 @@ function mapRow(row: Record<string, unknown>): VirtualAccountRecord {
     bank_id: row.bank_id == null ? null : Number(row.bank_id),
     currency: String(row.currency || 'NGN'),
     active: row.active !== false,
+    provider: providerFromRaw(row.raw) ?? (String(row.bank_slug || '').includes('squad') ? 'squad' : undefined),
+  }
+}
+
+function squadCustomerId(userId: string) {
+  return `BU${userId.replace(/-/g, '').slice(0, 18).toUpperCase()}`
+}
+
+function fromSquadAccount(
+  userId: string,
+  account: {
+    virtual_account_number?: string
+    customer_identifier?: string
+    first_name?: string
+    last_name?: string
+    bank_code?: string
+    account_name?: string
+    bank_name?: string
+  },
+): VirtualAccountRecord {
+  const first = String(account.first_name ?? '').trim()
+  const last = String(account.last_name ?? '').trim()
+  const name = [first, last].filter(Boolean).join(' ') || account.account_name || 'BUCKS'
+  return {
+    user_id: userId,
+    customer_code: String(account.customer_identifier || squadCustomerId(userId)),
+    customer_id: null,
+    account_number: String(account.virtual_account_number),
+    account_name: name,
+    bank_name: account.bank_name || 'GTBank',
+    bank_slug: 'squad-gtbank',
+    bank_id: account.bank_code ? Number(account.bank_code) : 58,
+    currency: 'NGN',
+    active: true,
+    provider: 'squad',
   }
 }
 
@@ -110,6 +159,11 @@ function fromPaystackAccount(
 
 async function persistVirtualAccount(record: VirtualAccountRecord, raw: unknown) {
   const db = createDataClient()
+  const rawObj = asRecord(raw) ?? {}
+  const stamped = {
+    ...rawObj,
+    provider: record.provider ?? rawObj.provider ?? 'paystack',
+  }
   const { data, error } = await db.rpc('bu_upsert_virtual_account', {
     p_user_id: record.user_id,
     p_customer_code: record.customer_code,
@@ -121,7 +175,7 @@ async function persistVirtualAccount(record: VirtualAccountRecord, raw: unknown)
     p_bank_id: record.bank_id,
     p_currency: record.currency,
     p_active: record.active,
-    p_raw: raw ?? {},
+    p_raw: stamped,
   })
   if (error) {
     if (rpcMissing(error.message)) {
@@ -242,12 +296,83 @@ async function resolvePaystackCustomerForUser(input: {
   return { customer, email, phone, firstName, lastName }
 }
 
+export type SquadFundingKyc = {
+  bvn: string
+  dob: string
+  gender: '1' | '2'
+  address: string
+}
+
+/** Create or return a Squad permanent VA. Requires one-time BVN KYC (Squad rule). */
+export async function getOrCreateSquadVirtualAccount(input: {
+  userId: string
+  email?: string | null
+  phone?: string | null
+  displayName?: string | null
+  kyc?: SquadFundingKyc | null
+}): Promise<VirtualAccountRecord> {
+  if (!isSquadBankInEnabled()) {
+    throw new ApiError(503, 'SQUAD_REQUIRED', 'Squad bank-in is not configured yet.')
+  }
+
+  const stored = await getStoredVirtualAccount(input.userId)
+  if (stored?.provider === 'squad' || stored?.bank_slug === 'squad-gtbank') {
+    return { ...stored, provider: 'squad' }
+  }
+
+  const customerIdentifier = squadCustomerId(input.userId)
+  const existingRemote = await getSquadVirtualAccountByCustomer(customerIdentifier).catch(() => null)
+  if (existingRemote?.virtual_account_number) {
+    return persistVirtualAccount(fromSquadAccount(input.userId, existingRemote), existingRemote)
+  }
+
+  if (!input.kyc) {
+    throw new ApiError(
+      428,
+      'SQUAD_KYC_REQUIRED',
+      'Bank transfer on Squad needs a one-time BVN check (name, date of birth, phone must match BVN).',
+      { needs_kyc: true, provider: 'squad' },
+    )
+  }
+
+  const phoneRaw = input.phone?.trim()
+  if (!phoneRaw) {
+    throw new ApiError(400, 'PHONE_REQUIRED', 'This account has no phone number. Complete signup before bank transfer funding.')
+  }
+  const { firstName, lastName } = splitName(input.displayName || `${BRAND_ASCII} User`)
+  const created = await createSquadCustomerVirtualAccount({
+    customerIdentifier,
+    firstName,
+    lastName,
+    mobileNum: phoneRaw,
+    email: contactEmail(input.email),
+    bvn: input.kyc.bvn,
+    dob: input.kyc.dob,
+    gender: input.kyc.gender,
+    address: input.kyc.address,
+  } satisfies CreateSquadCustomerVaInput)
+
+  return persistVirtualAccount(fromSquadAccount(input.userId, created), created)
+}
+
 export async function getOrCreateVirtualAccount(input: {
   userId: string
   email?: string | null
   phone?: string | null
   displayName?: string | null
+  kyc?: SquadFundingKyc | null
 }): Promise<VirtualAccountRecord> {
+  // Squad bank-in when enabled — cheaper VA fees than Paystack DVA for typical top-ups.
+  if (isSquadBankInEnabled()) {
+    const stored = await getStoredVirtualAccount(input.userId)
+    if (stored?.provider === 'squad' || stored?.bank_slug === 'squad-gtbank') {
+      return { ...stored, provider: 'squad' }
+    }
+    // Existing Paystack DVA stays usable until the user completes Squad KYC.
+    if (stored && !input.kyc) return stored
+    return getOrCreateSquadVirtualAccount(input)
+  }
+
   if (!isPaystackConfigured()) {
     throw new ApiError(503, 'PAYSTACK_REQUIRED', 'Funding is not available right now.')
   }
@@ -263,7 +388,7 @@ export async function getOrCreateVirtualAccount(input: {
         return stored
       }
     }
-    return stored
+    return { ...stored, provider: stored.provider ?? 'paystack' }
   }
 
   const existingProbe = await createDataClient().rpc('bu_get_virtual_account', { p_user_id: input.userId })

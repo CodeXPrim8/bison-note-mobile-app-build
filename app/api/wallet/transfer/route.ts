@@ -3,6 +3,7 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { BU_MIN_SPRAY, BU_MIN_TRANSFER, nairaFromBu } from '@/lib/bu-rate'
+import { PURPOSE_IDS } from '@/lib/purpose'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { transferBu } from '@/lib/wallet'
 import { pinSchema } from '@/lib/auth/pin'
@@ -15,6 +16,9 @@ const schema = z.object({
   event_id: z.string().uuid().optional(),
   is_tip: z.boolean().optional(),
   note: z.string().max(160).optional(),
+  purpose: z.enum(PURPOSE_IDS).optional(),
+  locked: z.boolean().optional(),
+  gift_id: z.string().uuid().optional(),
   pin: pinSchema,
 })
 
@@ -69,6 +73,9 @@ export async function POST(request: Request) {
       eventId: body.event_id,
       isTip: body.is_tip,
       note: body.note,
+      purpose: body.purpose,
+      locked: body.locked,
+      giftId: body.gift_id,
     })
     return successResponse(
       {

@@ -1,7 +1,8 @@
 'use client'
 
 import type { LucideIcon } from 'lucide-react'
-import { Home, Ticket, Sparkles, UserRound, LayoutDashboard, ShoppingBag, QrCode } from 'lucide-react'
+import { Home, Ticket, UserRound, LayoutDashboard, ShoppingBag, QrCode } from 'lucide-react'
+import { SprayCash } from '@/components/icons/spray-cash'
 
 interface NavigationProps {
   currentPage: string
@@ -23,7 +24,7 @@ const userTabs: NavTab[] = [
     id: 'dashboard',
     label: 'Home',
     Icon: Home,
-    matches: ['buy-bu', 'send-bu', 'receive-bu', 'history', 'redemption', 'notifications'],
+    matches: ['buy-bu', 'send-bu', 'receive-bu', 'history', 'redemption', 'notifications', 'bucks-card'],
   },
   {
     id: 'tickets',
@@ -34,7 +35,7 @@ const userTabs: NavTab[] = [
   {
     id: 'spraying',
     label: 'Spray',
-    Icon: Sparkles,
+    Icon: SprayCash,
   },
   {
     id: 'profile',

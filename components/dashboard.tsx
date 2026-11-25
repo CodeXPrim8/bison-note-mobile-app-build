@@ -12,10 +12,10 @@ import {
   Mail,
   Plus,
   Smartphone,
-  Sparkles,
   Ticket,
   Wifi,
 } from 'lucide-react'
+import { SprayCash } from '@/components/icons/spray-cash'
 import { useAccount, useWalletPulse } from '@/components/account-store'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { displayBuId } from '@/lib/phone'
@@ -23,6 +23,9 @@ import { historyLabel, walletDirection } from '@/lib/wallet/direction'
 import { countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 import { RollingBalance } from '@/components/rolling-balance'
+import { GiftPopup } from '@/components/gift-popup'
+import { PurposeIcon } from '@/components/icons/purpose-icons'
+import { purposeLabel, type PurposeGift } from '@/lib/purpose'
 import { SignedBu } from '@/components/signed-bu'
 import { SmartCampaign } from '@/components/smart-campaign'
 
@@ -88,6 +91,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [alertNeon, setAlertNeon] = useState(false)
   const [neonKey, setNeonKey] = useState(0)
+  const [gifts, setGifts] = useState<PurposeGift[]>([])
   function applyWalletPayload(transactions: Array<Record<string, unknown>>) {
     const nextUnread = countUnseenAlerts(transactions)
     setUnreadAlerts((prev) => {
@@ -98,6 +102,21 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       return nextUnread
     })
     setMovements(transactions.slice(0, 1).map(movementFromWallet))
+  }
+
+  useEffect(() => {
+    if (!userId) return
+    void fetch('/api/purpose-gifts', { credentials: 'include', cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.status) setGifts((json.data?.gifts ?? []) as PurposeGift[])
+      })
+      .catch(() => undefined)
+  }, [userId, balanceMotion])
+
+  function spendGift(gift: PurposeGift) {
+    window.sessionStorage.setItem('bu_spend_gift', JSON.stringify(gift))
+    onNavigate('send-bu')
   }
 
   useEffect(() => {
@@ -278,11 +297,37 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
+      {gifts.length ? (
+        <div className="space-y-2 px-4">
+          {gifts.map((gift) => (
+            <button
+              key={gift.id}
+              type="button"
+              onClick={() => spendGift(gift)}
+              className="bu-press bu-glass flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-950 text-white">
+                <PurposeIcon purpose={gift.purpose} className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">
+                  ₦{Math.round(gift.remaining_bu).toLocaleString('en-NG')} for {purposeLabel(gift.purpose).toLowerCase()}
+                </span>
+                <span className="block truncate text-xs text-neutral-500">From {gift.from_name || 'a friend'}</span>
+              </span>
+              <span className="rounded-full bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white">Spend</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <GiftPopup onSpend={spendGift} />
+
       <div className="bu-rise px-4" style={{ animationDelay: '80ms' }}>
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {[
             { label: 'To Ƀucks', action: 'send-bu', Icon: ArrowUp, well: 'bu-well-cyber' },
-            { label: 'Spray', action: 'spraying', Icon: Sparkles, well: 'bu-well-magenta' },
+            { label: 'Spray', action: 'spraying', Icon: SprayCash, well: 'bu-well-magenta' },
             { label: 'To Bank', action: 'redemption', Icon: Banknote, well: 'bu-well-navy' },
           ].map(({ label, action, Icon, well }) => (
             <button

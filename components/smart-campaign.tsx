@@ -13,6 +13,7 @@ import {
   Ticket,
   Wifi,
 } from 'lucide-react'
+import { SprayCash } from '@/components/icons/spray-cash'
 import { adMediaKind, getAdSlot } from '@/lib/admin/ad-slots'
 
 type CampaignSlide = {
@@ -43,7 +44,7 @@ const FALLBACK_SLIDES: CampaignSlide[] = [
       { label: 'Digital', Icon: Wifi },
       { label: 'Mobile', Icon: Smartphone },
     ],
-    Icon: Sparkles,
+    Icon: SprayCash,
   },
   {
     id: 'send',
@@ -61,7 +62,7 @@ const FALLBACK_SLIDES: CampaignSlide[] = [
     body: 'Fund your spray wallet and shower the celebrant at live events',
     tags: [
       { label: 'Events', Icon: PartyPopper },
-      { label: 'Spray', Icon: Sparkles },
+      { label: 'Spray', Icon: SprayCash },
     ],
     Icon: PartyPopper,
   },
@@ -70,7 +71,7 @@ const FALLBACK_SLIDES: CampaignSlide[] = [
     title: 'Tip Without Cash',
     body: 'Scan and tip performers, hosts, and helpers in seconds',
     tags: [
-      { label: 'Tip', Icon: Sparkles },
+      { label: 'Tip', Icon: SprayCash },
       { label: 'Scan', Icon: QrCode },
     ],
     Icon: QrCode,

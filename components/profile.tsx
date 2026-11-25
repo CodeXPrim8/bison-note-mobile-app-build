@@ -137,9 +137,9 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
     },
     {
       Icon: Nfc,
-      title: 'Contactless Pay',
-      desc: 'Setup your account for contactless pay',
-      onClick: () => onNavigate('receive-bu'),
+      title: 'Ƀucks Card',
+      desc: 'Tap to pay · NFC + EMV contactless',
+      onClick: () => onNavigate('bucks-card'),
     },
     {
       Icon: Palette,
@@ -162,12 +162,17 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
     {
       Icon: Sparkles,
       title: 'Coming soon',
-      desc: 'Data & airtime, card, overdraft',
+      desc: 'Data & airtime, overdraft',
       onClick: () => setView('coming-soon'),
     },
   ]
 
-  const comingSoonItems: Array<{ Icon: LucideIcon; title: string; desc: string }> = [
+  const comingSoonItems: Array<{
+    Icon: LucideIcon
+    title: string
+    desc: string
+    onClick?: () => void
+  }> = [
     {
       Icon: Radio,
       title: 'Data and Airtime',
@@ -176,7 +181,8 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
     {
       Icon: CreditCard,
       title: 'Card',
-      desc: 'Virtual card for online and POS spend',
+      desc: 'Physical contactless card for POS tap',
+      onClick: () => onNavigate('bucks-card'),
     },
     {
       Icon: WalletCards,
@@ -348,22 +354,41 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
               These features are on the way. We’ll unlock them in your wallet when ready.
             </p>
           </div>
-          {comingSoonItems.map(({ Icon, title, desc }) => (
-            <div key={title} className="bu-glass-soft flex items-start gap-3 rounded-2xl p-4">
-              <span className="bu-well-navy flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
-                <Icon className="h-5 w-5" strokeWidth={2.2} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-bold text-neutral-950">{title}</h4>
-                  <span className="rounded-full bg-neutral-950/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                    Soon
-                  </span>
+          {comingSoonItems.map(({ Icon, title, desc, onClick }) => {
+            const row = (
+              <>
+                <span className="bu-well-navy flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
+                  <Icon className="h-5 w-5" strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-neutral-950">{title}</h4>
+                    <span className="rounded-full bg-neutral-950/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                      Soon
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-neutral-500">{desc}</p>
                 </div>
-                <p className="mt-0.5 text-xs text-neutral-500">{desc}</p>
+              </>
+            )
+            if (onClick) {
+              return (
+                <button
+                  key={title}
+                  type="button"
+                  onClick={onClick}
+                  className="bu-press bu-glass-soft flex w-full items-start gap-3 rounded-2xl p-4 text-left"
+                >
+                  {row}
+                </button>
+              )
+            }
+            return (
+              <div key={title} className="bu-glass-soft flex items-start gap-3 rounded-2xl p-4">
+                {row}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

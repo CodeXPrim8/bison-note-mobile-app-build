@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ApiError } from '@/lib/api/errors'
+import { roundMoney } from '@/lib/bu-rate'
 import { recordWalletLedger } from '@/lib/wallet/ledger'
+
+export const INSUFFICIENT_ACCOUNT = 'Insufficient account'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
@@ -114,6 +117,88 @@ export async function moveLiveWallet(
   await applyDirect(db, input.userId, input.naira, input.direction)
   await recordWalletLedger(db, stamped)
   await settleReferralAfterMove(db, input)
+}
+
+export async function readWalletNaira(db: SupabaseClient, userId: string) {
+  const existing = await db.from('wallets').select('*').eq('user_id', userId).maybeSingle()
+  if (existing.error && !/schema cache|does not exist/i.test(existing.error.message)) {
+    throwMoveError(existing.error.message)
+  }
+  const row = asRecord(existing.data)
+  return row ? walletNaira(row) : 0
+}
+
+/**
+ * Debit the amount being sent, then the charge.
+ * If the balance cannot cover both, nothing is taken.
+ */
+export async function debitFaceThenCharge(
+  db: SupabaseClient,
+  input: {
+    userId: string
+    faceNaira: number
+    chargeNaira: number
+    type: string
+    faceDescription: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const face = roundMoney(input.faceNaira)
+  const charge = roundMoney(Math.max(0, input.chargeNaira))
+  if (!(face > 0)) {
+    throw new ApiError(400, 'INVALID_AMOUNT', 'Enter an amount to send')
+  }
+  const total = roundMoney(face + charge)
+  const balance = await readWalletNaira(db, input.userId)
+  if (balance + 1e-9 < total) {
+    throw new ApiError(400, 'INSUFFICIENT_FUNDS', INSUFFICIENT_ACCOUNT)
+  }
+
+  const faceMoveId = crypto.randomUUID()
+  const baseMeta = { ...(input.metadata ?? {}) }
+  await moveLiveWallet(db, {
+    userId: input.userId,
+    naira: face,
+    direction: 'debit',
+    type: input.type,
+    description: input.faceDescription,
+    metadata: { ...baseMeta, move_id: faceMoveId, leg: 'principal' },
+  })
+
+  if (!(charge > 0.004)) {
+    return { faceMoveId, chargeMoveId: null as string | null, face, charge }
+  }
+
+  const chargeMoveId = crypto.randomUUID()
+  try {
+    await moveLiveWallet(db, {
+      userId: input.userId,
+      naira: charge,
+      direction: 'debit',
+      type: input.type,
+      description: 'Charge',
+      metadata: {
+        ...baseMeta,
+        kind: 'charge',
+        move_id: chargeMoveId,
+        parent_move_id: faceMoveId,
+        leg: 'charge',
+        charge_naira: charge,
+      },
+    })
+  } catch {
+    await moveLiveWallet(db, {
+      userId: input.userId,
+      naira: face,
+      direction: 'credit',
+      type: 'refund',
+      description: 'Send refunded',
+      metadata: { ...baseMeta, move_id: crypto.randomUUID(), refund_of: faceMoveId, reason: 'charge_failed' },
+    }).catch(() => undefined)
+    throw new ApiError(400, 'INSUFFICIENT_FUNDS', INSUFFICIENT_ACCOUNT)
+  }
+
+  return { faceMoveId, chargeMoveId, face, charge }
 }
 
 async function settleReferralAfterMove(

@@ -11,6 +11,8 @@ import { ModeListRow, ModeSegmented } from '@/components/mode-home-shell'
 import { useAccount } from '@/components/account-store'
 import { BU_MIN_TRANSFER, buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { formatEventDateTime } from '@/lib/datetime'
+import { PURPOSE_IDS, purposeLabel, type PurposeId } from '@/lib/purpose'
+import { PurposeIcon } from '@/components/icons/purpose-icons'
 
 type PosMode = 'event' | 'business'
 type SaleStatus = 'pending_notes' | 'confirmed' | 'notes_issued' | 'cancelled'
@@ -79,6 +81,16 @@ export default function VendorPOS({
   const [sales, setSales] = useState<PosSale[]>([])
   const [resolvedTitle, setResolvedTitle] = useState(eventTitle || '')
   const [qrImage, setQrImage] = useState('')
+  const [bizProfile, setBizProfile] = useState({
+    business_name: '',
+    category: '' as PurposeId | '',
+    settlement: 'wallet' as 'wallet' | 'bank',
+    bank_name: '',
+    bank_code: '',
+    bank_account_number: '',
+    phone: '',
+    logo: '',
+  })
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(null)
@@ -205,11 +217,17 @@ export default function VendorPOS({
             type: 'pos',
             vendor_id: userId,
             mode: 'business',
-            label: 'Business POS',
+            label: bizProfile.business_name || 'Business POS',
+            business_name: bizProfile.business_name || undefined,
+            account_number: bizProfile.phone || undefined,
+            bank_account_number: bizProfile.bank_account_number || virtualAccount?.account_number || undefined,
+            bank_code: bizProfile.bank_code || undefined,
+            bank_name: bizProfile.bank_name || virtualAccount?.bank_name || undefined,
+            category: bizProfile.category || undefined,
           },
     )
     void QRCode.toDataURL(payload, { width: 280, margin: 1 }).then(setQrImage).catch(() => setQrImage(''))
-  }, [userId, isEventPos, eventId, resolvedTitle, acceptMethod])
+  }, [userId, isEventPos, eventId, resolvedTitle, acceptMethod, bizProfile, virtualAccount])
 
   async function handleCopyAccount() {
     if (!virtualAccount?.account_number) return
@@ -378,10 +396,99 @@ export default function VendorPOS({
       JSON.stringify(
         isEventPos
           ? { type: 'pos', vendor_id: userId, event_id: eventId, mode: 'event' }
-          : { type: 'pos', vendor_id: userId, mode: 'business' },
+          : {
+              type: 'pos',
+              vendor_id: userId,
+              mode: 'business',
+              label: bizProfile.business_name || 'Business POS',
+              business_name: bizProfile.business_name || undefined,
+              account_number: bizProfile.phone || undefined,
+              bank_account_number: bizProfile.bank_account_number || virtualAccount?.account_number || undefined,
+              bank_code: bizProfile.bank_code || undefined,
+              bank_name: bizProfile.bank_name || virtualAccount?.bank_name || undefined,
+              category: bizProfile.category || undefined,
+            },
       ),
-    [isEventPos, userId, eventId],
+    [isEventPos, userId, eventId, bizProfile, virtualAccount],
   )
+
+  useEffect(() => {
+    if (!userId || isEventPos) return
+    void fetch('/api/vendor/profile?logo=1', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.status) return
+        const data = json.data ?? {}
+        setBizProfile({
+          business_name: String(data.business_name ?? ''),
+          category: (data.category ?? '') as PurposeId | '',
+          settlement: data.settlement === 'bank' ? 'bank' : 'wallet',
+          bank_name: String(data.bank_name ?? ''),
+          bank_code: String(data.bank_code ?? ''),
+          bank_account_number: String(data.bank_account_number ?? ''),
+          phone: String(data.phone ?? ''),
+          logo: typeof data.logo_data_url === 'string' && data.logo_data_url.startsWith('data:') ? data.logo_data_url : '',
+        })
+      })
+      .catch(() => undefined)
+  }, [userId, isEventPos])
+
+  async function saveBiz(patch: Partial<typeof bizProfile> & { logo_data_url?: string }) {
+    const next = { ...bizProfile, ...patch }
+    setBizProfile(next)
+    await fetch('/api/vendor/profile', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_name: next.business_name,
+        category: next.category || null,
+        settlement: next.settlement,
+        bank_name: next.bank_name,
+        bank_code: next.bank_code,
+        bank_account_number: next.bank_account_number,
+        logo_data_url: patch.logo_data_url,
+      }),
+    })
+  }
+
+  async function downloadQrSheet() {
+    const dataUrl = await QRCode.toDataURL(qrPayload, { width: 900, margin: 2, errorCorrectionLevel: 'H' })
+    const canvas = document.createElement('canvas')
+    canvas.width = 1000
+    canvas.height = 1280
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    const qr = new Image()
+    qr.src = dataUrl
+    await qr.decode()
+    ctx.drawImage(qr, 50, 180, 900, 900)
+    if (bizProfile.logo) {
+      const logo = new Image()
+      logo.src = bizProfile.logo
+      await logo.decode()
+      const size = 168
+      const x = 500 - size / 2
+      const y = 630 - size / 2
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath()
+      ctx.roundRect(x - 14, y - 14, size + 28, size + 28, 28)
+      ctx.fill()
+      ctx.drawImage(logo, x, y, size, size)
+    }
+    ctx.fillStyle = '#0b1733'
+    ctx.textAlign = 'center'
+    ctx.font = '700 42px sans-serif'
+    ctx.fillText(bizProfile.business_name || 'Bucks', 500, 110)
+    ctx.font = '600 28px sans-serif'
+    ctx.fillText('Scan to pay with Bucks', 500, 1160)
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL('image/png')
+    link.download = 'bucks-scan-to-pay.png'
+    link.click()
+  }
 
   const history = useMemo(
     () =>
@@ -597,14 +704,107 @@ export default function VendorPOS({
                     <p className="text-center text-xs text-muted-foreground">
                       Guests with ɃU scan this QR and pay with PIN. You get 100%.
                     </p>
+                    <div className="flex w-full gap-2">
+                      <Button type="button" className="flex-1" onClick={() => void downloadQrSheet()}>
+                        Download to print
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void navigator.clipboard.writeText(qrPayload)}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
+                    </div>
+                    <label className="w-full text-xs font-semibold text-neutral-500">
+                      Business name
+                      <Input
+                        value={bizProfile.business_name}
+                        onChange={(e) => setBizProfile((current) => ({ ...current, business_name: e.target.value }))}
+                        onBlur={() => void saveBiz({})}
+                        className="mt-1"
+                      />
+                    </label>
+                    <div className="flex w-full flex-wrap gap-2">
+                      {PURPOSE_IDS.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => void saveBiz({ category: bizProfile.category === id ? '' : id })}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            bizProfile.category === id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-700'
+                          }`}
+                        >
+                          <PurposeIcon purpose={id} className="h-3.5 w-3.5" />
+                          {purposeLabel(id)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid w-full grid-cols-2 gap-2 text-sm">
+                      <button
+                        type="button"
+                        className={`rounded-2xl px-3 py-2 font-semibold ${bizProfile.settlement === 'wallet' ? 'bg-neutral-950 text-white' : 'bg-neutral-100'}`}
+                        onClick={() => void saveBiz({ settlement: 'wallet' })}
+                      >
+                        Keep in BU wallet
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-2xl px-3 py-2 font-semibold ${bizProfile.settlement === 'bank' ? 'bg-neutral-950 text-white' : 'bg-neutral-100'}`}
+                        onClick={() => void saveBiz({ settlement: 'bank' })}
+                      >
+                        Send to bank
+                      </button>
+                    </div>
+                    <label className="w-full text-xs font-semibold text-neutral-500">
+                      Logo for the middle of the QR
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="mt-1 block w-full text-sm"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const img = new Image()
+                          const url = URL.createObjectURL(file)
+                          img.onload = () => {
+                            const canvas = document.createElement('canvas')
+                            canvas.width = 256
+                            canvas.height = 256
+                            const ctx = canvas.getContext('2d')
+                            if (!ctx) return
+                            ctx.fillStyle = '#fff'
+                            ctx.fillRect(0, 0, 256, 256)
+                            ctx.drawImage(img, 0, 0, 256, 256)
+                            const logo = canvas.toDataURL('image/jpeg', 0.86)
+                            URL.revokeObjectURL(url)
+                            void saveBiz({ logo_data_url: logo, logo } as Partial<typeof bizProfile> & { logo_data_url: string })
+                          }
+                          img.src = url
+                        }}
+                      />
+                    </label>
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      onClick={() => void navigator.clipboard.writeText(qrPayload)}
+                      className="w-full"
+                      onClick={() => {
+                        navigator.geolocation.getCurrentPosition((pos) => {
+                          void fetch('/api/vendor/profile', {
+                            method: 'PUT',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              latitude: pos.coords.latitude,
+                              longitude: pos.coords.longitude,
+                            }),
+                          })
+                        })
+                      }}
                     >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Copy QR payload
+                      Save this place for gift popups
                     </Button>
                   </Card>
                 )}

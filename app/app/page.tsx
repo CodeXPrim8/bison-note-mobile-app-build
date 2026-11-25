@@ -31,6 +31,7 @@ const PosPay = dynamic(() => import('@/components/pos-pay'), { loading: () => pa
 const EventInfo = dynamic(() => import('@/components/event-info'), { loading: () => pageFallback })
 const MyTickets = dynamic(() => import('@/components/my-tickets'), { loading: () => pageFallback })
 const Refer = dynamic(() => import('@/components/refer'), { loading: () => pageFallback })
+const BucksCard = dynamic(() => import('@/components/bucks-card'), { loading: () => pageFallback })
 const ReferCampaignPopup = dynamic(() => import('@/components/refer-campaign-popup'), { loading: () => null })
 
 function ticketIdFromPageData(pageData: unknown) {
@@ -306,6 +307,9 @@ function MobileAppShell() {
                 <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
               )}
               {currentPage === 'refer' && <Refer />}
+              {currentPage === 'bucks-card' && (
+                <BucksCard onBack={() => handleNavigate('dashboard')} />
+              )}
             </>
           ) : mode === 'celebrant' ? (
             <>

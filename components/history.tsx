@@ -6,6 +6,8 @@ import { isEventPast } from '@/lib/events/sale'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatNairaPlain } from '@/lib/bu-rate'
 import { SignedBu } from '@/components/signed-bu'
+import { PurposeIcon } from '@/components/icons/purpose-icons'
+import { isPurposeId } from '@/lib/purpose'
 import { TicketFeedbackForm } from '@/components/ticket-feedback'
 import type { EventRecord, TicketRecord, TicketTier } from '@/lib/types/database'
 import { useAccount, useWalletPulse } from '@/components/account-store'
@@ -49,6 +51,7 @@ interface Transaction {
   reference?: string | null
   counterparty?: string | null
   note?: string | null
+  purpose?: string | null
 }
 
 interface HistoryTicket extends TicketRecord {
@@ -116,7 +119,8 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
   const statusRaw = String(tx.status ?? 'completed')
   const labeled = historyLabel({ type, description: rawDescription, direction })
   const tipCredit = direction === 'credit' && (/^tip received/i.test(rawDescription) || meta.kind === 'tip')
-  const counterparty = tipCredit
+  const chargeLine = meta.kind === 'charge' || meta.leg === 'charge' || /^charge$/i.test(rawDescription)
+  const counterparty = tipCredit || chargeLine
     ? null
     : (typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null) ||
       partyFromMeta(meta, direction) ||
@@ -128,7 +132,7 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
     amount: Math.abs(Number(tx.amount ?? 0)),
     date: tx.created_at ? formatEventDateTime(String(tx.created_at)) : '',
     createdAt,
-    description: tipCredit ? 'Tip received' : labeled,
+    description: tipCredit ? 'Tip received' : meta.purpose ? rawDescription : labeled,
     status: statusRaw,
     direction,
     bucket:
@@ -137,6 +141,7 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
     reference: typeof tx.reference === 'string' ? tx.reference : null,
     counterparty,
     note: typeof tx.note === 'string' ? tx.note : typeof meta.note === 'string' ? meta.note : null,
+    purpose: typeof meta.purpose === 'string' ? meta.purpose : null,
   }
 }
 
@@ -163,6 +168,7 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
 
 function activityTitle(tx: Transaction) {
   const desc = String(tx.description || '')
+  if (/^charge$/i.test(desc)) return 'Charge'
   if (tx.bucket === 'withdrawal' && !/tip|spray|sent Ƀu|received Ƀu|pos|commission/i.test(desc)) {
     return desc || (tx.counterparty ? `Sent to ${tx.counterparty}` : 'Send to bank')
   }
@@ -467,7 +473,7 @@ export default function History() {
                     <span
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:h-9 sm:w-9 sm:text-xs ${badgeClass}`}
                     >
-                      {credit ? 'In' : 'Out'}
+                      {isPurposeId(tx.purpose) ? <PurposeIcon purpose={tx.purpose} className="h-4 w-4" /> : credit ? 'In' : 'Out'}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-neutral-950 sm:text-sm">

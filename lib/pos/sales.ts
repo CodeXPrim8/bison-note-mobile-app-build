@@ -8,8 +8,9 @@ import {
 } from '@/lib/pos/event-vendors'
 import { createDataClient } from '@/lib/supabase/data'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
-import { moveLiveWallet } from '@/lib/wallet/move'
+import { debitFaceThenCharge, moveLiveWallet } from '@/lib/wallet/move'
 import { reverseFailedDebit } from '@/lib/wallet/reverse'
+import { settleVendorSale } from '@/lib/vendor-settle'
 
 export type PosSaleStatus = 'pending_notes' | 'confirmed' | 'notes_issued' | 'cancelled'
 
@@ -157,12 +158,12 @@ export async function payPosSale(input: {
     move_id: reference,
   }
 
-  await moveLiveWallet(client, {
+  const debited = await debitFaceThenCharge(client, {
     userId: input.guestUserId,
-    naira: feeQuote.totalDebitNaira,
-    direction: 'debit',
+    faceNaira: faceNaira,
+    chargeNaira: feeQuote.feeNaira,
     type: 'pos_sale',
-    description: mode === 'event' ? `POS · ${eventTitle}` : 'Business POS purchase',
+    faceDescription: mode === 'event' ? `POS · ${eventTitle}` : 'Business POS purchase',
     metadata: meta,
   })
 
@@ -216,6 +217,10 @@ export async function payPosSale(input: {
       throw new ApiError(500, 'POS_SAVE_FAILED', insert.error.message)
     }
 
+    if (mode === 'business' && vendorNaira > 0) {
+      await settleVendorSale(input.vendorUserId, vendorNaira).catch(() => undefined)
+    }
+
     return {
       sale: asSale(insert.data) as PosSale,
       amountBu,
@@ -228,10 +233,18 @@ export async function payPosSale(input: {
   } catch (error) {
     await reverseFailedDebit(client, {
       userId: input.guestUserId,
-      originalReference: reference,
-      naira: feeQuote.totalDebitNaira,
+      originalReference: debited.faceMoveId,
+      naira: debited.face,
       reason: error instanceof Error ? error.message : 'pos_pay_failed',
     }).catch(() => undefined)
+    if (debited.chargeMoveId && debited.charge > 0) {
+      await reverseFailedDebit(client, {
+        userId: input.guestUserId,
+        originalReference: debited.chargeMoveId,
+        naira: debited.charge,
+        reason: error instanceof Error ? error.message : 'pos_pay_failed',
+      }).catch(() => undefined)
+    }
     throw error
   }
 }

@@ -5,8 +5,13 @@ import { BalanceSparkline, useBalanceSpark } from '@/components/balance-sparklin
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { User, CheckCircle, AlertCircle, Search, QrCode, Sparkles, Star } from 'lucide-react'
+import { User, CheckCircle, AlertCircle, Search, QrCode, Star } from 'lucide-react'
+import { SprayCash } from '@/components/icons/spray-cash'
 import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { ScanAccountButton } from '@/components/scan-account-button'
+import { PurposeIcon } from '@/components/icons/purpose-icons'
+import { parsePayQr } from '@/lib/pay-qr'
+import { PURPOSE_IDS, purposeLabel, type PurposeGift, type PurposeId } from '@/lib/purpose'
 import { formatEventDateTime } from '@/lib/datetime'
 import {
   BU_MIN_SPRAY,
@@ -130,6 +135,9 @@ export default function SendBU({
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lookupAbort = useRef<AbortController | null>(null)
 
+  const [purpose, setPurpose] = useState<PurposeId | null>(null)
+  const [lockPurpose, setLockPurpose] = useState(false)
+  const [spendGift, setSpendGift] = useState<PurposeGift | null>(null)
   const [transferForm, setTransferForm] = useState({
     amount: '',
     message: '',
@@ -340,6 +348,58 @@ export default function SendBU({
     }, 220)
   }
 
+  useEffect(() => {
+    const raw = window.sessionStorage.getItem('bu_spend_gift')
+    if (!raw) return
+    window.sessionStorage.removeItem('bu_spend_gift')
+    try {
+      const gift = JSON.parse(raw) as PurposeGift
+      setSpendGift(gift)
+      setPurpose(gift.purpose)
+      setLockPurpose(true)
+      if (gift.remaining_bu > 0) {
+        setTransferForm((form) => ({ ...form, amount: String(Math.round(gift.remaining_bu)) }))
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  async function fillAccountFromScan(raw: string) {
+    const parsed = parsePayQr(raw)
+    if (!parsed) {
+      setMessage('Scan a Bucks pay QR.')
+      return
+    }
+    let account = parsed.accountNumber
+    let category = parsed.category
+    if (parsed.vendorId) {
+      try {
+        const res = await fetch(`/api/vendor/pay-card?user_id=${encodeURIComponent(parsed.vendorId)}`, {
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (json.status) {
+          account = String(json.data?.account_number || account || '')
+          category = json.data?.category || category
+        }
+      } catch {
+        // use what the QR already carried
+      }
+    }
+    if (spendGift && category && category !== spendGift.purpose) {
+      setMessage(`This money is for ${purposeLabel(spendGift.purpose).toLowerCase()}. This QR is a different kind of place.`)
+      return
+    }
+    const digits = String(account || '').replace(/\D/g, '')
+    if (digits.length < 10) {
+      setMessage('That QR has no account number yet.')
+      return
+    }
+    setMessage(null)
+    handleSearch(digits)
+  }
+
   function isSelfAccount(candidateId: string) {
     return Boolean(userId && candidateId && userId === candidateId)
   }
@@ -396,7 +456,16 @@ export default function SendBU({
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_user_id: user.id, amount, is_tip: isTip, note, pin }),
+        body: JSON.stringify({
+          to_user_id: user.id,
+          amount,
+          is_tip: isTip,
+          note,
+          pin,
+          purpose: isTip ? undefined : purpose ?? undefined,
+          locked: isTip ? false : Boolean(purpose && lockPurpose),
+          gift_id: spendGift?.id,
+        }),
       })
       const json = await res.json()
       setBusy(false)
@@ -578,8 +647,6 @@ export default function SendBU({
   }
 
   const handleTipScan = (raw: string) => handlePosOrReceiveScan(raw, 'tip')
-  const handlePayScan = (raw: string) => handlePosOrReceiveScan(raw, 'pay')
-
 
   return (
     <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">
@@ -722,7 +789,7 @@ export default function SendBU({
               className="flex h-14 w-14 items-center justify-center rounded-2xl text-white"
               style={{ background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)' }}
             >
-              <Sparkles className="h-7 w-7" />
+              <SprayCash className="h-7 w-7" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="truncate font-semibold text-[color:var(--bu-navy)]">{scannedQRData.username}</h3>
@@ -864,7 +931,7 @@ export default function SendBU({
               >
                 Account number
               </label>
-              <div className="mt-2 flex items-center gap-2.5 rounded-2xl border border-white/70 bg-white/55 px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus-within:border-primary/40 focus-within:bg-white/75">
+              <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-neutral-200/80 bg-secondary px-3.5 focus-within:border-primary/35 focus-within:bg-white">
                 <Search className="h-4 w-4 shrink-0 text-neutral-500" />
                 <Input
                   id="bu-account-number"
@@ -874,58 +941,10 @@ export default function SendBU({
                   placeholder="Phone used as ɃU account"
                   value={searchQuery}
                   onChange={(e) => void handleSearch(e.target.value)}
-                  className="h-11 border-0 bg-transparent px-0 text-sm font-medium text-neutral-950 shadow-none placeholder:text-neutral-400 focus-visible:ring-0"
+                  className="h-12 border-0 bg-transparent px-0 text-sm font-medium text-neutral-950 shadow-none placeholder:text-neutral-400 focus-visible:ring-0"
                 />
+                <ScanAccountButton onScan={(raw) => void fillAccountFromScan(raw)} />
               </div>
-            </div>
-
-            <div className="bu-glass-soft mt-3 space-y-3 rounded-[26px] p-4">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white shadow-[0_8px_18px_rgba(11,23,51,0.22)]">
-                  <QrCode className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">Scan to pay</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Scan a receive ɃU QR or a vendor pay QR
-                  </p>
-                </div>
-              </div>
-              {cameraActive && step === 'search' ? (
-                <TicketQrScanner
-                  readerId="bu-send-pay-reader"
-                  active={cameraActive}
-                  onScan={handlePayScan}
-                />
-              ) : null}
-              <Button
-                type="button"
-                className="bu-press h-11 w-full rounded-2xl bg-neutral-950 font-semibold text-white shadow-[0_12px_28px_rgba(11,23,51,0.22)] hover:bg-neutral-900"
-                onClick={() => {
-                  setMessage(null)
-                  setCameraActive((open) => !open)
-                }}
-              >
-                {cameraActive && step === 'search' ? 'Stop scanner' : 'Scan to pay'}
-              </Button>
-              {cameraActive && step === 'search' ? (
-                <>
-                  <Input
-                    placeholder="Or paste QR payload"
-                    value={pastedQr}
-                    onChange={(e) => setPastedQr(e.target.value)}
-                    className="h-11 rounded-2xl border-white/70 bg-white/55"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full rounded-2xl"
-                    onClick={() => handlePayScan(pastedQr)}
-                  >
-                    Load from paste
-                  </Button>
-                </>
-              ) : null}
             </div>
 
             {message && step === 'search' && (
@@ -1186,6 +1205,48 @@ export default function SendBU({
                     </p>
                   )}
                 </div>
+
+                {spendGift ? (
+                  <p className="rounded-2xl bg-neutral-950 px-3 py-2 text-sm text-white">
+                    Spending {purposeLabel(spendGift.purpose).toLowerCase()} from {spendGift.from_name || 'a friend'}. Up to ₦
+                    {Math.round(spendGift.remaining_bu).toLocaleString('en-NG')}.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold">What is this for?</p>
+                    <div className="flex flex-wrap gap-2">
+                      {PURPOSE_IDS.map((id) => {
+                        const active = purpose === id
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => {
+                              setPurpose(active ? null : id)
+                              if (active) setLockPurpose(false)
+                            }}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                              active ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-700'
+                            }`}
+                          >
+                            <PurposeIcon purpose={id} className="h-3.5 w-3.5" />
+                            {purposeLabel(id)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {purpose ? (
+                      <label className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-50 px-3 py-2 text-sm">
+                        <span>Lock to this reason</span>
+                        <input
+                          type="checkbox"
+                          checked={lockPurpose}
+                          onChange={(e) => setLockPurpose(e.target.checked)}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                )}
 
                 <div>
                   <label className="text-sm font-semibold">Message (Optional)</label>

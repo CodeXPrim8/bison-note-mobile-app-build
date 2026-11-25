@@ -21,6 +21,8 @@ import { bankCodeFromName, NGN_BANKS } from '@/lib/payments/ngn-banks'
 import { PinPadModal } from '@/components/pin-pad-modal'
 import { BuInvoiceDialog } from '@/components/bu-invoice'
 import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
+import { ScanAccountButton } from '@/components/scan-account-button'
+import { parsePayQr } from '@/lib/pay-qr'
 
 interface WithdrawalRequest {
   id: string
@@ -142,6 +144,45 @@ export default function Redemption() {
     accountName: '',
     remark: '',
   })
+
+  async function fillBankFromScan(raw: string) {
+    const parsed = parsePayQr(raw)
+    if (!parsed) {
+      setMessage('Scan a Bucks pay QR.')
+      return
+    }
+    let bankAccount = parsed.bankAccountNumber
+    let bankCode = parsed.bankCode
+    let bankName = parsed.bankName
+    if (parsed.vendorId && !bankAccount) {
+      try {
+        const res = await fetch(`/api/vendor/pay-card?user_id=${encodeURIComponent(parsed.vendorId)}`, {
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (json.status) {
+          bankAccount = String(json.data?.bank_account_number || '')
+          bankCode = String(json.data?.bank_code || bankCode || '')
+          bankName = String(json.data?.bank_name || bankName || '')
+        }
+      } catch {
+        // keep the QR fields
+      }
+    }
+    const digits = String(bankAccount || '').replace(/\D/g, '').slice(0, 10)
+    if (digits.length !== 10) {
+      setMessage('That QR has no bank account number yet.')
+      return
+    }
+    setMessage(null)
+    if (bankName) setBankQuery(bankName)
+    setForm((current) => ({
+      ...current,
+      accountNumber: digits,
+      bankCode: bankCode || current.bankCode,
+      accountName: '',
+    }))
+  }
 
   async function loadHistory() {
     if (!userId) {
@@ -342,7 +383,7 @@ export default function Redemption() {
     if (!readyQuote) return
     if (insufficient) {
       setMessage(
-        `Not enough ɃU. Bank gets ₦${formatNairaPlain(readyQuote.bankNaira)}; you need Ƀ ${formatBu(readyQuote.totalDebitBu)} (amount + charges).`,
+        'Insufficient account',
       )
       return
     }
@@ -468,7 +509,7 @@ export default function Redemption() {
   }
 
   const fieldClass =
-    'mt-1.5 h-11 w-full rounded-2xl border border-white/70 bg-white/55 px-3.5 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none placeholder:text-muted-foreground focus:border-primary/40 focus:bg-white/75'
+    'mt-1.5 h-12 w-full rounded-xl border border-neutral-200/80 bg-secondary px-3.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/35 focus:bg-white'
 
   return (
     <div className="space-y-5 bg-transparent pb-28 pt-4 text-neutral-950">
@@ -591,7 +632,7 @@ export default function Redemption() {
                   </div>
                   {insufficient ? (
                     <p className="mt-1.5 text-destructive">
-                      Need Ƀ {formatBu(readyQuote.totalDebitBu)} for this send.
+                      Insufficient account
                     </p>
                   ) : null}
                 </div>
@@ -668,20 +709,23 @@ export default function Redemption() {
               <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
                 Account number
               </label>
-              <Input
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="Account number"
-                value={form.accountNumber}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
-                    accountName: '',
-                  })
-                }
-                className={fieldClass}
-              />
+              <div className="mt-2 flex items-center gap-2">
+                <Input
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="Account number"
+                  value={form.accountNumber}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
+                      accountName: '',
+                    })
+                  }
+                  className={fieldClass}
+                />
+                <ScanAccountButton onScan={(raw) => void fillBankFromScan(raw)} />
+              </div>
               {(resolving || form.accountName || form.accountNumber.length === 10) && (
                 <div className="mt-2.5 flex items-center gap-2 rounded-2xl bg-white/55 px-3 py-2 text-sm">
                   {resolving ? (

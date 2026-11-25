@@ -1,7 +1,7 @@
 /**
  * Wallet FX. Live `wallets.balance` stays naira.
- * Display: 1 ɃU = ₦1. Peer/spray/tip: fee-on-top (receiver gets face amount).
- * Card Fund Wallet: 5% buy spread. Withdraw: face to bank; Paystack + platform on top.
+ * Display: 1 ɃU = ₦1. Peer send/tip: free (receiver gets face amount).
+ * Spray: fee-on-top. Card Fund Wallet: 5% buy spread. Withdraw: face to bank; Paystack + platform on top.
  * Ticket prices and the 5% ticket service fee stay naira and are separate.
  */
 export const BU_NAIRA_VALUE = 1
@@ -156,13 +156,9 @@ export function quoteBuyFromChargeNaira(chargeNaira: number): BuyQuote {
   return quoteBuyBu(chargeNaira / cardBuyRate())
 }
 
-/** Quiet peer fee (send / tip). Receiver gets full `bu`; fee debited on top. */
-export function peerTransferFeeBu(bu: number): number {
-  const amount = roundMoney(bu, 2)
-  if (!(amount > 0)) return 0
-  if (amount + 1e-9 < 500) return 5
-  if (amount + 1e-9 <= 5000) return 10
-  return Math.min(50, Math.max(10, roundMoney(amount * 0.005, 2)))
+/** ɃU → ɃU send / tip: free. Receiver gets full `bu`; no platform charge. */
+export function peerTransferFeeBu(_bu: number): number {
+  return 0
 }
 
 /** Quiet spray fee. Receiver / event gets full face; fee on top. */
