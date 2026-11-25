@@ -1,7 +1,9 @@
 /**
  * Wallet FX. Live `wallets.balance` stays naira.
  * Display: 1 ɃU = ₦1. Peer send/tip: free (receiver gets face amount).
- * Spray: fee-on-top. Card Fund Wallet: 5% buy spread. Withdraw: face to bank; Paystack + platform on top.
+ * Spray: fee-on-top. Card Fund Wallet: 5% buy spread.
+ * Bank transfer in: free under ₦10,000. From ₦10,000: ₦25 up to ₦20,000, then 0.3% capped at ₦150.
+ * Withdraw: face to bank; Paystack + platform on top.
  * Ticket prices and the 5% ticket service fee stay naira and are separate.
  */
 export const BU_NAIRA_VALUE = 1
@@ -186,10 +188,10 @@ export function quotePeerMoveBu(
   }
 }
 
-/** DVA bank-in convenience: net credited after fee. */
+/** Bank transfer into ɃU. Free under ₦10,000. From ₦10,000 the pay-in fee applies. */
 export function dvaCreditFeeNaira(grossNaira: number): number {
   const gross = roundMoney(grossNaira)
-  if (!(gross > 0)) return 0
+  if (!(gross > 0) || gross + 1e-9 < 10000) return 0
   if (gross + 1e-9 <= 20000) return 25
   return Math.min(150, Math.max(25, roundMoney(gross * 0.003)))
 }

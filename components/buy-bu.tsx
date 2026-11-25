@@ -328,12 +328,12 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Transfer any amount. Stay on this screen — we credit your ɃU as soon as the transfer lands.
+                  Under ₦10,000 is credited in full. From ₦10,000, the fee is ₦25 up to ₦20,000, then 0.3% up to ₦150. Stay on this screen — we credit your ɃU as soon as the transfer lands.
                 </p>
                 {syncNote && <p className="text-sm font-semibold text-primary">{syncNote}</p>}
                 {virtualAccount.needs_kyc || virtualAccount.upgrade_to_squad ? (
                   <p className="text-xs text-muted-foreground">
-                    Optional: verify BVN once to move onto the cheaper Squad bank-in rail.
+                    Optional: verify BVN once for your permanent funding account.
                   </p>
                 ) : null}
                 <div className="flex gap-2">
