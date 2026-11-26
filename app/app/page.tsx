@@ -63,6 +63,27 @@ function intentFromPageData(pageData: unknown): 'tip' | undefined {
   return (pageData as { intent?: string }).intent === 'tip' ? 'tip' : undefined
 }
 
+function bankFromPageData(pageData: unknown) {
+  if (!pageData || typeof pageData !== 'object') return null
+  const data = pageData as {
+    bankAccountNumber?: string
+    bankCode?: string
+    bankName?: string
+    businessName?: string
+    vendorId?: string
+  }
+  const bankAccountNumber = String(data.bankAccountNumber ?? '').replace(/\D/g, '').slice(0, 10)
+  const bankCode = String(data.bankCode ?? '').trim()
+  if (bankAccountNumber.length !== 10 || !bankCode) return null
+  return {
+    bankAccountNumber,
+    bankCode,
+    bankName: data.bankName ? String(data.bankName) : undefined,
+    businessName: data.businessName ? String(data.businessName) : undefined,
+    vendorId: data.vendorId ? String(data.vendorId) : undefined,
+  }
+}
+
 function eventPosFromPageData(pageData: unknown): { eventId?: string; eventTitle?: string } {
   if (!pageData || typeof pageData !== 'object') return {}
   const data = pageData as { eventId?: string; eventTitle?: string }
@@ -276,7 +297,12 @@ function MobileAppShell() {
                 </div>
               </div>
               {currentPage === 'spraying' && <Spraying onNavigate={handleNavigate} />}
-              {currentPage === 'redemption' && <Redemption />}
+              {currentPage === 'redemption' && (
+                <Redemption
+                  key={`bank-${bankFromPageData(pageData)?.bankAccountNumber || 'default'}`}
+                  initialBank={bankFromPageData(pageData)}
+                />
+              )}
               {currentPage === 'profile' && (
                 <Profile
                   onNavigate={handleNavigate}
@@ -312,7 +338,7 @@ function MobileAppShell() {
                 />
               )}
               {currentPage === 'pos-pay' && (
-                <PosPay onBack={() => handleNavigate('dashboard')} />
+                <PosPay onBack={() => handleNavigate('dashboard')} onNavigate={handleNavigate} />
               )}
               {currentPage === 'receive-bu' && (
                 <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />
@@ -332,7 +358,12 @@ function MobileAppShell() {
                 />
               </div>
               {currentPage === 'wallet' && <Wallet onNavigate={handleNavigate} />}
-              {currentPage === 'redemption' && <Redemption />}
+              {currentPage === 'redemption' && (
+                <Redemption
+                  key={`bank-${bankFromPageData(pageData)?.bankAccountNumber || 'default'}`}
+                  initialBank={bankFromPageData(pageData)}
+                />
+              )}
               {currentPage === 'history' && <History />}
               {currentPage === 'receive-bu' && (
                 <ReceiveBU key={`receive-${intentFromPageData(pageData) || 'menu'}`} initialIntent={intentFromPageData(pageData)} />

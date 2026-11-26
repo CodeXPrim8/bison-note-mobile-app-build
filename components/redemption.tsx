@@ -24,6 +24,7 @@ import { BuInvoiceDialog } from '@/components/bu-invoice'
 import { invoiceNumberFromId, type BuInvoice } from '@/lib/invoice/document'
 import { ScanAccountButton } from '@/components/scan-account-button'
 import { parsePayQr } from '@/lib/pay-qr'
+import { takeBankScan, type BankScanPrefill } from '@/lib/pay-qr-route'
 
 interface WithdrawalRequest {
   id: string
@@ -121,7 +122,11 @@ function uniqueReceivers(rows: WithdrawalRequest[]): BankReceiver[] {
   return out
 }
 
-export default function Redemption() {
+export default function Redemption({
+  initialBank,
+}: {
+  initialBank?: BankScanPrefill | null
+} = {}) {
   const { applySpendBu, refreshWallet, buBalance, userId, displayName } = useAccount()
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [banks, setBanks] = useState<BankOption[]>(NGN_BANKS.map((bank) => ({ name: bank.name, code: bank.code })))
@@ -147,6 +152,26 @@ export default function Redemption() {
     accountName: '',
     remark: '',
   })
+  const [posVendorUserId, setPosVendorUserId] = useState<string | null>(null)
+
+  function applyBankPrefill(prefill: BankScanPrefill) {
+    const digits = prefill.bankAccountNumber.replace(/\D/g, '').slice(0, 10)
+    const bankCode = prefill.bankCode.trim()
+    if (digits.length !== 10 || !bankCode) return false
+    setMessage(null)
+    if (prefill.bankName) setBankQuery(prefill.bankName)
+    setPosVendorUserId(prefill.vendorId?.trim() || null)
+    setForm((current) => ({
+      ...current,
+      accountNumber: digits,
+      bankCode,
+      accountName: '',
+      remark: prefill.businessName
+        ? `Pay ${prefill.businessName}`
+        : current.remark,
+    }))
+    return true
+  }
 
   async function fillBankFromScan(raw: string) {
     const parsed = parsePayQr(raw)
@@ -157,35 +182,45 @@ export default function Redemption() {
     let bankAccount = parsed.bankAccountNumber
     let bankCode = parsed.bankCode
     let bankName = parsed.bankName
-    if (parsed.vendorId && !bankAccount) {
+    let businessName = parsed.businessName
+    if (parsed.vendorId) {
       try {
         const res = await fetch(`/api/vendor/pay-card?user_id=${encodeURIComponent(parsed.vendorId)}`, {
           credentials: 'include',
         })
         const json = await res.json()
         if (json.status) {
-          bankAccount = String(json.data?.bank_account_number || '')
+          bankAccount = String(json.data?.bank_account_number || bankAccount || '')
           bankCode = String(json.data?.bank_code || bankCode || '')
           bankName = String(json.data?.bank_name || bankName || '')
+          businessName = String(json.data?.business_name || businessName || '')
         }
       } catch {
         // keep the QR fields
       }
     }
     const digits = String(bankAccount || '').replace(/\D/g, '').slice(0, 10)
-    if (digits.length !== 10) {
+    if (digits.length !== 10 || !String(bankCode || '').trim()) {
       setMessage('That QR has no bank account number yet.')
       return
     }
-    setMessage(null)
-    if (bankName) setBankQuery(bankName)
-    setForm((current) => ({
-      ...current,
-      accountNumber: digits,
-      bankCode: bankCode || current.bankCode,
-      accountName: '',
-    }))
+    applyBankPrefill({
+      bankAccountNumber: digits,
+      bankCode: String(bankCode),
+      bankName: bankName || undefined,
+      businessName: businessName || undefined,
+      vendorId: parsed.vendorId,
+    })
   }
+
+  useEffect(() => {
+    const fromNav = initialBank
+    const fromStash = takeBankScan()
+    const prefill = fromNav?.bankAccountNumber ? fromNav : fromStash
+    if (!prefill) return
+    applyBankPrefill(prefill)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function loadHistory() {
     if (!userId) {
@@ -371,6 +406,7 @@ export default function Redemption() {
   function pickBank(option: BankOption) {
     setBankQuery(option.name)
     setBankMenuOpen(false)
+    setPosVendorUserId(null)
     setForm((current) => ({
       ...current,
       bankCode: option.code,
@@ -382,6 +418,7 @@ export default function Redemption() {
     setMessage(null)
     setReceiverSearch('')
     setSaveBeneficiary(false)
+    setPosVendorUserId(null)
     setBankQuery(receiver.bankName)
     setBankMenuOpen(false)
     setForm((current) => ({
@@ -439,6 +476,7 @@ export default function Redemption() {
           account_name: form.accountName.trim(),
           remark: form.remark.trim() || undefined,
           pin,
+          ...(posVendorUserId ? { pos_vendor_user_id: posVendorUserId } : {}),
         }),
       })
       const json = await res.json()
@@ -453,6 +491,7 @@ export default function Redemption() {
         return
       }
       setPinOpen(false)
+      setPosVendorUserId(null)
       applySpendBu(readyQuote.totalDebitBu)
       const row = json.data as WithdrawalRequest & {
         invoice_number?: string
@@ -751,13 +790,14 @@ export default function Redemption() {
                   maxLength={10}
                   placeholder="Account number"
                   value={form.accountNumber}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setPosVendorUserId(null)
                     setForm({
                       ...form,
                       accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
                       accountName: '',
                     })
-                  }
+                  }}
                   className={fieldClass}
                 />
                 <ScanAccountButton onScan={(raw) => void fillBankFromScan(raw)} />

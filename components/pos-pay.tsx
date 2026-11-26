@@ -9,6 +9,7 @@ import { PinPadModal } from '@/components/pin-pad-modal'
 import { BU_MIN_TRANSFER, formatBu, quotePeerMoveBu } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { QrScanPopup } from '@/components/qr-scan-popup'
+import { resolvePosScanRoute, stashBankScan } from '@/lib/pay-qr-route'
 
 type PosTarget = {
   vendorId: string
@@ -42,23 +43,25 @@ export function parsePosQr(raw: string): PosTarget | null {
 
 export default function PosPay({
   onBack,
+  onNavigate,
   initialRaw,
 }: {
   onBack?: () => void
+  onNavigate?: (page: string, data?: unknown) => void
   initialRaw?: string | null
 }) {
   const { applySpendBu, userId } = useAccount()
   const [target, setTarget] = useState<PosTarget | null>(null)
   const [amount, setAmount] = useState('')
   const [pasted, setPasted] = useState('')
-  const [cameraActive, setCameraActive] = useState(false)
+  const [cameraActive, setCameraActive] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pinOpen, setPinOpen] = useState(false)
   const [pinError, setPinError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  function onScan(raw: string) {
+  async function onScan(raw: string) {
     const parsed = parsePosQr(raw)
     if (!parsed) {
       setMessage('Scan a vendor POS QR.')
@@ -68,6 +71,22 @@ export default function PosPay({
       setMessage('That is your own POS QR.')
       return
     }
+
+    // Business POS with bank settlement → Send to bank (not wallet POS).
+    if (parsed.mode === 'business') {
+      const route = await resolvePosScanRoute(raw)
+      if (route.kind === 'bank') {
+        setCameraActive(false)
+        stashBankScan(route)
+        if (onNavigate) {
+          onNavigate('redemption', route)
+          return
+        }
+        window.location.assign('/app?page=redemption')
+        return
+      }
+    }
+
     setTarget(parsed)
     setCameraActive(false)
     setMessage(null)
@@ -75,7 +94,7 @@ export default function PosPay({
 
   useEffect(() => {
     if (!initialRaw) return
-    onScan(initialRaw)
+    void onScan(initialRaw)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRaw])
 
@@ -84,7 +103,7 @@ export default function PosPay({
       const cached = sessionStorage.getItem('bu_pos_qr')
       if (cached) {
         sessionStorage.removeItem('bu_pos_qr')
-        onScan(cached)
+        void onScan(cached)
       }
     } catch {
       // ignore
@@ -164,21 +183,21 @@ export default function PosPay({
       {!target ? (
         <Card className="space-y-3 p-4">
           <Button className="w-full" onClick={() => setCameraActive(true)}>
-            Scan POS QR
+            {cameraActive ? 'Camera open' : 'Scan POS QR'}
           </Button>
           <QrScanPopup
             open={cameraActive}
             onClose={() => setCameraActive(false)}
             onScan={(raw) => {
               setCameraActive(false)
-              onScan(raw)
+              void onScan(raw)
             }}
-            title="Scan POS QR"
+            title="Scan to pay"
             hint="Point at the vendor Business or Event POS code."
             readerId="bu-pos-pay"
           />
           <Input placeholder="Or paste POS QR payload" value={pasted} onChange={(e) => setPasted(e.target.value)} />
-          <Button variant="outline" className="w-full" onClick={() => onScan(pasted)}>
+          <Button variant="outline" className="w-full" onClick={() => void onScan(pasted)}>
             Use pasted QR
           </Button>
         </Card>

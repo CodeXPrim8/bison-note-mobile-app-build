@@ -5,7 +5,7 @@ import QRCode from 'qrcode'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Building2, Check, CheckCircle, ChevronLeft, Copy, Nfc, QrCode, Share2 } from 'lucide-react'
+import { Building2, Check, CheckCircle, ChevronLeft, Copy, Nfc, QrCode, Share2, Upload } from 'lucide-react'
 import { WalletPageSummary } from '@/components/wallet-summary'
 import { ModeListRow, ModeSegmented } from '@/components/mode-home-shell'
 import { useAccount } from '@/components/account-store'
@@ -62,6 +62,9 @@ function saleStatusLabel(status: SaleStatus): 'Pending' | 'Received' | 'Reversed
 
 function saleTitle(sale: PosSale, isEventPos: boolean) {
   if (sale.metadata?.kind === 'business_pos_terminal') return 'Contactless sale'
+  if (sale.metadata?.kind === 'business_pos_bank' || sale.metadata?.settlement === 'bank') {
+    return 'Bank settlement'
+  }
   if (isEventPos) return 'Event POS sale'
   return 'Business POS sale'
 }
@@ -80,6 +83,8 @@ export default function VendorPOS({
   const [tab, setTab] = useState<BizTab | EventTab>(isEventPos ? 'qr' : 'accept')
   const [acceptMethod, setAcceptMethod] = useState<AcceptMethod | null>(null)
   const [sales, setSales] = useState<PosSale[]>([])
+  const [salesLoading, setSalesLoading] = useState(false)
+  const [salesError, setSalesError] = useState<string | null>(null)
   const [resolvedTitle, setResolvedTitle] = useState(eventTitle || '')
   const [qrImage, setQrImage] = useState('')
   const [bizProfile, setBizProfile] = useState({
@@ -114,10 +119,19 @@ export default function VendorPOS({
 
   const loadSales = useCallback(async () => {
     if (!userId || !canVendor) return
+    setSalesLoading(true)
+    setSalesError(null)
     try {
-      const salesRes = await fetch('/api/pos/sales', { credentials: 'include' })
+      const salesRes = await fetch('/api/pos/sales', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
       const salesJson = await salesRes.json()
-      if (salesJson.status) setSales((salesJson.data?.sales ?? []) as PosSale[])
+      if (!salesJson.status) {
+        setSalesError(salesJson.message ?? 'Could not load POS history.')
+        return
+      }
+      setSales((salesJson.data?.sales ?? []) as PosSale[])
 
       if (isEventPos && eventId && !eventTitle) {
         const linksRes = await fetch('/api/pos/vendors?mine=1', { credentials: 'include' })
@@ -133,7 +147,9 @@ export default function VendorPOS({
         }
       }
     } catch {
-      setMessage('Could not load POS.')
+      setSalesError('Could not load POS history.')
+    } finally {
+      setSalesLoading(false)
     }
   }, [userId, canVendor, isEventPos, eventId, eventTitle])
 
@@ -156,6 +172,20 @@ export default function VendorPOS({
     void loadSales()
     void loadTerminal()
   }, [loadSales, loadTerminal])
+
+  useEffect(() => {
+    if (tab !== 'history') return
+    void loadSales()
+  }, [tab, loadSales])
+
+  useEffect(() => {
+    if (tab !== 'history') return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadSales()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [tab, loadSales])
 
   useEffect(() => {
     if (eventTitle) setResolvedTitle(eventTitle)
@@ -221,12 +251,17 @@ export default function VendorPOS({
             type: 'pos',
             vendor_id: userId,
             mode: 'business',
+            settlement: bizProfile.settlement,
             label: bizProfile.business_name || 'Business POS',
             business_name: bizProfile.business_name || undefined,
             account_number: bizProfile.phone || undefined,
-            bank_account_number: bizProfile.bank_account_number || virtualAccount?.account_number || undefined,
-            bank_code: bizProfile.bank_code || undefined,
-            bank_name: bizProfile.bank_name || virtualAccount?.bank_name || undefined,
+            ...(bizProfile.settlement === 'bank'
+              ? {
+                  bank_account_number: bizProfile.bank_account_number || undefined,
+                  bank_code: bizProfile.bank_code || undefined,
+                  bank_name: bizProfile.bank_name || undefined,
+                }
+              : {}),
             category: bizProfile.category || undefined,
           },
     )
@@ -392,7 +427,8 @@ export default function VendorPOS({
     if (isEventPos && eventId) {
       return sales.filter((sale) => sale.mode === 'event' && sale.event_id === eventId)
     }
-    return sales.filter((sale) => sale.mode === 'business')
+    // Business history: include business mode and any sale missing mode (legacy rows).
+    return sales.filter((sale) => sale.mode !== 'event')
   }, [sales, isEventPos, eventId])
 
   const qrPayload = useMemo(
@@ -404,12 +440,17 @@ export default function VendorPOS({
               type: 'pos',
               vendor_id: userId,
               mode: 'business',
+              settlement: bizProfile.settlement,
               label: bizProfile.business_name || 'Business POS',
               business_name: bizProfile.business_name || undefined,
               account_number: bizProfile.phone || undefined,
-              bank_account_number: bizProfile.bank_account_number || virtualAccount?.account_number || undefined,
-              bank_code: bizProfile.bank_code || undefined,
-              bank_name: bizProfile.bank_name || virtualAccount?.bank_name || undefined,
+              ...(bizProfile.settlement === 'bank'
+                ? {
+                    bank_account_number: bizProfile.bank_account_number || undefined,
+                    bank_code: bizProfile.bank_code || undefined,
+                    bank_name: bizProfile.bank_name || undefined,
+                  }
+                : {}),
               category: bizProfile.category || undefined,
             },
       ),
@@ -614,7 +655,7 @@ export default function VendorPOS({
           <ModeSegmented
             value={tab}
             onChange={(id) => {
-              setTab(id as BizTab)
+              setTab(id as BizTab | EventTab)
               if (id !== 'accept') setAcceptMethod(null)
             }}
             options={tabOptions}
@@ -837,13 +878,6 @@ export default function VendorPOS({
                     </div>
                     {bizProfile.settlement === 'bank' ? (
                       <div className="w-full space-y-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs font-semibold text-neutral-700">
-                          Business bank for auto-settlement
-                        </p>
-                        <p className="text-[11px] leading-relaxed text-neutral-500">
-                          After each POS sale, Ƀucks pays this account (Paystack fees apply). Without a
-                          verified account, sales stay in your ɃU wallet.
-                        </p>
                         <label className="block text-xs font-semibold text-neutral-500">
                           Bank
                           <select
@@ -896,12 +930,18 @@ export default function VendorPOS({
                         {bankHint ? <p className="text-xs text-amber-700">{bankHint}</p> : null}
                       </div>
                     ) : null}
-                    <label className="w-full text-xs font-semibold text-neutral-500">
-                      Logo for the middle of the QR
+                    <label className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-3 text-xs font-semibold text-neutral-500">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white">
+                        <Upload className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <span>
+                        <span className="block text-neutral-800">Logo for the middle of the QR</span>
+                        <span className="mt-0.5 block font-medium text-neutral-500">Tap to upload</span>
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
-                        className="mt-1 block w-full text-sm"
+                        className="sr-only"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
@@ -1106,12 +1146,28 @@ export default function VendorPOS({
 
         {tab === 'history' && (
           <div className="mt-4 space-y-2">
-            {history.length === 0 && (
-              <p className="text-sm text-muted-foreground">No POS sales yet.</p>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {salesLoading ? 'Refreshing…' : `${history.length} sale${history.length === 1 ? '' : 's'}`}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={salesLoading}
+                onClick={() => void loadSales()}
+              >
+                Refresh
+              </Button>
+            </div>
+            {salesError ? (
+              <p className="text-sm text-destructive">{salesError}</p>
+            ) : null}
             {history.map((sale) => {
               const status = saleStatusLabel(sale.status)
-              const isOpen = status === 'Pending'
+              const isBankSettlement =
+                sale.metadata?.kind === 'business_pos_bank' || sale.metadata?.settlement === 'bank'
+              const isOpen = status === 'Pending' && !isBankSettlement
               return (
                 <Card key={sale.id} className="space-y-3 p-4">
                   <ModeListRow
@@ -1123,6 +1179,7 @@ export default function VendorPOS({
                   <p className="text-xs text-muted-foreground">
                     Guest paid Ƀ {formatBu(buFromNaira(sale.amount_naira))}
                     {isEventPos ? ` · Celebrant Ƀ ${formatBu(buFromNaira(sale.celebrant_naira))}` : ''}
+                    {isBankSettlement ? ' · Settled to bank' : ''}
                     {' · '}
                     {status}
                   </p>

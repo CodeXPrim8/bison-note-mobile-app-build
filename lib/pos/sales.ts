@@ -64,37 +64,108 @@ function asSale(raw: unknown): PosSale | null {
   }
 }
 
-export async function listVendorPosSales(vendorUserId: string, limit = 40) {
+export async function listVendorPosSales(vendorUserId: string | string[], limit = 40) {
+  const ids = [...new Set((Array.isArray(vendorUserId) ? vendorUserId : [vendorUserId]).filter(Boolean))]
+  if (ids.length === 0) return []
   const client = db()
-  const { data, error } = await client
+  let query = client
     .from('bu_pos_sales')
     .select('*')
-    .eq('vendor_user_id', vendorUserId)
     .order('created_at', { ascending: false })
     .limit(limit)
+  query = ids.length === 1 ? query.eq('vendor_user_id', ids[0]) : query.in('vendor_user_id', ids)
+  const { data, error } = await query
   if (error) {
     if (/schema cache|does not exist/i.test(error.message)) return []
     throw new ApiError(500, 'POS_LIST_FAILED', error.message)
   }
-  return ((data ?? []) as unknown[]).map(asSale).filter(Boolean) as PosSale[]
+  const byId = new Map<string, PosSale>()
+  for (const raw of data ?? []) {
+    const sale = asSale(raw)
+    if (sale) byId.set(sale.id, sale)
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
 }
 
 export async function updatePosSaleStatus(input: {
   saleId: string
-  vendorUserId: string
+  vendorUserId: string | string[]
   status: PosSaleStatus
 }) {
+  const ids = [...new Set((Array.isArray(input.vendorUserId) ? input.vendorUserId : [input.vendorUserId]).filter(Boolean))]
+  if (ids.length === 0) throw new ApiError(404, 'NOT_FOUND', 'POS sale not found')
   const client = db()
   const updated = await client
     .from('bu_pos_sales')
     .update({ status: input.status, updated_at: new Date().toISOString() })
     .eq('id', input.saleId)
-    .eq('vendor_user_id', input.vendorUserId)
+    .in('vendor_user_id', ids)
     .select('*')
     .maybeSingle()
   if (updated.error) throw new ApiError(500, 'POS_UPDATE_FAILED', updated.error.message)
   if (!updated.data) throw new ApiError(404, 'NOT_FOUND', 'POS sale not found')
   return asSale(updated.data) as PosSale
+}
+
+/** Log a business POS sale when a guest pays via Send-to-bank after scanning a bank-settlement QR. */
+export async function recordBusinessPosBankSale(input: {
+  vendorUserId: string
+  guestUserId: string
+  amountNaira: number
+  withdrawalId: string
+  remark?: string | null
+}) {
+  const vendorUserId = input.vendorUserId.trim()
+  const guestUserId = input.guestUserId.trim()
+  if (!vendorUserId || !guestUserId) return null
+  if (vendorUserId === guestUserId) return null
+  const amountNaira = roundMoney(input.amountNaira)
+  if (!(amountNaira > 0)) return null
+
+  const client = db()
+  const reference = `BANKPOS_${input.withdrawalId.replace(/-/g, '').slice(0, 20)}`
+  const meta = {
+    kind: 'business_pos_bank',
+    mode: 'business',
+    settlement: 'bank',
+    withdrawal_id: input.withdrawalId,
+    remark: input.remark || null,
+    vendor_user_id: vendorUserId,
+    guest_user_id: guestUserId,
+  }
+
+  const insert = await client
+    .from('bu_pos_sales')
+    .insert({
+      id: randomUUID(),
+      reference,
+      vendor_user_id: vendorUserId,
+      celebrant_user_id: null,
+      guest_user_id: guestUserId,
+      event_id: null,
+      mode: 'business',
+      amount_naira: amountNaira,
+      celebrant_naira: 0,
+      vendor_naira: amountNaira,
+      commission_pct: 0,
+      status: 'notes_issued',
+      metadata: meta,
+    })
+    .select('*')
+    .maybeSingle()
+
+  if (insert.error) {
+    if (/unique|duplicate/i.test(insert.error.message)) {
+      const existing = await client.from('bu_pos_sales').select('*').eq('reference', reference).maybeSingle()
+      return asSale(existing.data)
+    }
+    if (/schema cache|does not exist/i.test(insert.error.message)) return null
+    // Don't fail the bank send if history insert fails.
+    return null
+  }
+  return asSale(insert.data)
 }
 
 export async function payPosSale(input: {

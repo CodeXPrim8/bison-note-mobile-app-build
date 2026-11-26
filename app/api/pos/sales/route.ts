@@ -31,7 +31,8 @@ export async function GET() {
     if (!canUseVendorMode(roles)) {
       throw new ApiError(403, 'FORBIDDEN', 'Vendor role required.')
     }
-    const sales = await listVendorPosSales(liveId, 60)
+    const vendorIds = liveId === user.id ? [liveId] : [liveId, user.id]
+    const sales = await listVendorPosSales(vendorIds, 60)
     return successResponse({ sales })
   } catch (error) {
     return handleRouteError(error)
@@ -48,9 +49,10 @@ export async function PATCH(request: Request) {
       throw new ApiError(403, 'FORBIDDEN', 'Vendor role required.')
     }
     const body = patchSchema.parse(await request.json())
+    const vendorIds = liveId === user.id ? [liveId] : [liveId, user.id]
     const sale = await updatePosSaleStatus({
       saleId: body.sale_id,
-      vendorUserId: liveId,
+      vendorUserId: vendorIds,
       status: body.status,
     })
     return successResponse(sale, 'Updated')

@@ -11,6 +11,7 @@ import {
   EyeOff,
   Mail,
   Plus,
+  QrCode,
   Smartphone,
   Ticket,
   Wifi,
@@ -241,6 +242,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => onNavigate('pos-pay')}
+                className="bu-press bu-glass-dark flex h-12 w-12 items-center justify-center rounded-full"
+                aria-label="Scan QR to pay"
+              >
+                <QrCode className="h-5 w-5" />
+              </button>
               <div className="bu-glass-dark flex items-center rounded-full">
                 <button
                   type="button"

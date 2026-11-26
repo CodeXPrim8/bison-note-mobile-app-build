@@ -10,7 +10,6 @@ import {
 } from '@/lib/auth/biometric'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as const
-const AUTO_SUBMIT_MS = 220
 
 export function PinPadModal({
   open,
@@ -39,26 +38,15 @@ export function PinPadModal({
   const [availability, setAvailability] = useState<BiometricAvailability | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
-  const autoTimerRef = useRef<number | null>(null)
-  const pinRef = useRef('')
-
-  useEffect(() => {
-    pinRef.current = pin
-  }, [pin])
 
   useEffect(() => {
     if (!open) {
       setPin('')
-      pinRef.current = ''
       setShake(false)
       setFaceBusy(false)
       setFaceHint(null)
       setSubmitting(false)
       submittingRef.current = false
-      if (autoTimerRef.current) {
-        window.clearTimeout(autoTimerRef.current)
-        autoTimerRef.current = null
-      }
       return
     }
     if (!biometric || !isFaceUnlockPreferred()) {
@@ -80,7 +68,6 @@ export function PinPadModal({
     setSubmitting(false)
     setShake(true)
     setPin('')
-    pinRef.current = ''
     const timer = window.setTimeout(() => setShake(false), 420)
     return () => window.clearTimeout(timer)
   }, [error])
@@ -92,16 +79,11 @@ export function PinPadModal({
     }
   }, [busy])
 
-  useEffect(() => {
-    return () => {
-      if (autoTimerRef.current) window.clearTimeout(autoTimerRef.current)
-    }
-  }, [])
-
   if (!open) return null
 
   const showFace = Boolean(biometric && isFaceUnlockPreferred() && availability?.available)
   const locked = busy || faceBusy || submitting
+  const canConfirm = pin.replace(/\D/g, '').length >= 4 && pin.replace(/\D/g, '').length <= 6
 
   async function submitNow(nextPin: string) {
     const clean = nextPin.replace(/\D/g, '')
@@ -109,10 +91,6 @@ export function PinPadModal({
     if (busy || faceBusy || submittingRef.current) return
     submittingRef.current = true
     setSubmitting(true)
-    if (autoTimerRef.current) {
-      window.clearTimeout(autoTimerRef.current)
-      autoTimerRef.current = null
-    }
     try {
       await onSubmit(clean)
     } catch {
@@ -121,42 +99,14 @@ export function PinPadModal({
     }
   }
 
-  function queueAutoSubmit(nextPin: string) {
-    if (autoTimerRef.current) window.clearTimeout(autoTimerRef.current)
-    if (nextPin.length >= 6) {
-      void submitNow(nextPin)
-      return
-    }
-    if (nextPin.length >= 4) {
-      // Short pause so a 5th/6th digit can still be typed for longer PINs.
-      autoTimerRef.current = window.setTimeout(() => {
-        void submitNow(pinRef.current)
-      }, AUTO_SUBMIT_MS)
-    }
-  }
-
   function press(key: (typeof KEYS)[number]) {
     if (busy || faceBusy || submittingRef.current) return
     if (key === '') return
     if (key === 'del') {
-      if (autoTimerRef.current) {
-        window.clearTimeout(autoTimerRef.current)
-        autoTimerRef.current = null
-      }
-      setPin((value) => {
-        const next = value.slice(0, -1)
-        pinRef.current = next
-        return next
-      })
+      setPin((value) => value.slice(0, -1))
       return
     }
-    setPin((value) => {
-      if (value.length >= 6) return value
-      const next = `${value}${key}`
-      pinRef.current = next
-      queueAutoSubmit(next)
-      return next
-    })
+    setPin((value) => (value.length >= 6 ? value : `${value}${key}`))
   }
 
   async function unlockWithFace() {
@@ -190,7 +140,7 @@ export function PinPadModal({
           <div>
             <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
             {subtitle ? <p className="mt-1 text-sm text-neutral-500">{subtitle}</p> : null}
-            <p className="mt-1 text-xs text-neutral-400">PIN submits automatically when you finish typing.</p>
+            <p className="mt-1 text-xs text-neutral-400">Enter your PIN, then tap Confirm PIN.</p>
           </div>
           <button
             type="button"
@@ -257,7 +207,7 @@ export function PinPadModal({
 
         <button
           type="button"
-          disabled={locked || pin.length < 4}
+          disabled={locked || !canConfirm}
           onClick={() => void submitNow(pin)}
           className="bu-press mt-5 w-full rounded-2xl bg-neutral-950 py-3.5 text-sm font-semibold text-white transition disabled:opacity-40"
         >

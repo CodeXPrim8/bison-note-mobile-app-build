@@ -11,6 +11,7 @@ import { QrScanPopup } from '@/components/qr-scan-popup'
 import { ScanAccountButton } from '@/components/scan-account-button'
 import { PurposeIcon } from '@/components/icons/purpose-icons'
 import { parsePayQr } from '@/lib/pay-qr'
+import { resolvePosScanRoute, stashBankScan } from '@/lib/pay-qr-route'
 import { PURPOSE_IDS, purposeLabel, type PurposeGift, type PurposeId } from '@/lib/purpose'
 import { formatEventDateTime } from '@/lib/datetime'
 import {
@@ -366,6 +367,30 @@ export default function SendBU({
   }, [])
 
   async function fillAccountFromScan(raw: string) {
+    const route = await resolvePosScanRoute(raw)
+    if (route.kind === 'bank') {
+      stashBankScan(route)
+      if (onNavigate) {
+        onNavigate('redemption', route)
+        return
+      }
+      window.location.assign('/app?page=redemption')
+      return
+    }
+    if (route.kind === 'pos') {
+      try {
+        sessionStorage.setItem('bu_pos_qr', route.raw)
+      } catch {
+        // ignore
+      }
+      if (onNavigate) {
+        onNavigate('pos-pay')
+        return
+      }
+      window.location.assign('/app?page=pos-pay')
+      return
+    }
+
     const parsed = parsePayQr(raw)
     if (!parsed) {
       setMessage('Scan a Bucks pay QR.')
@@ -602,25 +627,33 @@ export default function SendBU({
     }
   }
 
-  function handlePosOrReceiveScan(raw: string, mode: 'tip' | 'pay') {
-    try {
-      const asPos = JSON.parse(raw) as { type?: string }
-      if (String(asPos.type ?? '') === 'pos') {
-        try {
-          sessionStorage.setItem('bu_pos_qr', raw)
-        } catch {
-          // ignore
-        }
-        if (onNavigate) {
-          onNavigate('pos-pay')
-          return
-        }
-        window.location.assign('/app?page=pos-pay')
+  async function handlePosOrReceiveScan(raw: string, mode: 'tip' | 'pay') {
+    const route = await resolvePosScanRoute(raw)
+    if (route.kind === 'bank') {
+      setCameraActive(false)
+      stashBankScan(route)
+      if (onNavigate) {
+        onNavigate('redemption', route)
         return
       }
-    } catch {
-      // not JSON / not POS
+      window.location.assign('/app?page=redemption')
+      return
     }
+    if (route.kind === 'pos') {
+      try {
+        sessionStorage.setItem('bu_pos_qr', route.raw)
+      } catch {
+        // ignore
+      }
+      setCameraActive(false)
+      if (onNavigate) {
+        onNavigate('pos-pay')
+        return
+      }
+      window.location.assign('/app?page=pos-pay')
+      return
+    }
+
     const parsed = parseReceiveQr(raw)
     if (!parsed) {
       setMessage('Scan a live receive-ɃU or pay QR, or paste the payload.')
@@ -646,7 +679,9 @@ export default function SendBU({
     setStep('tip-confirm')
   }
 
-  const handleTipScan = (raw: string) => handlePosOrReceiveScan(raw, 'tip')
+  const handleTipScan = (raw: string) => {
+    void handlePosOrReceiveScan(raw, 'tip')
+  }
 
   return (
     <div className="space-y-6 bg-transparent pb-28 pt-4 text-neutral-950">

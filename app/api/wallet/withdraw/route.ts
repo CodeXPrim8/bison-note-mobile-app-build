@@ -26,6 +26,8 @@ import {
   publicWithdrawalStatus,
   sendWithdrawalPayout,
 } from '@/lib/wallet/payout'
+import { recordBusinessPosBankSale } from '@/lib/pos/sales'
+import { ensureLiveRecipientById } from '@/lib/auth/live-user'
 
 const schema = z.object({
   amount: z.number().positive().optional(),
@@ -36,6 +38,8 @@ const schema = z.object({
   account_name: z.string().min(2).optional(),
   remark: z.string().max(160).optional(),
   pin: pinSchema,
+  /** When set, guest paid a vendor bank-settlement POS QR — log it in POS History. */
+  pos_vendor_user_id: z.string().uuid().optional(),
 }).refine((body) => body.bu != null || body.amount != null, {
   message: 'Enter ɃU to send',
 })
@@ -165,7 +169,7 @@ export async function POST(request: Request) {
       liveId,
       settings.squad_fee_rules.free_under_naira,
     )
-    let quote
+    let quote: ReturnType<typeof quoteWithdrawBu>
     try {
       quote = quoteWithdrawBu(body.bu ?? body.amount ?? 0, {
         provider: payoutProvider,
@@ -264,7 +268,21 @@ export async function POST(request: Request) {
       throw new ApiError(500, 'WITHDRAW_FAILED', error instanceof Error ? error.message : 'Could not save bank send')
     }
 
+    async function maybeLogPosBankSale() {
+      const rawVendor = body.pos_vendor_user_id?.trim()
+      if (!rawVendor) return
+      const vendorId = (await ensureLiveRecipientById(rawVendor).catch(() => null)) || rawVendor
+      await recordBusinessPosBankSale({
+        vendorUserId: vendorId,
+        guestUserId: liveId,
+        amountNaira: quote.bankNaira,
+        withdrawalId: id,
+        remark: remark || null,
+      }).catch(() => null)
+    }
+
     if (!automatic) {
+      await maybeLogPosBankSale()
       return successResponse(
         {
           ...guestRow(row),
@@ -279,6 +297,7 @@ export async function POST(request: Request) {
 
     try {
       const payout = await sendWithdrawalPayout(row, db)
+      await maybeLogPosBankSale()
       const paidRow = { ...row, status: payout.status, paid_at: payout.status === 'paid' ? new Date().toISOString() : null }
       return successResponse(
         {
