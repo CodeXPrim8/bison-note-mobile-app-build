@@ -87,7 +87,7 @@ export async function PATCH(request: Request) {
       // Assume the guest was billed (not a free-quota send) when reversing fees.
       const chargeNaira = Math.max(
         0,
-        roundMoney(quoteWithdrawBu(faceNaira, { freeUsedToday: 999 }).totalDebit - faceNaira),
+        roundMoney(quoteWithdrawBu(faceNaira, { freeUsedToday: 1e12 }).totalDebit - faceNaira),
       )
       await creditFaceThenCharge(db, {
         userId: String(row.user_id),

@@ -3,7 +3,7 @@ import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { requireUser } from '@/lib/api/session'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { pinSchema } from '@/lib/auth/pin'
-import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { verifySessionPin } from '@/lib/auth/verify-session-pin'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { isVtuPublicEnabled } from '@/lib/vtu/provider'
 import { purchaseVtu } from '@/lib/vtu/purchase'
@@ -25,23 +25,23 @@ export async function POST(request: Request) {
     const user = await requireUser()
     const [body, session] = await Promise.all([request.json().then((json) => schema.parse(json)), readBuSession()])
     const phone = session?.phone_e164 || session?.phone
-    if (!phone) {
-      throw new ApiError(400, 'PIN_REQUIRED', 'Enter the transaction PIN you created for this account.')
-    }
-    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
-    if ('wrongPin' in pinCheck) {
-      throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
-    }
-    if (!('session' in pinCheck)) {
-      throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before buying airtime or data.')
-    }
-
     const userId =
       (await resolveLiveCelebrantId({
         id: user.id,
         email: user.email,
         phone: session?.phone_e164 || session?.phone || null,
       })) || user.id
+    const pinCheck = await verifySessionPin({
+      userId,
+      phone,
+      pin: body.pin,
+    })
+    if ('wrongPin' in pinCheck) {
+      throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
+    }
+    if ('pinNotSet' in pinCheck) {
+      throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before buying airtime or data.')
+    }
 
     const result = await purchaseVtu({
       userId,

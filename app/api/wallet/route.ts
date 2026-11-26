@@ -10,7 +10,7 @@ import { listWalletHistory } from '@/lib/wallet/history'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { createDataClient } from '@/lib/supabase/data'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
-import { countUnderFreeBankTransfersToday, freeUnderRemaining } from '@/lib/wallet/free-quota'
+import { freeUnderRemaining, sumUnderFreeBankVolumeToday } from '@/lib/wallet/free-quota'
 import { isPaystackConfigured } from '@/lib/env'
 
 export async function GET(request: Request) {
@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const user = await requireUser()
     const url = new URL(request.url)
     const includeHistory = url.searchParams.get('history') !== '0'
+    const lite = url.searchParams.get('lite') === '1'
     const rawLimit = Number(url.searchParams.get('limit') || (includeHistory ? 40 : 0))
     const limit = Math.min(200, Math.max(0, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 40))
     // Always merge ledger sources so tips / sprays / event sprays / POS appear.
@@ -31,6 +32,18 @@ export async function GET(request: Request) {
         phone: session?.phone_e164 || session?.phone || null,
       })) || user.id
 
+    // Notifications / badge refreshes only need movement rows — skip wallet + fee settings.
+    if (lite) {
+      const transactions =
+        includeHistory && limit > 0
+          ? await listWalletHistory(liveId, limit, { full: fullHistory })
+          : []
+      return successResponse({
+        user_id: liveId,
+        transactions,
+      })
+    }
+
     const db = tryCreateAdminClient() ?? createDataClient()
     const [wallet, transactions, settings] = await Promise.all([
       fetchLiveWallet(liveId),
@@ -39,12 +52,8 @@ export async function GET(request: Request) {
         : Promise.resolve([]),
       getPlatformSettings(db),
     ])
-    const freeUsed = await countUnderFreeBankTransfersToday(
-      db,
-      liveId,
-      settings.squad_fee_rules.free_under_naira,
-    )
-    const freePerDay = settings.squad_fee_rules.free_under_per_day
+    const freeUnderNaira = settings.squad_fee_rules.free_under_naira
+    const freeUsed = await sumUnderFreeBankVolumeToday(db, liveId, freeUnderNaira)
 
     return successResponse({
       user_id: liveId,
@@ -52,11 +61,11 @@ export async function GET(request: Request) {
       rates: {
         ...publicBuRates({
           free_under_used_today: freeUsed,
-          free_under_remaining: freeUnderRemaining(freeUsed, freePerDay),
+          free_under_remaining: freeUnderRemaining(freeUsed, freeUnderNaira),
           payout_provider: isPaystackConfigured() ? 'paystack' : 'squad',
         }),
-        free_under_naira: settings.squad_fee_rules.free_under_naira,
-        free_under_per_day: freePerDay,
+        free_under_naira: freeUnderNaira,
+        free_under_per_day: settings.squad_fee_rules.free_under_per_day,
         platform_fee_percent: settings.squad_fee_rules.pay_out.platform_percent,
       },
       transactions,

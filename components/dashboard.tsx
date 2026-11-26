@@ -20,7 +20,7 @@ import { useAccount, useWalletPulse } from '@/components/account-store'
 import { buFromNaira, formatBu, formatNairaPlain } from '@/lib/bu-rate'
 import { displayBuId } from '@/lib/phone'
 import { historyLabel, walletDirection } from '@/lib/wallet/direction'
-import { countUnseenAlerts } from '@/components/notifications'
+import { cacheAlertsFromWallet, countUnseenAlerts } from '@/components/notifications'
 import { AdSlot } from '@/components/web/ad-slot'
 import { RollingBalance } from '@/components/rolling-balance'
 import { GiftPopup } from '@/components/gift-popup'
@@ -28,9 +28,6 @@ import { PurposeIcon } from '@/components/icons/purpose-icons'
 import { purposeLabel, type PurposeGift } from '@/lib/purpose'
 import { SignedBu } from '@/components/signed-bu'
 import { SmartCampaign } from '@/components/smart-campaign'
-import { SeasonAtmosphere } from '@/components/season/season-atmosphere'
-import { SeasonGiftPopup } from '@/components/season/season-gift-popup'
-import { SeasonStrip } from '@/components/season/season-strip'
 
 interface HomeMovement {
   id: string
@@ -96,6 +93,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [neonKey, setNeonKey] = useState(0)
   const [gifts, setGifts] = useState<PurposeGift[]>([])
   function applyWalletPayload(transactions: Array<Record<string, unknown>>) {
+    cacheAlertsFromWallet(transactions)
     const nextUnread = countUnseenAlerts(transactions)
     setUnreadAlerts((prev) => {
       if (nextUnread > prev) {
@@ -131,7 +129,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   useWalletPulse(() => {
     if (!userId) return
-    fetch('/api/wallet?history=1&limit=12&full=1', { credentials: 'include', cache: 'no-store' })
+    fetch('/api/wallet?history=1&limit=12&lite=1', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) return
@@ -148,6 +146,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       setAvatarUrl('')
       return
     }
+    // Warm the notifications chunk so opening the bell feels instant.
+    void import('@/components/notifications')
     fetch('/api/me', { credentials: 'include' })
       .then(async (res) => {
         const json = await res.json()
@@ -156,7 +156,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         setAvatarUrl(String(profile?.avatar_url || ''))
       })
       .catch(() => undefined)
-    fetch('/api/wallet?history=1&limit=12&full=1', { credentials: 'include', cache: 'no-store' })
+    fetch('/api/wallet?history=1&limit=12&lite=1', { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         const json = await res.json()
         if (!json.status) {
@@ -172,14 +172,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const latest = movements[0] ?? null
 
   return (
-    <div className="relative space-y-6 bg-transparent pb-4 text-neutral-950">
-      <SeasonAtmosphere variant="app" />
-      <SeasonStrip className="!mx-4 !mb-0 !mt-2" />
-      <SeasonGiftPopup
-        mode="member"
-        onSendBu={() => onNavigate('send-bu')}
-        onFund={() => onNavigate('buy-bu')}
-      />
+    <div className="space-y-6 bg-transparent pb-4 text-neutral-950">
       <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-3 backdrop-blur-xl">
         <div className="relative">
         {alertNeon ? (

@@ -1,13 +1,21 @@
 import { z } from 'zod'
-import bcrypt from 'bcryptjs'
 import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { normalizePhone } from '@/lib/phone'
-import { authEmailsFromBuId, contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { authEmailsFromBuId, contactEmail, pinSchema } from '@/lib/auth/pin'
+import { signInWithPinPassword, upgradeStoredAuthPassword } from '@/lib/auth/auth-password'
 import { clientIp, rateLimit } from '@/lib/api/rate-limit'
 import { isSupabaseConfigured } from '@/lib/env'
-import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { pinMatches, verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import {
+  assertPinOpen,
+  clearPinFailures,
+  LOGIN_IP_LIMIT,
+  LOGIN_IP_WINDOW_MS,
+  notePinFailure,
+  pinAttemptKeys,
+} from '@/lib/auth/pin-attempts'
 import { ensureLiveBuUser } from '@/lib/auth/live-user'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
 import { getUserControl } from '@/lib/admin/platform'
@@ -39,9 +47,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const limited = rateLimit(`login:${clientIp(request)}`, 8, 60_000)
+    const ip = clientIp(request)
+    const loginIpKeys = [`login-ip:${ip}`]
+    const limited = rateLimit(`login:${ip}`, 8, 60_000)
     if (!limited.ok) {
       throw new ApiError(429, 'RATE_LIMITED', 'Too many sign-in attempts. Try again shortly.')
+    }
+    await assertPinOpen(loginIpKeys, LOGIN_IP_LIMIT)
+    const loginFailed = async (message: string): Promise<never> => {
+      await notePinFailure(loginIpKeys, LOGIN_IP_LIMIT, LOGIN_IP_WINDOW_MS)
+      throw new ApiError(401, 'LOGIN_FAILED', message)
     }
 
     const body = schema.parse(await request.json())
@@ -56,22 +71,14 @@ export async function POST(request: Request) {
       if ('session' in legacy) {
         await assertActiveAccount(legacy.session.id)
         await writeBuSession(legacy.session)
+        await upgradeStoredAuthPassword(legacy.session.id, body.pin)
         if (legacy.session.email) {
-          const withWrapped = await supabase.auth.signInWithPassword({
-            email: legacy.session.email,
-            password: supabasePinPassword(body.pin),
-          })
-          if (withWrapped.error) {
-            await supabase.auth.signInWithPassword({
-              email: legacy.session.email,
-              password: body.pin,
-            })
-          }
+          await signInWithPinPassword(supabase, legacy.session.email, body.pin)
         }
         return attachBuSession(successResponse({ user: { id: legacy.session.id, email: legacy.session.email } }, 'Signed in'), legacy.session)
       }
       if ('wrongPin' in legacy) {
-        throw new ApiError(401, 'LOGIN_FAILED', 'That ɃU ID is registered. The PIN does not match. Use the same PIN as the live ɃU app.')
+        return loginFailed('That ɃU ID is registered. The PIN does not match. Use the same PIN as the live ɃU app.')
       }
       if ('missingVerifier' in legacy) {
         missingVerifier = true
@@ -111,32 +118,50 @@ export async function POST(request: Request) {
         }
         const { data: legacyUser } = await admin.from('users').select('*').eq('email', email).maybeSingle()
         if (legacyUser?.pin_hash) {
-          const ok = await bcrypt.compare(body.pin, legacyUser.pin_hash as string)
+          const storedHash = String(legacyUser.pin_hash)
+          const emailKeys = pinAttemptKeys({
+            userId: typeof legacyUser.id === 'string' ? legacyUser.id : null,
+            email,
+            phone: (legacyUser.phone_number as string | null) ?? null,
+          })
+          await assertPinOpen(emailKeys)
+          const ok = await pinMatches(body.pin, storedHash)
           if (ok) {
+            await clearPinFailures(emailKeys)
             const phone = (legacyUser.phone_number as string | null) ?? email
-            const legacy = await verifyLegacyBuPin(phone, body.pin)
+            const legacy = await verifyLegacyBuPin(phone, body.pin, { skipAttemptGuard: true })
             if ('session' in legacy) {
               await assertActiveAccount(legacy.session.id)
               await writeBuSession(legacy.session)
               return attachBuSession(successResponse({ user: { id: legacy.session.id, email: legacy.session.email } }, 'Signed in'), legacy.session)
             }
+          } else if (storedHash.startsWith('$2')) {
+            await notePinFailure(emailKeys)
+            return loginFailed('Invalid ɃU ID or PIN')
           }
         }
       }
     }
 
     if (pinHash) {
-      const ok = await bcrypt.compare(body.pin, pinHash)
-      if (!ok) {
-        throw new ApiError(401, 'LOGIN_FAILED', 'Invalid ɃU ID or PIN')
+      const hashKeys = pinAttemptKeys({ email: body.email, phone: body.phone })
+      await assertPinOpen(hashKeys)
+      const ok = await pinMatches(body.pin, pinHash)
+      if (ok) {
+        await clearPinFailures(hashKeys)
+      } else if (pinHash.startsWith('$2')) {
+        await notePinFailure(hashKeys)
+        return loginFailed('Invalid ɃU ID or PIN')
       }
     }
 
-    const password = supabasePinPassword(body.pin)
     let confirmBlocked = false
     for (const email of emails) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      const signed = await signInWithPinPassword(supabase, email, body.pin)
+      const data = { user: signed.user }
+      const error = signed.errorMessage ? { message: signed.errorMessage } : null
       if (!error && data.user) {
+        if (signed.legacy) await upgradeStoredAuthPassword(data.user.id, body.pin)
         const displayName =
           (data.user.user_metadata?.display_name as string | undefined) || 'ɃU member'
         const phone =
@@ -211,7 +236,7 @@ export async function POST(request: Request) {
       )
     }
 
-    throw new ApiError(401, 'LOGIN_FAILED', 'Invalid ɃU ID or PIN')
+    return loginFailed('Invalid ɃU ID or PIN')
   } catch (error) {
     return handleRouteError(error)
   }

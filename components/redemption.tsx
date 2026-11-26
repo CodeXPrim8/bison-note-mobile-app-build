@@ -229,7 +229,7 @@ export default function Redemption() {
           | { free_under_used_today?: number; payout_provider?: FeeProvider }
           | undefined
         if (typeof rates?.free_under_used_today === 'number') {
-          setFreeUsedToday(Math.max(0, Math.floor(rates.free_under_used_today)))
+          setFreeUsedToday(Math.max(0, Number(rates.free_under_used_today) || 0))
         }
         if (rates?.payout_provider === 'squad' || rates?.payout_provider === 'paystack') {
           setPayoutProvider(rates.payout_provider)

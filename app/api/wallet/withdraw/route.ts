@@ -9,11 +9,11 @@ import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { isPaystackConfigured, isSquadConfigured } from '@/lib/env'
-import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
+import { sumUnderFreeBankVolumeToday } from '@/lib/wallet/free-quota'
 import { NGN_BANKS, bankCodeFromName, displayBankName } from '@/lib/payments/ngn-banks'
 import { creditFaceThenCharge, debitFaceThenCharge } from '@/lib/wallet/move'
 import { pinSchema } from '@/lib/auth/pin'
-import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { verifySessionPin } from '@/lib/auth/verify-session-pin'
 import { resolveNuban } from '@/lib/payments/paystack'
 import {
   createPayoutRecipient,
@@ -130,14 +130,15 @@ export async function POST(request: Request) {
     const body = schema.parse(await request.json())
     const session = await readBuSession()
     const phone = session?.phone_e164 || session?.phone
-    if (!phone) {
-      throw new ApiError(400, 'PIN_REQUIRED', 'Enter the transaction PIN you created for this account.')
-    }
-    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
+    const pinCheck = await verifySessionPin({
+      userId: liveId,
+      phone,
+      pin: body.pin,
+    })
     if ('wrongPin' in pinCheck) {
       throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
     }
-    if (!('session' in pinCheck)) {
+    if ('pinNotSet' in pinCheck) {
       throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before sending to bank.')
     }
 
@@ -159,7 +160,7 @@ export async function POST(request: Request) {
     }
 
     const payoutProvider = isPaystackConfigured() ? 'paystack' : 'squad'
-    const freeUsedToday = await countUnderFreeBankTransfersToday(
+    const freeUsedToday = await sumUnderFreeBankVolumeToday(
       db,
       liveId,
       settings.squad_fee_rules.free_under_naira,

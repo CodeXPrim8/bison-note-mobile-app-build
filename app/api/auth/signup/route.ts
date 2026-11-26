@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { handleRouteError, successResponse, ApiError } from '@/lib/api/errors'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
-import { authEmailsFromBuId, contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { authEmailsFromBuId, contactEmail, pinSchema } from '@/lib/auth/pin'
+import { strongPinPassword } from '@/lib/auth/auth-password'
 import { createDataClient } from '@/lib/supabase/data'
 import { isSupabaseConfigured } from '@/lib/env'
 import { attachBuSession, writeBuSession } from '@/lib/auth/bu-session'
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
       throw new ApiError(400, 'INVALID_EMAIL', 'Enter the real email you will use for receipts and account recovery.')
     }
     const pinHash = await bcrypt.hash(body.pin, 10)
-    const password = supabasePinPassword(body.pin)
+    const password = strongPinPassword(body.pin)
     const metadata = {
       display_name: body.display_name,
       role: 'guest',

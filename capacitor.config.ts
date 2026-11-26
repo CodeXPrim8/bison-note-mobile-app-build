@@ -16,7 +16,7 @@ const config: CapacitorConfig = {
     cleartext: false,
     allowNavigation: [
       'buapp.vercel.app',
-      '*.vercel.app',
+      'bu-app.vercel.app',
       '*.paystack.com',
       'checkout.paystack.com',
       'api.paystack.co',

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { FREE_UNDER_NAIRA, FREE_UNDER_PER_DAY, roundMoney } from '@/lib/bu-rate'
+import { FREE_UNDER_NAIRA, roundMoney } from '@/lib/bu-rate'
 
 /** Midnight Africa/Lagos as UTC Date for the calendar day containing `now`. */
 export function startOfDayWAT(now = new Date()): Date {
@@ -39,10 +39,10 @@ function isBankDepositRow(row: Record<string, unknown>): boolean {
 }
 
 /**
- * Count under-threshold bank pay-ins + pay-outs for this wallet since midnight WAT.
- * Shared counter for the daily free quota.
+ * Sum under-threshold bank pay-ins + pay-outs for this wallet since midnight WAT.
+ * Shared daily free volume (₦) — not a transaction count.
  */
-export async function countUnderFreeBankTransfersToday(
+export async function sumUnderFreeBankVolumeToday(
   db: SupabaseClient,
   userId: string,
   freeUnderNaira: number = FREE_UNDER_NAIRA,
@@ -68,12 +68,12 @@ export async function countUnderFreeBankTransfersToday(
       .limit(500),
   ])
 
-  let count = 0
+  let volume = 0
   for (const row of (ledger.data ?? []) as Array<Record<string, unknown>>) {
     if (!isBankDepositRow(row)) continue
     const gross = metaGross(row)
     if (gross == null) continue
-    if (gross + 1e-9 < threshold) count += 1
+    if (gross + 1e-9 < threshold) volume = roundMoney(volume + gross)
   }
 
   for (const row of (withdrawals.data ?? []) as Array<Record<string, unknown>>) {
@@ -81,15 +81,25 @@ export async function countUnderFreeBankTransfersToday(
     if (status === 'rejected' || status === 'cancelled') continue
     const face = Number(row.naira)
     if (!Number.isFinite(face) || !(face > 0)) continue
-    if (face + 1e-9 < threshold) count += 1
+    if (face + 1e-9 < threshold) volume = roundMoney(volume + face)
   }
 
-  return count
+  return volume
 }
 
+/** @deprecated Use sumUnderFreeBankVolumeToday — name kept for older imports. */
+export async function countUnderFreeBankTransfersToday(
+  db: SupabaseClient,
+  userId: string,
+  freeUnderNaira: number = FREE_UNDER_NAIRA,
+): Promise<number> {
+  return sumUnderFreeBankVolumeToday(db, userId, freeUnderNaira)
+}
+
+/** Remaining free bank volume (₦) for today. */
 export function freeUnderRemaining(
-  usedToday: number,
-  freeUnderPerDay: number = FREE_UNDER_PER_DAY,
+  usedVolumeToday: number,
+  freeUnderNaira: number = FREE_UNDER_NAIRA,
 ): number {
-  return Math.max(0, freeUnderPerDay - Math.max(0, Math.floor(usedToday)))
+  return roundMoney(Math.max(0, freeUnderNaira - Math.max(0, usedVolumeToday)))
 }

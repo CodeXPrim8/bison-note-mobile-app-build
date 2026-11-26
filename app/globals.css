@@ -3409,3 +3409,52 @@
   .bu-season-snowflake { width: 40px; }
 }
 
+/* === Wallet card twinkle stars === */
+.bu-wallet-stars {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.bu-wallet-star {
+  position: absolute;
+  display: block;
+  background: #fff8dc;
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+  filter: drop-shadow(0 0 4px rgba(255, 248, 220, 0.95)) drop-shadow(0 0 10px rgba(251, 191, 36, 0.65));
+  animation-name: bu-wallet-star-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: opacity, transform, filter;
+}
+@keyframes bu-wallet-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.65);
+    filter: drop-shadow(0 0 2px rgba(255, 248, 220, 0.4));
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 6px rgba(255, 248, 220, 1)) drop-shadow(0 0 14px rgba(251, 191, 36, 0.85));
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+

@@ -63,7 +63,7 @@ export function SeasonGiftPopup({
               <img src="/season/snowflake-cut.png" alt="" className="h-14 w-auto drop-shadow-lg" />
               <div className="bu-clay-ticket !static !translate-x-0 !rotate-[-6deg]">
                 <span className="bu-clay-ticket-mark">Ƀ</span>
-                <span className="bu-clay-ticket-meta">GIFT</span>
+                <span className="bu-clay-ticket-meta">VOUCHER</span>
               </div>
             </div>
             <p className="mt-3 text-center text-[12px] font-semibold tracking-wide text-amber-100/95">{SEASON_COPY.eyebrow}</p>

@@ -6,7 +6,8 @@ import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
 import { isSupabaseConfigured } from '@/lib/env'
 import { normalizePhone } from '@/lib/phone'
-import { contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { contactEmail, pinSchema } from '@/lib/auth/pin'
+import { strongPinPassword } from '@/lib/auth/auth-password'
 import { attachBuSession, readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { getAccountRolesForViewer } from '@/lib/account/roles'
@@ -140,7 +141,7 @@ export async function PATCH(request: Request) {
       }
       updates.pin_hash = await bcrypt.hash(body.new_pin, 10)
       const { error: passwordError } = await admin.auth.admin.updateUserById(user.id, {
-        password: supabasePinPassword(body.new_pin),
+        password: strongPinPassword(body.new_pin),
       })
       if (passwordError) throw new ApiError(500, 'UPDATE_FAILED', 'Could not update PIN')
     }

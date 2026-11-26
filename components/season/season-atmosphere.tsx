@@ -60,7 +60,7 @@ export function SeasonAtmosphere({
 
           <div className="bu-clay-ticket bu-clay-ticket-a">
             <span className="bu-clay-ticket-mark">Ƀ</span>
-            <span className="bu-clay-ticket-meta">GIFT</span>
+            <span className="bu-clay-ticket-meta">VOUCHER</span>
           </div>
         </>
       ) : (

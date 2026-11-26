@@ -174,23 +174,19 @@ export default function AdminRatesPage() {
         <div>
           <h2 className="text-xl font-semibold">Squad fee rules</h2>
           <p className="text-sm text-muted-foreground">
-            First {rules.free_under_per_day} bank transfers under ₦
-            {Number(rules.free_under_naira).toLocaleString('en-NG')} per wallet per day (Lagos time) are free.
-            From the next one, or from ₦{Number(rules.free_under_naira).toLocaleString('en-NG')}+, guest pays
-            partner pass-through + Bucks platform %.
+            First ₦{Number(rules.free_under_naira).toLocaleString('en-NG')} of under-threshold bank
+            volume (pay-in + pay-out) per wallet per day (Lagos time) is free. Any single transfer of ₦
+            {Number(rules.free_under_naira).toLocaleString('en-NG')}+ is always charged. After the free
+            volume is used, guest pays partner pass-through + Bucks platform %.
           </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
-            label="Free under (₦)"
+            label="Free volume / always-charge from (₦)"
             value={String(rules.free_under_naira)}
             onChange={(v) => setRules((r) => ({ ...r, free_under_naira: Number(v) || 0 }))}
-          />
-          <Field
-            label="Free under-threshold transfers / day"
-            value={String(rules.free_under_per_day)}
-            onChange={(v) => setRules((r) => ({ ...r, free_under_per_day: Number(v) || 0 }))}
+            hint="Daily free under-threshold volume and the single-tx charge threshold"
           />
         </div>
 
@@ -272,10 +268,10 @@ export default function AdminRatesPage() {
 
         <div className="flex flex-wrap items-end gap-3">
           <Field
-            label="Preview as if free slots already used today"
+            label="Preview free volume already used today (₦)"
             value={previewUsed}
             onChange={setPreviewUsed}
-            hint="0 = still inside free quota for under-threshold rows"
+            hint={`0 = full ₦${Number(rules.free_under_naira).toLocaleString('en-NG')} free volume left`}
           />
           <Button disabled={saving} onClick={() => void saveFees()}>
             Save Squad fees

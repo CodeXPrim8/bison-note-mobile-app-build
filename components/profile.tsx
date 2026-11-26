@@ -61,6 +61,8 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
   const [faceBusy, setFaceBusy] = useState(false)
   const [facePinOpen, setFacePinOpen] = useState(false)
   const [facePinError, setFacePinError] = useState<string | null>(null)
+  const [faceMessage, setFaceMessage] = useState<string | null>(null)
+  const [faceMessageError, setFaceMessageError] = useState(false)
 
   useEffect(() => {
     if (!displayName) return
@@ -385,29 +387,43 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
                 </p>
               </div>
             </div>
-            {!faceAvail?.available ? (
-              <p className="text-sm text-muted-foreground">
-                {faceAvail?.reason || 'Face unlock needs the Bucks phone app with Face ID / face unlock enrolled.'}
-              </p>
+            <p className="text-sm text-muted-foreground">
+              {faceAvail?.available
+                ? 'Ready on this phone. Confirm with your PIN to turn it on.'
+                : faceAvail?.reason ||
+                  'Works in the Bucks phone app when Face ID / face unlock is enrolled. Browser preview cannot enable it.'}
+            </p>
+            {faceMessage ? (
+              <p className={`text-sm ${faceMessageError ? 'text-destructive' : 'text-muted-foreground'}`}>{faceMessage}</p>
             ) : null}
             <button
               type="button"
-              disabled={faceBusy || (!faceEnabled && !faceAvail?.available)}
+              disabled={faceBusy}
               onClick={() => {
                 if (faceEnabled) {
                   setFaceBusy(true)
                   void clearBiometricCredentials().finally(() => {
                     setFaceEnabled(false)
                     setFaceBusy(false)
-                    setSettingsError(false)
-                    setSettingsMessage(`${faceAvail?.label || 'Face unlock'} turned off. PIN still works.`)
+                    setFaceMessageError(false)
+                    setFaceMessage(`${faceAvail?.label || 'Face unlock'} turned off. PIN still works.`)
                   })
                   return
                 }
+                if (!faceAvail?.available) {
+                  setFaceMessageError(true)
+                  setFaceMessage(
+                    faceAvail?.reason ||
+                      'Face unlock needs the Bucks phone app (iOS/Android) with Face ID or face unlock turned on.',
+                  )
+                  return
+                }
+                setFaceMessage(null)
+                setFaceMessageError(false)
                 setFacePinError(null)
                 setFacePinOpen(true)
               }}
-              className="w-full cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+              className="w-full cursor-pointer rounded-lg border border-border bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
             >
               {faceBusy
                 ? 'Working…'
@@ -444,8 +460,8 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
               }
               setFaceEnabled(true)
               setFacePinOpen(false)
-              setSettingsError(false)
-              setSettingsMessage(`${faceAvail?.label || 'Face unlock'} is on.`)
+              setFaceMessageError(false)
+              setFaceMessage(`${faceAvail?.label || 'Face unlock'} is on.`)
             }}
           />
         </div>

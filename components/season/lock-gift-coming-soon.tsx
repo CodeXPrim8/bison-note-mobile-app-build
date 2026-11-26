@@ -31,7 +31,7 @@ export function LockGiftComingSoon({
           <div className="bu-season-popup-art mx-auto flex aspect-[4/3] w-full max-w-[220px] items-center justify-center rounded-[18px]">
             <div className="bu-clay-ticket !static !translate-x-0">
               <span className="bu-clay-ticket-mark">Ƀ</span>
-              <span className="bu-clay-ticket-meta">GIFT</span>
+              <span className="bu-clay-ticket-meta">VOUCHER</span>
             </div>
           </div>
           <p className="mt-3 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200/95">Coming soon</p>

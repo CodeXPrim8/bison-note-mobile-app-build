@@ -7,7 +7,7 @@ import { PURPOSE_IDS } from '@/lib/purpose'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { transferBu } from '@/lib/wallet'
 import { pinSchema } from '@/lib/auth/pin'
-import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { verifySessionPin } from '@/lib/auth/verify-session-pin'
 import { ensureLiveRecipientById } from '@/lib/auth/live-user'
 
 const schema = z.object({
@@ -44,14 +44,15 @@ export async function POST(request: Request) {
       throw new ApiError(400, 'SELF_TRANSFER', 'You cannot send ɃU to yourself')
     }
     const phone = session?.phone_e164 || session?.phone
-    if (!phone) {
-      throw new ApiError(400, 'PIN_REQUIRED', 'Enter the transaction PIN you created for this account.')
-    }
-    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
+    const pinCheck = await verifySessionPin({
+      userId: fromUserId,
+      phone,
+      pin: body.pin,
+    })
     if ('wrongPin' in pinCheck) {
       throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
     }
-    if (!('session' in pinCheck)) {
+    if ('pinNotSet' in pinCheck) {
       throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN at signup before sending ɃU.')
     }
     const sprayLike = Boolean(body.event_id || body.is_tip)

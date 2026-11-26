@@ -8,24 +8,24 @@ export const REFER_POPUP_KEY = 'bu_refer_popup_seen_at'
 export const SEASON_COPY = {
   eyebrow: 'Season of love · Season of joy',
   strip: "Distance shouldn't stop a gift. Send ɃU to anyone you love.",
-  stripLockChip: 'Lock Gift · Coming soon',
+  stripLockChip: 'Digital voucher',
   guestTitle: 'This season, love travels as ɃU',
   guestBody:
-    "Can't be there in person? Send celebration money straight to their Ƀucks. Lock Gift for fuel and transport is coming soon.",
+    "Can't be there in person? Send a digital voucher straight to their Ƀucks. Fuel and transport vouchers are on the way.",
   guestCta: 'Create free wallet',
   guestSignIn: 'Already have Ƀucks? Sign in',
   memberTitle: "Someone's waiting on your joy",
-  memberBody: 'Fund once. Send ɃU before the year turns. Lock Gift is coming soon.',
+  memberBody: 'Fund once. Send a digital voucher before the year turns. Purpose vouchers are on the way.',
   memberCtaSend: 'Send ɃU',
   memberCtaFund: 'Fund wallet',
-  lockChip: 'Lock Gift · Coming soon',
-  lockSoonTitle: 'Lock Gift is coming soon',
+  lockChip: 'Digital voucher',
+  lockSoonTitle: 'Digital voucher',
   lockSoonBody:
-    "Soon you'll lock ɃU for fuel, transport, food, and more. Open send works today.",
+    'Send a digital voucher for fuel, transport, food, and more. Open send works today.',
   lockSoonCta: 'Send ɃU now',
   lockSoonDismiss: 'Got it',
   campaignTitle: 'Season of love',
-  campaignBody: 'Send ɃU across any distance. Lock Gift — Coming soon.',
+  campaignBody: 'Send a digital voucher across any distance.',
 } as const
 
 function lagosParts(now = new Date()) {

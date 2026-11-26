@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Bell } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { formatEventDateTime } from '@/lib/datetime'
 import { buFromNaira, formatNairaPlain } from '@/lib/bu-rate'
 import { SignedBu } from '@/components/signed-bu'
 import { useAccount, useWalletPulse } from '@/components/account-store'
+import { bindAccountSnapshots, readSessionSnapshot, writeSessionSnapshot } from '@/lib/session-snapshot'
 import {
   amountIconTone,
   amountTone,
@@ -17,6 +18,7 @@ import {
 } from '@/lib/wallet/direction'
 
 const SEEN_KEY = 'bu_alerts_seen_at'
+export const ALERTS_CACHE_KEY = 'bu_alerts'
 
 type AlertRow = {
   id: string
@@ -45,28 +47,60 @@ function mapAlert(tx: Record<string, unknown>): AlertRow {
   }
 }
 
+/** Persist mapped alerts so Notifications can paint instantly next open. */
+export function cacheAlertsFromWallet(txs: Array<Record<string, unknown>>) {
+  const next = txs.map(mapAlert).sort((a, b) => b.createdAt - a.createdAt)
+  writeSessionSnapshot(ALERTS_CACHE_KEY, next)
+  return next
+}
+
+function readCachedAlerts(): AlertRow[] {
+  const cached = readSessionSnapshot<AlertRow[]>(ALERTS_CACHE_KEY)
+  if (Array.isArray(cached) && cached.length) return cached
+  // History page may already have a fuller wallet snapshot — reuse it for first paint.
+  const history = readSessionSnapshot<{ transactions?: Array<Record<string, unknown>> }>('bu_history')
+  const rows = history?.transactions
+  if (!Array.isArray(rows) || !rows.length) return []
+  return rows.map((row) =>
+    mapAlert({
+      ...row,
+      created_at:
+        row.created_at ??
+        (typeof row.createdAt === 'number' ? new Date(row.createdAt).toISOString() : undefined),
+    }),
+  )
+}
+
 export default function Notifications() {
-  const { userId, refreshWallet } = useAccount()
+  const { userId } = useAccount()
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [ready, setReady] = useState(false)
-  const [pulse, setPulse] = useState(0)
-  useWalletPulse(() => setPulse((value) => value + 1))
+  const busyRef = useRef(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const res = await fetch('/api/wallet?history=1&limit=30', { credentials: 'include', cache: 'no-store' })
-        const json = await res.json()
-        if (cancelled) return
-        if (!json.status) {
-          setAlerts([])
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      bindAccountSnapshots(userId || null)
+      if (!opts?.silent) {
+        const cached = readCachedAlerts()
+        if (cached.length) {
+          setAlerts(cached)
           setReady(true)
+        }
+      }
+      if (busyRef.current) return
+      busyRef.current = true
+      try {
+        // lite=1 skips balance/settings/fee work — alerts only need history rows.
+        const res = await fetch('/api/wallet?history=1&limit=30&lite=1', {
+          credentials: 'include',
+          cache: 'no-store',
+        })
+        const json = await res.json()
+        if (!json.status) {
+          if (!opts?.silent) setReady(true)
           return
         }
-        const next = ((json.data?.transactions ?? []) as Array<Record<string, unknown>>)
-          .map(mapAlert)
-          .sort((a, b) => b.createdAt - a.createdAt)
+        const next = cacheAlertsFromWallet((json.data?.transactions ?? []) as Array<Record<string, unknown>>)
         setAlerts(next)
         setReady(true)
         try {
@@ -74,25 +108,27 @@ export default function Notifications() {
         } catch {
           // Private mode can block localStorage.
         }
-        void refreshWallet()
       } catch {
-        if (!cancelled) setReady(true)
+        if (!opts?.silent) setReady(true)
+      } finally {
+        busyRef.current = false
       }
-    }
+    },
+    [userId],
+  )
+
+  useWalletPulse(() => {
+    void load({ silent: true })
+  })
+
+  useEffect(() => {
     void load()
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load()
-    }, 3000)
     function onVisible() {
-      if (document.visibilityState === 'visible') void load()
+      if (document.visibilityState === 'visible') void load({ silent: true })
     }
     document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [userId, refreshWallet, pulse])
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [load])
 
   return (
     <div className="space-y-6 pb-24 pt-4">

@@ -5,6 +5,7 @@ import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import type { BuSession } from '@/lib/auth/bu-session-token'
 import { contactEmail } from '@/lib/auth/pin'
+import { assertPinOpen, clearPinFailures, notePinFailure, pinAttemptKeys } from '@/lib/auth/pin-attempts'
 
 export interface LegacyUserRow {
   id: string
@@ -68,9 +69,12 @@ async function rowForPhone(phone: string): Promise<LegacyUserRow | null | { miss
 
   if (admin) {
     const variants = phoneLookupVariants(phone)
-    for (const variant of variants) {
-      const { data } = await admin.from('users').select(columns).eq('phone_number', variant).maybeSingle()
-      if (data) return data as LegacyUserRow
+    // Parallel exact lookups — cut multi-hop wait on transaction PIN checks.
+    const exactHits = await Promise.all(
+      variants.map((variant) => admin.from('users').select(columns).eq('phone_number', variant).maybeSingle()),
+    )
+    for (const hit of exactHits) {
+      if (hit.data) return hit.data as LegacyUserRow
     }
     if (needle.length === 10) {
       const { data } = await admin.from('users').select(columns).ilike('phone_number', `%${needle}%`).limit(5)
@@ -96,15 +100,38 @@ async function rowForPhone(phone: string): Promise<LegacyUserRow | null | { miss
 export async function verifyLegacyBuPin(
   phone: string,
   pin: string,
+  options?: { skipAttemptGuard?: boolean },
 ): Promise<{ session: Omit<BuSession, 'exp'> } | { missingVerifier: true } | { invalid: true } | { wrongPin: true }> {
+  const keys = options?.skipAttemptGuard ? [] : pinAttemptKeys({ phone })
+  if (keys.length) await assertPinOpen(keys)
   const row = await rowForPhone(phone)
   if (row && 'missingVerifier' in row) return { missingVerifier: true }
   if (!row) return { invalid: true }
   if (!(await pinMatches(pin, row.pin_hash))) {
-    console.error('ɃU PIN mismatch', { prefix: row.pin_hash?.slice(0, 7), len: row.pin_hash?.length })
+    if (keys.length) await notePinFailure(keys)
     return { wrongPin: true }
   }
+  if (keys.length) await clearPinFailures(keys)
+  await upgradeWeakPinHash(row.id, pin, row.pin_hash)
   return { session: toSession(row) }
+}
+
+/** Replace plaintext / MD5 / SHA pins with bcrypt after a successful check. Failure must not block sign-in. */
+export async function upgradeWeakPinHash(userId: string, pin: string, currentHash: string | null) {
+  const hash = currentHash?.trim() ?? ''
+  if (!userId || !hash || hash.startsWith('$2')) return
+  const admin = tryCreateAdminClient()
+  if (!admin) return
+  try {
+    const pinHash = await bcrypt.hash(pin, 10)
+    await admin.from('users').update({ pin_hash: pinHash }).eq('id', userId)
+    const profiles = await admin.from('profiles').update({ pin_hash: pinHash }).eq('id', userId)
+    if (profiles.error && !/does not exist|schema cache|column/i.test(profiles.error.message)) {
+      console.error('pin upgrade skipped', profiles.error.message)
+    }
+  } catch (error) {
+    console.error('pin upgrade skipped', error instanceof Error ? error.message : 'unknown')
+  }
 }
 
 /** True when this phone is already a ɃU account (live users table). */

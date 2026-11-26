@@ -1,4 +1,4 @@
-import { verifyPaystackSignature, isPaystackConfigured } from '@/lib/payments/paystack'
+import { verifyPaystackSignature } from '@/lib/payments/paystack'
 import { failPayment, fulfillSuccessfulPayment } from '@/lib/payments/fulfill'
 import { fulfillLiveTicketPayment, isLiveTicketReference } from '@/lib/payments/live-ticket'
 import { fulfillDepositReference, fulfillSettlementTopupReference } from '@/lib/payments/verify'
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const raw = await request.text()
   const signature = request.headers.get('x-paystack-signature')
 
-  if (isPaystackConfigured() && !verifyPaystackSignature(raw, signature)) {
+  if (!verifyPaystackSignature(raw, signature)) {
     return errorResponse(401, 'INVALID_SIGNATURE', 'Invalid webhook signature')
   }
 

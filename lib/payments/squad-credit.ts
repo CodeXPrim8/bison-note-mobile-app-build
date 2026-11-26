@@ -2,7 +2,7 @@ import { ApiError } from '@/lib/api/errors'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { quotePayInCreditNaira } from '@/lib/bu-rate'
 import { isSquadConfigured, listSquadCustomerTransactions, type SquadVaWebhookPayload } from '@/lib/payments/squad'
-import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
+import { sumUnderFreeBankVolumeToday } from '@/lib/wallet/free-quota'
 import {
   findVirtualAccountByAccountNumber,
   findVirtualAccountByCustomerCode,
@@ -65,7 +65,7 @@ export async function fulfillSquadVirtualAccountCredit(payload: SquadVaWebhookPa
 
   const db = createDataClient()
   const settings = await getPlatformSettings(db)
-  const freeUsedToday = await countUnderFreeBankTransfersToday(
+  const freeUsedToday = await sumUnderFreeBankVolumeToday(
     db,
     resolved.userId,
     settings.squad_fee_rules.free_under_naira,

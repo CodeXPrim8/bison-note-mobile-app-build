@@ -7,7 +7,7 @@ import { createDataClient } from '@/lib/supabase/data'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { createPayoutRecipient, insertWithdrawalRow, sendWithdrawalPayout } from '@/lib/wallet/payout'
 import { creditFaceThenCharge, debitFaceThenCharge } from '@/lib/wallet/move'
-import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
+import { sumUnderFreeBankVolumeToday } from '@/lib/wallet/free-quota'
 import { getVendorProfile } from '@/lib/vendor-profile'
 
 /** Best effort. A failed bank send leaves the sale in the BU wallet. */
@@ -19,7 +19,7 @@ export async function settleVendorSale(vendorUserId: string, naira: number) {
   const db = tryCreateAdminClient() ?? createDataClient()
   const settings = await getPlatformSettings(db)
   const payoutProvider = 'paystack'
-  const freeUsedToday = await countUnderFreeBankTransfersToday(
+  const freeUsedToday = await sumUnderFreeBankVolumeToday(
     db,
     vendorUserId,
     settings.squad_fee_rules.free_under_naira,

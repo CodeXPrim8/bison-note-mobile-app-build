@@ -1,7 +1,7 @@
 import { ApiError } from '@/lib/api/errors'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { quotePayInCreditNaira } from '@/lib/bu-rate'
-import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
+import { sumUnderFreeBankVolumeToday } from '@/lib/wallet/free-quota'
 import {
   isPaystackConfigured,
   listPaystackTransactions,
@@ -123,7 +123,7 @@ async function creditDedicatedNubanRow(
 
   const db = createDataClient()
   const settings = await getPlatformSettings(db)
-  const freeUsedToday = await countUnderFreeBankTransfersToday(
+  const freeUsedToday = await sumUnderFreeBankVolumeToday(
     db,
     userId,
     settings.squad_fee_rules.free_under_naira,

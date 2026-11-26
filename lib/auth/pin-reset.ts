@@ -4,7 +4,8 @@ import { Resend } from 'resend'
 import { ApiError } from '@/lib/api/errors'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
-import { contactEmail, supabasePinPassword } from '@/lib/auth/pin'
+import { contactEmail } from '@/lib/auth/pin'
+import { strongPinPassword } from '@/lib/auth/auth-password'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import { getAppUrl, getBankEncryptionKey, getResendConfig } from '@/lib/env'
 import { BU_SITE_NAME } from '@/lib/brand'
@@ -173,13 +174,7 @@ export async function requestPinReset(phoneInput: string) {
   }
   if (!account) return { ...generic, email_hint: null as string | null, challenge: null as string | null }
 
-  if (!account.email) {
-    throw new ApiError(
-      400,
-      'EMAIL_REQUIRED',
-      'This account has no email on file. Contact support or add an email after you regain access.',
-    )
-  }
+  if (!account.email) return { ...generic, email_hint: null, challenge: null }
 
   const otp = sixDigitOtp()
   const challenge = signChallenge({
@@ -248,7 +243,7 @@ export async function completePinReset(input: {
   }
 
   const pinHash = await bcrypt.hash(input.newPin, 10)
-  const password = supabasePinPassword(input.newPin)
+  const password = strongPinPassword(input.newPin)
 
   const profileUpdate = await admin.from('profiles').update({ pin_hash: pinHash }).eq('id', payload.userId)
   if (profileUpdate.error && !/does not exist|schema cache/i.test(profileUpdate.error.message)) {

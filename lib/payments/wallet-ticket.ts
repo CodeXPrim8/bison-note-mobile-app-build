@@ -1,12 +1,23 @@
 import { ApiError } from '@/lib/api/errors'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { verifySessionPin } from '@/lib/auth/verify-session-pin'
 import { createDataClient } from '@/lib/supabase/data'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { moveLiveWallet } from '@/lib/wallet/move'
 import { reverseFailedDebit } from '@/lib/wallet/reverse'
 
-export async function requireTicketWalletPin(phone: string | null | undefined, pin: string | undefined) {
+export async function requireTicketWalletPin(
+  phone: string | null | undefined,
+  pin: string | undefined,
+  userId?: string | null,
+) {
   if (!pin) throw new ApiError(400, 'PIN_REQUIRED', 'Enter your PIN to pay with ɃU.')
+  if (userId) {
+    const check = await verifySessionPin({ userId, phone, pin })
+    if ('ok' in check) return { id: userId, phone: phone ?? null }
+    if ('wrongPin' in check) throw new ApiError(401, 'WRONG_PIN', 'Incorrect PIN.')
+    throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN before paying with ɃU.')
+  }
   if (!phone) {
     throw new ApiError(400, 'PIN_REQUIRED', 'Sign in with your ɃU ID to pay from your wallet.')
   }

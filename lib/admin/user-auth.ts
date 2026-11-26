@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs'
 import { ApiError } from '@/lib/api/errors'
 import { pinMatches, verifyLegacyBuPin } from '@/lib/auth/legacy-login'
-import { contactEmail, pinSchema, supabasePinPassword } from '@/lib/auth/pin'
+import { contactEmail, pinSchema } from '@/lib/auth/pin'
+import { strongPinPassword } from '@/lib/auth/auth-password'
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -171,7 +172,7 @@ export async function adminSetUserPin(input: {
     throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Setting a PIN needs the live ɃU service role key on this server.')
   }
   const pinHash = await bcrypt.hash(newPin, 10)
-  const password = supabasePinPassword(newPin)
+  const password = strongPinPassword(newPin)
 
   await saveProfilesPinHash(admin, input.userId, input.phone, pinHash)
   const hashSaved = await saveUsersPinHash(admin, input.userId, input.phone, pinHash)

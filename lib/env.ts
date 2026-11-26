@@ -162,8 +162,17 @@ export function getResendConfig() {
   }
 }
 
+/** Known insecure fallback. Production must not sign sessions with this. */
+export const DEV_ONLY_BANK_KEY = 'dev-only-bank-key-change-me!!'
+
 export function getBankEncryptionKey(): string {
-  return optional('BANK_ENCRYPTION_KEY') ?? optional('JWT_SECRET') ?? 'dev-only-bank-key-change-me!!'
+  const key = optional('BANK_ENCRYPTION_KEY') ?? optional('JWT_SECRET')
+  if (process.env.VERCEL_ENV === 'production' && (!key || key === DEV_ONLY_BANK_KEY)) {
+    throw new MissingEnvError(
+      'Set BANK_ENCRYPTION_KEY or JWT_SECRET in production. The dev default cannot sign live sessions.',
+    )
+  }
+  return key ?? DEV_ONLY_BANK_KEY
 }
 
 export function getCronSecret(): string | undefined {

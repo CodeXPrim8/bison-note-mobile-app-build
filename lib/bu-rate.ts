@@ -2,8 +2,8 @@
  * Wallet FX. Live `wallets.balance` stays naira.
  * Display: 1 ɃU = ₦1. Peer send/tip: free (receiver gets full face).
  * Spray: fee-on-top. Card Fund Wallet: 5% buy spread.
- * Bank transfer in/out: first 3 under ₦10,000 per wallet per WAT day are free;
- * after that (or from ₦10,000) guest pays partner pass-through + 0.05% Bucks keep.
+ * Bank transfer in/out: first ₦10,000 under-threshold volume per wallet per WAT day is free;
+ * after that (or from ₦10,000+ in one go) guest pays partner pass-through + 0.05% Bucks keep.
  * Pay-out also adds ₦50 stamp from ₦10,000. No flat ₦25 platform fee.
  * Ticket prices and the 5% ticket service fee stay naira and are separate.
  */
@@ -21,6 +21,7 @@ export const BU_SPRAY_NOTES = [200, 500, 1000] as const
 export const BU_BUY_PRESETS = [100, 500, 1000, 2000, 5000, 10000, 20000, 50000] as const
 
 export const FREE_UNDER_NAIRA = 10000
+/** @deprecated Count quota removed — free bank allowance is volume (₦) = FREE_UNDER_NAIRA / day. */
 export const FREE_UNDER_PER_DAY = 3
 /** Bucks platform keep as percent points (0.05 → 0.05% → ₦5 at ₦10,000). */
 export const PLATFORM_FEE_PERCENT = 0.05
@@ -50,9 +51,11 @@ export type BankFeePolicy = {
   payOut: PayOutFeeBand
 }
 
-/** Persisted Super Admin Squad rules (+ shared free quota). */
+/** Persisted Super Admin Squad rules (+ shared free volume quota). */
 export type SquadFeeRulesSettings = {
+  /** Single-tx always-charge threshold AND daily free under-threshold volume (₦). */
   free_under_naira: number
+  /** @deprecated Ignored — kept for older saved settings JSON. */
   free_under_per_day: number
   pay_in: {
     partner_percent: number
@@ -177,8 +180,10 @@ export type PayInCreditQuote = {
 
 export type BankFeeQuoteOptions = {
   provider?: FeeProvider
+  /** Under-threshold bank volume (₦) already used today (shared pay-in + pay-out). */
   freeUsedToday?: number
   freeUnderNaira?: number
+  /** @deprecated Ignored — volume quota uses freeUnderNaira. */
   freeUnderPerDay?: number
   squadRules?: SquadFeeRulesSettings | null
 }
@@ -319,16 +324,23 @@ export function platformKeepNaira(amountNaira: number, platformPercent: number):
   return percentOf(roundMoney(amountNaira), platformPercent)
 }
 
+/**
+ * Guest is charged when:
+ * - this transfer alone is ≥ freeUnderNaira, or
+ * - today's under-threshold volume used + this amount would exceed freeUnderNaira.
+ * `freeUnderPerDay` is ignored (legacy count quota).
+ */
 export function isGuestChargedForBankAmount(
   amountNaira: number,
-  freeUsedToday: number,
+  freeUsedVolumeToday: number,
   freeUnderNaira: number,
-  freeUnderPerDay: number,
+  _freeUnderPerDay?: number,
 ): boolean {
   const amount = roundMoney(amountNaira)
   if (!(amount > 0)) return false
   if (amount + 1e-9 >= freeUnderNaira) return true
-  return freeUsedToday >= freeUnderPerDay
+  const used = Math.max(0, roundMoney(freeUsedVolumeToday))
+  return roundMoney(used + amount) > freeUnderNaira + 1e-9
 }
 
 export function resolveBankFeeOptions(options?: BankFeeQuoteOptions) {
@@ -336,7 +348,8 @@ export function resolveBankFeeOptions(options?: BankFeeQuoteOptions) {
   const policy = policyForProvider(provider, options?.squadRules)
   const freeUnderNaira = options?.freeUnderNaira ?? policy.freeUnderNaira
   const freeUnderPerDay = options?.freeUnderPerDay ?? policy.freeUnderPerDay
-  const freeUsedToday = Math.max(0, Math.floor(options?.freeUsedToday ?? 0))
+  // freeUsedToday is under-threshold volume (₦) used today, not a count.
+  const freeUsedToday = Math.max(0, roundMoney(options?.freeUsedToday ?? 0))
   return { provider, policy, freeUnderNaira, freeUnderPerDay, freeUsedToday }
 }
 
@@ -413,7 +426,8 @@ export function publicBuRates(extra?: {
     platform_fee_percent: PLATFORM_FEE_PERCENT,
     free_under_used_today: extra?.free_under_used_today ?? 0,
     free_under_remaining:
-      extra?.free_under_remaining ?? Math.max(0, FREE_UNDER_PER_DAY - (extra?.free_under_used_today ?? 0)),
+      extra?.free_under_remaining ??
+      Math.max(0, roundMoney(FREE_UNDER_NAIRA - (extra?.free_under_used_today ?? 0))),
     payout_provider: extra?.payout_provider ?? 'paystack',
   }
 }

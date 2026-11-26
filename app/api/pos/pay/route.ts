@@ -4,7 +4,7 @@ import { requireUser } from '@/lib/api/session'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
 import { pinSchema } from '@/lib/auth/pin'
-import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
+import { verifySessionPin } from '@/lib/auth/verify-session-pin'
 import { ensureLiveRecipientById } from '@/lib/auth/live-user'
 import { payPosSale } from '@/lib/pos/sales'
 import { BU_MIN_TRANSFER } from '@/lib/bu-rate'
@@ -36,12 +36,13 @@ export async function POST(request: Request) {
     }
 
     const phone = session?.phone_e164 || session?.phone
-    if (!phone) {
-      throw new ApiError(400, 'PIN_REQUIRED', 'Enter your transaction PIN to pay.')
-    }
-    const pinCheck = await verifyLegacyBuPin(phone, body.pin)
+    const pinCheck = await verifySessionPin({
+      userId: guestId,
+      phone,
+      pin: body.pin,
+    })
     if ('wrongPin' in pinCheck) throw new ApiError(401, 'WRONG_PIN', 'Incorrect transaction PIN.')
-    if (!('session' in pinCheck)) {
+    if ('pinNotSet' in pinCheck) {
       throw new ApiError(400, 'PIN_NOT_SET', 'Create your transaction PIN before paying at POS.')
     }
 

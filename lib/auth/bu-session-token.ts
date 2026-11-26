@@ -1,5 +1,7 @@
+import { getBankEncryptionKey } from '@/lib/env'
+
 function secret() {
-  return process.env.BANK_ENCRYPTION_KEY || process.env.JWT_SECRET || 'dev-only-bank-key-change-me!!'
+  return getBankEncryptionKey()
 }
 
 function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
