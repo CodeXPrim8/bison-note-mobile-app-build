@@ -13,6 +13,7 @@ import { BU_MIN_TRANSFER, buFromNaira, formatBu, formatNairaPlain } from '@/lib/
 import { formatEventDateTime } from '@/lib/datetime'
 import { PURPOSE_IDS, purposeLabel, type PurposeId } from '@/lib/purpose'
 import { PurposeIcon } from '@/components/icons/purpose-icons'
+import { NGN_BANKS } from '@/lib/payments/ngn-banks'
 
 type PosMode = 'event' | 'business'
 type SaleStatus = 'pending_notes' | 'confirmed' | 'notes_issued' | 'cancelled'
@@ -93,6 +94,9 @@ export default function VendorPOS({
   })
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [bankAccountName, setBankAccountName] = useState('')
+  const [bankResolving, setBankResolving] = useState(false)
+  const [bankHint, setBankHint] = useState<string | null>(null)
   const [virtualAccount, setVirtualAccount] = useState<VirtualAccount | null>(null)
   const [vaLoading, setVaLoading] = useState(false)
   const [vaError, setVaError] = useState<string | null>(null)
@@ -433,9 +437,20 @@ export default function VendorPOS({
       .catch(() => undefined)
   }, [userId, isEventPos])
 
+  function bankDetailsReady(profile: typeof bizProfile) {
+    return profile.bank_account_number.replace(/\D/g, '').length === 10 && Boolean(profile.bank_code.trim())
+  }
+
   async function saveBiz(patch: Partial<typeof bizProfile> & { logo_data_url?: string }) {
     const next = { ...bizProfile, ...patch }
+    // Never persist bank settlement without a real NUBAN + bank code.
+    if (next.settlement === 'bank' && !bankDetailsReady(next)) {
+      setBizProfile({ ...next, settlement: 'bank' })
+      setBankHint('Add a verified 10-digit account so sales can auto-send to your bank.')
+      return
+    }
     setBizProfile(next)
+    setBankHint(null)
     await fetch('/api/vendor/profile', {
       method: 'PUT',
       credentials: 'include',
@@ -451,6 +466,65 @@ export default function VendorPOS({
       }),
     })
   }
+
+  useEffect(() => {
+    if (bizProfile.settlement !== 'bank') return
+    const digits = bizProfile.bank_account_number.replace(/\D/g, '')
+    const bankCode = bizProfile.bank_code.trim()
+    if (digits.length !== 10 || !bankCode) {
+      setBankAccountName('')
+      return
+    }
+    let cancelled = false
+    setBankResolving(true)
+    const timer = window.setTimeout(() => {
+      fetch(
+        `/api/wallet/withdraw?account_number=${encodeURIComponent(digits)}&bank_code=${encodeURIComponent(bankCode)}`,
+        { credentials: 'include' },
+      )
+        .then(async (res) => {
+          const json = await res.json()
+          if (cancelled) return
+          if (!json.status) {
+            setBankAccountName('')
+            setBankHint(json.message || 'Could not verify that account number.')
+            return
+          }
+          setBankAccountName(String(json.data?.account_name || ''))
+          setBankHint(null)
+          setBizProfile((current) => {
+            if (current.settlement !== 'bank') return current
+            void fetch('/api/vendor/profile', {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                business_name: current.business_name,
+                category: current.category || null,
+                settlement: 'bank',
+                bank_name: current.bank_name,
+                bank_code: bankCode,
+                bank_account_number: digits,
+              }),
+            })
+            return current
+          })
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setBankAccountName('')
+            setBankHint('Could not verify that account number.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setBankResolving(false)
+        })
+    }, 450)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [bizProfile.settlement, bizProfile.bank_account_number, bizProfile.bank_code])
 
   async function downloadQrSheet() {
     const dataUrl = await QRCode.toDataURL(qrPayload, { width: 900, margin: 2, errorCorrectionLevel: 'H' })
@@ -746,7 +820,10 @@ export default function VendorPOS({
                       <button
                         type="button"
                         className={`rounded-2xl px-3 py-2 font-semibold ${bizProfile.settlement === 'wallet' ? 'bg-neutral-950 text-white' : 'bg-neutral-100'}`}
-                        onClick={() => void saveBiz({ settlement: 'wallet' })}
+                        onClick={() => {
+                          setBankHint(null)
+                          void saveBiz({ settlement: 'wallet' })
+                        }}
                       >
                         Keep in BU wallet
                       </button>
@@ -758,6 +835,67 @@ export default function VendorPOS({
                         Send to bank
                       </button>
                     </div>
+                    {bizProfile.settlement === 'bank' ? (
+                      <div className="w-full space-y-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                        <p className="text-xs font-semibold text-neutral-700">
+                          Business bank for auto-settlement
+                        </p>
+                        <p className="text-[11px] leading-relaxed text-neutral-500">
+                          After each POS sale, Ƀucks pays this account (Paystack fees apply). Without a
+                          verified account, sales stay in your ɃU wallet.
+                        </p>
+                        <label className="block text-xs font-semibold text-neutral-500">
+                          Bank
+                          <select
+                            value={bizProfile.bank_code}
+                            onChange={(e) => {
+                              const code = e.target.value
+                              const bank = NGN_BANKS.find((item) => item.code === code)
+                              setBizProfile((current) => ({
+                                ...current,
+                                bank_code: code,
+                                bank_name: bank?.name || current.bank_name,
+                                settlement: 'bank',
+                              }))
+                              setBankAccountName('')
+                            }}
+                            className="mt-1 flex h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm text-neutral-950"
+                          >
+                            <option value="">Select bank</option>
+                            {NGN_BANKS.map((bank) => (
+                              <option key={bank.code} value={bank.code}>
+                                {bank.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-semibold text-neutral-500">
+                          Account number
+                          <Input
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={bizProfile.bank_account_number}
+                            onChange={(e) => {
+                              const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                              setBizProfile((current) => ({
+                                ...current,
+                                bank_account_number: digits,
+                                settlement: 'bank',
+                              }))
+                              setBankAccountName('')
+                            }}
+                            placeholder="10-digit NUBAN"
+                            className="mt-1 bg-white"
+                          />
+                        </label>
+                        {bankResolving ? (
+                          <p className="text-xs text-neutral-500">Checking account…</p>
+                        ) : bankAccountName ? (
+                          <p className="text-xs font-semibold text-emerald-700">{bankAccountName}</p>
+                        ) : null}
+                        {bankHint ? <p className="text-xs text-amber-700">{bankHint}</p> : null}
+                      </div>
+                    ) : null}
                     <label className="w-full text-xs font-semibold text-neutral-500">
                       Logo for the middle of the QR
                       <input
