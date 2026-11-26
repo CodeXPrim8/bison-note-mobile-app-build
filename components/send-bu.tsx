@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { User, CheckCircle, AlertCircle, Search, QrCode, Star } from 'lucide-react'
 import { SprayCash } from '@/components/icons/spray-cash'
-import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { QrScanPopup } from '@/components/qr-scan-popup'
 import { ScanAccountButton } from '@/components/scan-account-button'
 import { PurposeIcon } from '@/components/icons/purpose-icons'
 import { parsePayQr } from '@/lib/pay-qr'
@@ -677,36 +677,38 @@ export default function SendBU({
               boxShadow: '0 18px 40px rgba(47,123,255,0.1), inset 0 1px 0 rgba(255,255,255,1)',
             }}
           >
-            {cameraActive ? (
-              <div className="overflow-hidden rounded-2xl ring-1 ring-[#2f7bff]/25">
-                <TicketQrScanner readerId="bu-tip-reader" active={cameraActive} onScan={handleTipScan} />
-              </div>
-            ) : (
-              <div
-                className="relative mx-auto flex aspect-square w-full max-w-[220px] flex-col items-center justify-center overflow-hidden rounded-[24px]"
-                style={{
-                  background:
-                    'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
-                  border: '1.5px dashed rgba(47,123,255,0.35)',
-                }}
-              >
-                <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
-                <p className="relative mt-3 px-4 text-center text-xs text-neutral-500">
-                  Point the camera at a live receive-ɃU QR
-                </p>
-              </div>
-            )}
+            <div
+              className="relative mx-auto flex aspect-square w-full max-w-[220px] flex-col items-center justify-center overflow-hidden rounded-[24px]"
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
+                border: '1.5px dashed rgba(47,123,255,0.35)',
+              }}
+            >
+              <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
+              <p className="relative mt-3 px-4 text-center text-xs text-neutral-500">
+                Point the camera at a live receive-ɃU QR
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => setCameraActive((open) => !open)}
+              onClick={() => setCameraActive(true)}
               className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white"
               style={{
                 background: 'linear-gradient(120deg, #2f7bff 0%, #8b5cf6 55%, #ff2d95 120%)',
                 boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
               }}
             >
-              {cameraActive ? 'Stop scanner' : 'Scan QR Code'}
+              Scan QR Code
             </button>
+            <QrScanPopup
+              open={cameraActive}
+              onClose={() => setCameraActive(false)}
+              onScan={handleTipScan}
+              title="Scan to tip"
+              hint="Point at their receive-ɃU QR. It scans automatically."
+              readerId="bu-tip-reader"
+            />
             <div className="relative flex items-center gap-3 py-0.5">
               <div className="h-px flex-1 bg-neutral-200/80" />
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">or paste</span>

@@ -68,5 +68,7 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Ƀucks uses Face ID to unlock your wallet and confirm sends. Your PIN always works as a backup.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Ƀucks uses the camera to scan QR codes for pay, tip, POS, and ticket check-in.</string>
 </dict>
 </plist>

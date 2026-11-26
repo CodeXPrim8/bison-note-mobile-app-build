@@ -8,7 +8,7 @@ import { WalletPageSummary } from '@/components/wallet-summary'
 import { PinPadModal } from '@/components/pin-pad-modal'
 import { BU_MIN_TRANSFER, formatBu, quotePeerMoveBu } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
-import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { QrScanPopup } from '@/components/qr-scan-popup'
 
 type PosTarget = {
   vendorId: string
@@ -51,7 +51,7 @@ export default function PosPay({
   const [target, setTarget] = useState<PosTarget | null>(null)
   const [amount, setAmount] = useState('')
   const [pasted, setPasted] = useState('')
-  const [cameraActive, setCameraActive] = useState(true)
+  const [cameraActive, setCameraActive] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pinOpen, setPinOpen] = useState(false)
@@ -163,10 +163,20 @@ export default function PosPay({
 
       {!target ? (
         <Card className="space-y-3 p-4">
-          {cameraActive ? <TicketQrScanner readerId="bu-pos-pay" onScan={onScan} active /> : null}
-          <Button variant="outline" className="w-full" onClick={() => setCameraActive((v) => !v)}>
-            {cameraActive ? 'Stop scanner' : 'Scan POS QR'}
+          <Button className="w-full" onClick={() => setCameraActive(true)}>
+            Scan POS QR
           </Button>
+          <QrScanPopup
+            open={cameraActive}
+            onClose={() => setCameraActive(false)}
+            onScan={(raw) => {
+              setCameraActive(false)
+              onScan(raw)
+            }}
+            title="Scan POS QR"
+            hint="Point at the vendor Business or Event POS code."
+            readerId="bu-pos-pay"
+          />
           <Input placeholder="Or paste POS QR payload" value={pasted} onChange={(e) => setPasted(e.target.value)} />
           <Button variant="outline" className="w-full" onClick={() => onScan(pasted)}>
             Use pasted QR

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { QrCode, CheckCircle, Calendar, MapPin, User, AlertCircle } from 'lucide-react'
-import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { QrScanPopup } from '@/components/qr-scan-popup'
 import { formatEventDateTime } from '@/lib/datetime'
 import {
   BU_MIN_SPRAY,
@@ -203,85 +203,76 @@ export default function SprayingQR() {
                 '0 18px 40px rgba(47,123,255,0.1), inset 0 1px 0 rgba(255,255,255,1)',
             }}
           >
-            {!cameraActive ? (
-              <div className="space-y-4">
+            <div className="space-y-4">
+              <div
+                className="relative mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center overflow-hidden rounded-[24px]"
+                style={{
+                  background:
+                    'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
+                  border: '1.5px dashed rgba(47,123,255,0.35)',
+                }}
+              >
                 <div
-                  className="relative mx-auto flex aspect-square w-full max-w-[220px] items-center justify-center overflow-hidden rounded-[24px]"
+                  className="absolute inset-3 rounded-[18px]"
                   style={{
                     background:
-                      'radial-gradient(circle at 30% 20%, rgba(34,224,255,0.18), transparent 55%), radial-gradient(circle at 80% 80%, rgba(255,45,149,0.14), transparent 50%), linear-gradient(160deg, #eef3ff, #f8f5ff)',
-                    border: '1.5px dashed rgba(47,123,255,0.35)',
+                      'linear-gradient(135deg, rgba(47,123,255,0.08), rgba(139,92,246,0.08))',
                   }}
-                >
-                  <div
-                    className="absolute inset-3 rounded-[18px]"
-                    style={{
-                      background:
-                        'linear-gradient(135deg, rgba(47,123,255,0.08), rgba(139,92,246,0.08))',
-                    }}
-                  />
-                  <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setCameraActive(true)}
-                  className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white"
-                  style={{
-                    background: brandGradient,
-                    boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
-                  }}
-                >
-                  Start QR Scanner
-                </button>
-
-                <div className="relative flex items-center gap-3 py-0.5">
-                  <div className="h-px flex-1 bg-neutral-200/80" />
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
-                    or paste
-                  </span>
-                  <div className="h-px flex-1 bg-neutral-200/80" />
-                </div>
-
-                <Input
-                  placeholder="Paste event ID or QR payload"
-                  value={pasted}
-                  onChange={(e) => setPasted(e.target.value)}
-                  className="h-12 rounded-2xl border-white/70 bg-white/70 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-muted-foreground focus-visible:border-[#2f7bff]/40 focus-visible:ring-[#2f7bff]/20"
                 />
-                <button
-                  type="button"
-                  onClick={() => void loadEvent(pasted)}
-                  className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-[color:var(--bu-navy)]"
-                  style={{
-                    background: 'rgba(255,255,255,0.9)',
-                    border: '1px solid rgba(47,123,255,0.2)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,1)',
-                  }}
-                >
-                  Load event
-                </button>
-                {message ? <p className="text-sm text-destructive">{message}</p> : null}
+                <QrCode className="relative h-20 w-20 text-[#2f7bff]/70" strokeWidth={1.5} />
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="overflow-hidden rounded-2xl ring-1 ring-[#2f7bff]/25">
-                  <TicketQrScanner
-                    readerId="bu-spray-reader"
-                    active={cameraActive}
-                    onScan={(text) => void loadEvent(text)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCameraActive(false)}
-                  className="bu-press flex h-11 w-full items-center justify-center rounded-2xl border border-neutral-200 bg-white text-sm font-semibold text-neutral-700"
-                >
-                  Cancel scanner
-                </button>
-                {message ? <p className="text-sm text-destructive">{message}</p> : null}
+
+              <button
+                type="button"
+                onClick={() => setCameraActive(true)}
+                className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-white"
+                style={{
+                  background: brandGradient,
+                  boxShadow: '0 14px 28px rgba(47,123,255,0.32)',
+                }}
+              >
+                Start QR Scanner
+              </button>
+              <QrScanPopup
+                open={cameraActive}
+                onClose={() => setCameraActive(false)}
+                onScan={(text) => {
+                  setCameraActive(false)
+                  void loadEvent(text)
+                }}
+                title="Scan event QR"
+                hint="Point at the live event QR to load the celebrant."
+                readerId="bu-spray-reader"
+              />
+
+              <div className="relative flex items-center gap-3 py-0.5">
+                <div className="h-px flex-1 bg-neutral-200/80" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                  or paste
+                </span>
+                <div className="h-px flex-1 bg-neutral-200/80" />
               </div>
-            )}
+
+              <Input
+                placeholder="Paste event ID or QR payload"
+                value={pasted}
+                onChange={(e) => setPasted(e.target.value)}
+                className="h-12 rounded-2xl border-white/70 bg-white/70 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-muted-foreground focus-visible:border-[#2f7bff]/40 focus-visible:ring-[#2f7bff]/20"
+              />
+              <button
+                type="button"
+                onClick={() => void loadEvent(pasted)}
+                className="bu-press flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold text-[color:var(--bu-navy)]"
+                style={{
+                  background: 'rgba(255,255,255,0.9)',
+                  border: '1px solid rgba(47,123,255,0.2)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,1)',
+                }}
+              >
+                Load event
+              </button>
+              {message ? <p className="text-sm text-destructive">{message}</p> : null}
+            </div>
           </div>
         </div>
       )}

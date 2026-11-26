@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { TicketQrScanner } from '@/components/web/ticket-qr-scanner'
+import { QrScanPopup } from '@/components/qr-scan-popup'
 import { formatEventDateTime } from '@/lib/datetime'
 
 interface TransferValidation {
@@ -169,7 +169,7 @@ export default function QRScanner() {
             >
               <h3 className="text-lg font-semibold">Validate Transfer</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Scan QR code or enter transfer ID to confirm ɃU transfer from guest
+                Open the camera popup or enter a transfer ID to confirm ɃU from a guest
               </p>
             </div>
           </Card>
@@ -204,16 +204,23 @@ export default function QRScanner() {
 
           <h2 className="text-xl font-bold">Validate ɃU Transfer</h2>
 
-          {/* Camera Preview */}
-          {cameraActive && (
-            <Card className="border-primary/20 bg-card p-4">
-              <TicketQrScanner
-                readerId="bu-validate-reader"
-                active={cameraActive}
-                onScan={(text) => void validateTransfer(text)}
-              />
-            </Card>
-          )}
+          <Button
+            className="w-full"
+            onClick={() => startCamera()}
+          >
+            Open camera scanner
+          </Button>
+          <QrScanPopup
+            open={cameraActive}
+            onClose={() => stopCamera()}
+            onScan={(text) => {
+              stopCamera()
+              void validateTransfer(text)
+            }}
+            title="Scan ticket QR"
+            hint="Hold the guest ticket steady inside the frame."
+            readerId="bu-validate-reader"
+          />
 
           {/* Manual Entry */}
           <div className="space-y-3">

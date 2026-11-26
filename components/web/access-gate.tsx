@@ -171,7 +171,7 @@ export function AccessGate({ eventId }: { eventId: string }) {
           {camera ? (
             <TicketQrScanner
               active={camera}
-              className="absolute inset-0 h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
+              className="absolute inset-0 aspect-auto h-full min-h-0 w-full rounded-none [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
               onScan={(text) => {
                 void authenticate(text)
               }}
