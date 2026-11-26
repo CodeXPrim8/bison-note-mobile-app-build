@@ -95,11 +95,27 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const naira = Number(wallet.naira_available)
     const bu = Number(wallet.bu_balance)
     if (!Number.isFinite(naira) || !Number.isFinite(bu)) return
+    let changed = false
+    let prevNaira: number | null = null
     setSnapshot((prev) => {
+      prevNaira = prev.nairaBalance
+      changed = prev.nairaBalance == null || Math.abs(prev.nairaBalance - naira) >= 0.01
       const next = { ...prev, nairaBalance: naira, buBalance: bu }
       writeCache(next)
       return next
     })
+    // Balance-only refreshes used to skip this pulse, so Notifications stayed stale.
+    if (changed && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(WALLET_PULSE_EVENT, {
+          detail: {
+            prevNaira,
+            nextNaira: naira,
+            delta: prevNaira == null ? naira : naira - prevNaira,
+          },
+        }),
+      )
+    }
   }, [])
 
   const spendHoldUntil = useRef(0)
@@ -258,19 +274,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         if (Date.now() < spendHoldUntil.current && prevNaira != null && Number.isFinite(nextNaira) && nextNaira <= prevNaira + 0.01) {
           spendHoldUntil.current = 0
         }
+        // ingestWallet pulses when the balance changes — that refreshes Notifications/History too.
         ingestWallet(wallet)
-        if (
-          prevNaira != null &&
-          Number.isFinite(nextNaira) &&
-          Math.abs(nextNaira - prevNaira) >= 0.01
-        ) {
-          // One pulse only — a second event remounted the balance UI and looked like a double credit.
-          window.dispatchEvent(
-            new CustomEvent(WALLET_PULSE_EVENT, {
-              detail: { prevNaira, nextNaira, delta: nextNaira - prevNaira },
-            }),
-          )
-        }
       } catch {
         // The next tick retries.
       } finally {

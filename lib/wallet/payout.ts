@@ -1,13 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isPaystackConfigured } from '@/lib/env'
+import { isPaystackConfigured, isSquadConfigured } from '@/lib/env'
 import { createTransferRecipient, initiateTransfer, listPaystackNgnBanks, nairaToKobo, resolveNuban } from '@/lib/payments/paystack'
-import { bankCodeFromName, displayBankName, NGN_BANKS, payoutBankCodes } from '@/lib/payments/ngn-banks'
+import {
+  getSquadMerchantBalance,
+  initiateSquadTransfer,
+  lookupSquadAccount,
+} from '@/lib/payments/squad'
+import { bankCodeFromName, displayBankName, NGN_BANKS, payoutBankCodes, squadNipCode } from '@/lib/payments/ngn-banks'
 import { moveLiveWallet } from '@/lib/wallet/move'
+import { ApiError } from '@/lib/api/errors'
+
+function isPaystackTransferPaused(message: string) {
+  return /third party payouts|payouts? (are|is) on hold|transfers are not available/i.test(message)
+}
 
 export function paystackPayoutMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || 'Bank transfer failed')
-  if (/third party payouts|starter business|transfers are not available/i.test(message)) {
+  if (/starter business/i.test(message)) {
     return 'Automatic bank payouts are not enabled yet. Try again later or contact support.'
+  }
+  if (/squad payout wallet needs funding|squad wallet/i.test(message)) {
+    return message.slice(0, 500)
+  }
+  if (isPaystackTransferPaused(message)) {
+    return 'Paystack has paused transfers on this account. Fund the Squad payout wallet, or ask Paystack support to lift the pause.'
   }
   if (/insufficient|not enough balance|balance is low|not enough to fulfil|not enough to fulfill/i.test(message)) {
     return 'Settlement balance is too low to send this payout right now. Try again later.'
@@ -206,11 +222,85 @@ async function payoutSenderLabel(userId: string, db: SupabaseClient) {
   return `Sent from BUCKS/${who || 'Customer'}`.slice(0, 80)
 }
 
+async function sendSquadWithdrawalPayout(
+  row: Record<string, unknown>,
+  db: SupabaseClient,
+  bankNaira: number,
+  narration: string,
+) {
+  if (!isSquadConfigured()) {
+    throw new Error('Squad payouts are not configured.')
+  }
+  const id = String(row.id)
+  const accountNumber = String(row.account_number || '').replace(/\D/g, '')
+  const bankCode = String(row.bank_code || bankCodeFromName(String(row.bank_name || '')))
+  const nip = squadNipCode(bankCode, String(row.bank_name || ''))
+  if (!nip) {
+    throw new Error('This bank is not available for Squad payouts yet. Choose another Nigerian bank.')
+  }
+  const wallet = await getSquadMerchantBalance('NGN')
+  const amountKobo = nairaToKobo(bankNaira)
+  if (!(wallet.balance >= amountKobo)) {
+    throw new Error(
+      'Paystack has paused transfers, and the Squad payout wallet needs funding before bank sends can go out.',
+    )
+  }
+  let accountName = String(row.account_name || '').trim()
+  try {
+    const lookedUp = await lookupSquadAccount({ bankCode: nip, accountNumber })
+    accountName = lookedUp.account_name || accountName
+  } catch (error) {
+    if (!accountName) throw error
+  }
+  if (!accountName) {
+    throw new Error('Could not confirm the bank account name for Squad payout.')
+  }
+  const transfer = await initiateSquadTransfer({
+    merchantId: wallet.merchant_id,
+    referenceSuffix: `buwd${id.replace(/-/g, '').slice(0, 18)}${Date.now().toString(36)}`,
+    amountKobo,
+    bankCode: nip,
+    accountNumber,
+    accountName,
+    remark: narration,
+  })
+  const success = /success|successful|completed|ok/i.test(transfer.status || '')
+  const inFlight = /pending|processing|queued|ongoing/i.test(transfer.status || '')
+  const status = success ? 'paid' : inFlight ? 'approved' : 'paid'
+  await updateWithdrawal(db, id, {
+    status,
+    bank_code: bankCode || nip,
+    bank_name: displayBankName(String(row.bank_name || ''), bankCode || nip),
+    account_name: accountName,
+    paystack_transfer_code: null,
+    paystack_reference: `squad:${transfer.reference}`,
+    transfer_error: null,
+    note: 'Sent via Squad',
+    reviewed_at: new Date().toISOString(),
+    paid_at: success || !inFlight ? new Date().toISOString() : null,
+  })
+  return { status, reference: transfer.reference, transferStatus: transfer.status, provider: 'squad' as const }
+}
+
 export async function sendWithdrawalPayout(row: Record<string, unknown>, db: SupabaseClient) {
-  if (!isPaystackConfigured()) {
+  if (!isPaystackConfigured() && !isSquadConfigured()) {
     throw new Error('Bank payouts are not available right now.')
   }
   const id = String(row.id)
+  // Always pay the face bank amount. Fees were already taken from the sender's wallet.
+  const bankNaira = Number(row.bank_naira ?? row.naira)
+  if (!Number.isFinite(bankNaira) || bankNaira <= 0) {
+    throw new Error('Invalid bank send amount.')
+  }
+  const senderUserId = String(row.user_id || '')
+  const narration = senderUserId
+    ? await payoutSenderLabel(senderUserId, db)
+    : 'Sent from BUCKS'
+
+  if (!isPaystackConfigured()) {
+    return sendSquadWithdrawalPayout(row, db, bankNaira, narration)
+  }
+
   const reuse =
     String(row.paystack_recipient || '').trim() &&
     !/bank is invalid/i.test(String(row.transfer_error || ''))
@@ -227,37 +317,61 @@ export async function sendWithdrawalPayout(row: Record<string, unknown>, db: Sup
     account_name: ready.accountName || row.account_name,
     paystack_recipient: ready.recipient.recipient_code,
   })
-  // Always pay the face bank amount. Fees were already taken from the sender's wallet.
-  const bankNaira = Number(row.bank_naira ?? row.naira)
-  if (!Number.isFinite(bankNaira) || bankNaira <= 0) {
-    throw new Error('Invalid bank send amount.')
+
+  try {
+    const transfer = await initiateTransfer({
+      amountKobo: nairaToKobo(bankNaira),
+      recipient: ready.recipient.recipient_code,
+      reference: transferReference(id),
+      reason: narration,
+    })
+    const success = /success/i.test(transfer.status || '')
+    const inFlight = /otp|pending|received|queued/i.test(transfer.status || '')
+    const status = success ? 'paid' : inFlight || transfer.status ? 'approved' : 'approved'
+    await updateWithdrawal(db, id, {
+      status,
+      bank_code: ready.bankCode,
+      bank_name: displayBankName(String(row.bank_name || ''), ready.bankCode),
+      account_name: ready.accountName || row.account_name,
+      paystack_recipient: ready.recipient.recipient_code,
+      paystack_transfer_code: transfer.transfer_code,
+      paystack_reference: transfer.reference,
+      transfer_error: null,
+      reviewed_at: new Date().toISOString(),
+      paid_at: success ? new Date().toISOString() : null,
+    })
+    return { status, reference: transfer.reference, transferStatus: transfer.status, provider: 'paystack' as const }
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error || '')
+    if (isPaystackTransferPaused(raw) && isSquadConfigured()) {
+      try {
+        return await sendSquadWithdrawalPayout(
+          {
+            ...row,
+            bank_code: ready.bankCode,
+            account_name: ready.accountName || row.account_name,
+          },
+          db,
+          bankNaira,
+          narration,
+        )
+      } catch (squadError) {
+        const squadMessage =
+          squadError instanceof ApiError
+            ? squadError.message
+            : squadError instanceof Error
+              ? squadError.message
+              : String(squadError || '')
+        if (/needs funding|insufficient|not enough/i.test(squadMessage)) {
+          throw new Error(
+            'Paystack has paused transfers, and the Squad payout wallet needs funding before bank sends can go out.',
+          )
+        }
+        throw squadError instanceof Error ? squadError : new Error(squadMessage || raw)
+      }
+    }
+    throw error instanceof Error ? error : new Error(raw)
   }
-  const senderUserId = String(row.user_id || '')
-  const narration = senderUserId
-    ? await payoutSenderLabel(senderUserId, db)
-    : 'Sent from BUCKS'
-  const transfer = await initiateTransfer({
-    amountKobo: nairaToKobo(bankNaira),
-    recipient: ready.recipient.recipient_code,
-    reference: transferReference(id),
-    reason: narration,
-  })
-  const success = /success/i.test(transfer.status || '')
-  const inFlight = /otp|pending|received|queued/i.test(transfer.status || '')
-  const status = success ? 'paid' : inFlight || transfer.status ? 'approved' : 'approved'
-  await updateWithdrawal(db, id, {
-    status,
-    bank_code: ready.bankCode,
-    bank_name: displayBankName(String(row.bank_name || ''), ready.bankCode),
-    account_name: ready.accountName || row.account_name,
-    paystack_recipient: ready.recipient.recipient_code,
-    paystack_transfer_code: transfer.transfer_code,
-    paystack_reference: transfer.reference,
-    transfer_error: null,
-    reviewed_at: new Date().toISOString(),
-    paid_at: success ? new Date().toISOString() : null,
-  })
-  return { status, reference: transfer.reference, transferStatus: transfer.status }
 }
 
 export async function guestBanks() {

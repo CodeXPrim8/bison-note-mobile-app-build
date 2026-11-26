@@ -15,6 +15,7 @@ import {
   formatNairaPlain,
   quoteWithdrawBu,
   WalletAmountError,
+  type FeeProvider,
 } from '@/lib/bu-rate'
 import { useAccount } from '@/components/account-store'
 import { bankCodeFromName, NGN_BANKS } from '@/lib/payments/ngn-banks'
@@ -137,6 +138,8 @@ export default function Redemption() {
   const [pinOpen, setPinOpen] = useState(false)
   const [pinError, setPinError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<BuInvoice | null>(null)
+  const [freeUsedToday, setFreeUsedToday] = useState(0)
+  const [payoutProvider, setPayoutProvider] = useState<FeeProvider>('paystack')
   const [form, setForm] = useState({
     buAmount: '',
     bankCode: '',
@@ -217,6 +220,28 @@ export default function Redemption() {
   }, [refreshWallet, userId])
 
   useEffect(() => {
+    let cancelled = false
+    fetch('/api/wallet?history=0', { credentials: 'include', cache: 'no-store' })
+      .then(async (res) => {
+        const json = await res.json()
+        if (cancelled || !json.status) return
+        const rates = json.data?.rates as
+          | { free_under_used_today?: number; payout_provider?: FeeProvider }
+          | undefined
+        if (typeof rates?.free_under_used_today === 'number') {
+          setFreeUsedToday(Math.max(0, Math.floor(rates.free_under_used_today)))
+        }
+        if (rates?.payout_provider === 'squad' || rates?.payout_provider === 'paystack') {
+          setPayoutProvider(rates.payout_provider)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  useEffect(() => {
     const digits = form.accountNumber.replace(/\D/g, '')
     if (digits.length !== 10 || !form.bankCode) {
       setForm((current) => (current.accountName ? { ...current, accountName: '' } : current))
@@ -259,12 +284,15 @@ export default function Redemption() {
   const quote = useMemo(() => {
     try {
       if (!form.buAmount) return null
-      return quoteWithdrawBu(Number(form.buAmount))
+      return quoteWithdrawBu(Number(form.buAmount), {
+        provider: payoutProvider,
+        freeUsedToday,
+      })
     } catch (error) {
       if (error instanceof WalletAmountError) return { error: error.message }
       return { error: 'Enter a valid amount' }
     }
-  }, [form.buAmount])
+  }, [form.buAmount, freeUsedToday, payoutProvider])
 
   const readyQuote = quote && !('error' in quote) ? quote : null
   const quoteError = quote && 'error' in quote ? quote.error : null
@@ -625,6 +653,14 @@ export default function Redemption() {
                   <div className="flex items-center justify-between gap-2">
                     <span>Bank receives</span>
                     <span className="font-semibold text-neutral-950">₦{formatNairaPlain(readyQuote.bankNaira)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span>Fee</span>
+                    <span className="font-semibold text-neutral-950">
+                      {readyQuote.freeQuotaApplied
+                        ? 'Free today'
+                        : `Ƀ ${formatBu(readyQuote.totalDebitBu - readyQuote.bu)}`}
+                    </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <span>You pay</span>

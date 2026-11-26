@@ -176,7 +176,7 @@ export async function debitFaceThenCharge(
       naira: charge,
       direction: 'debit',
       type: input.type,
-      description: 'Charge',
+      description: 'Fee',
       metadata: {
         ...baseMeta,
         kind: 'charge',
@@ -198,6 +198,60 @@ export async function debitFaceThenCharge(
     throw new ApiError(400, 'INSUFFICIENT_FUNDS', INSUFFICIENT_ACCOUNT)
   }
 
+  return { faceMoveId, chargeMoveId, face, charge }
+}
+
+/**
+ * Credit the face amount, then the charge — same split as debitFaceThenCharge.
+ * History shows Ƀ100 then Ƀ35, never a single Ƀ135 line next to a separate charge.
+ */
+export async function creditFaceThenCharge(
+  db: SupabaseClient,
+  input: {
+    userId: string
+    faceNaira: number
+    chargeNaira: number
+    faceDescription: string
+    chargeDescription?: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const face = roundMoney(input.faceNaira)
+  const charge = roundMoney(Math.max(0, input.chargeNaira))
+  const baseMeta = { ...(input.metadata ?? {}) }
+  const faceMoveId = crypto.randomUUID()
+
+  if (face > 0.004) {
+    await moveLiveWallet(db, {
+      userId: input.userId,
+      naira: face,
+      direction: 'credit',
+      type: 'refund',
+      description: input.faceDescription,
+      metadata: { ...baseMeta, move_id: faceMoveId, leg: 'principal', kind: 'refund' },
+    })
+  }
+
+  if (!(charge > 0.004)) {
+    return { faceMoveId, chargeMoveId: null as string | null, face, charge }
+  }
+
+  const chargeMoveId = crypto.randomUUID()
+  await moveLiveWallet(db, {
+    userId: input.userId,
+    naira: charge,
+    direction: 'credit',
+    type: 'refund',
+    description: input.chargeDescription ?? 'Fee refunded',
+    metadata: {
+      ...baseMeta,
+      kind: 'charge_refund',
+      move_id: chargeMoveId,
+      parent_move_id: faceMoveId,
+      leg: 'charge',
+      charge_naira: charge,
+    },
+  })
   return { faceMoveId, chargeMoveId, face, charge }
 }
 

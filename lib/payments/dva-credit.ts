@@ -1,5 +1,7 @@
 import { ApiError } from '@/lib/api/errors'
-import { dvaNetCreditNaira } from '@/lib/bu-rate'
+import { getPlatformSettings } from '@/lib/admin/platform'
+import { quotePayInCreditNaira } from '@/lib/bu-rate'
+import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
 import {
   isPaystackConfigured,
   listPaystackTransactions,
@@ -108,8 +110,6 @@ async function creditDedicatedNubanRow(
   if (!(grossNaira > 0)) {
     throw new ApiError(400, 'INVALID_AMOUNT', 'Charge amount must be greater than zero')
   }
-  const credited = dvaNetCreditNaira(grossNaira)
-  const creditNaira = credited.net
 
   const resolved = await resolveDvaUserId({ ...data, ...charge }, meta)
   const userId = knownUserId || resolved.userId
@@ -121,23 +121,40 @@ async function creditDedicatedNubanRow(
     })
   }
 
+  const db = createDataClient()
+  const settings = await getPlatformSettings(db)
+  const freeUsedToday = await countUnderFreeBankTransfersToday(
+    db,
+    userId,
+    settings.squad_fee_rules.free_under_naira,
+  )
+  const credited = quotePayInCreditNaira(grossNaira, {
+    provider: 'paystack',
+    freeUsedToday,
+    squadRules: settings.squad_fee_rules,
+  })
+  const creditNaira = credited.net
+
   if (await walletHasReference(userId, reference)) {
     return { already_credited: true, userId, amount: creditNaira, reference }
   }
 
-  const db = createDataClient()
   const ledgerMeta = {
     ...meta,
     reference,
     move_id: reference,
     kind: 'deposit',
     channel: 'dedicated_nuban',
+    provider: 'paystack',
     account_number: resolved.accountNumber || null,
     customer_code: resolved.customerCode || null,
     paystack_amount_kobo: amountKobo,
     paystack_fees: charge.fees ?? data.fees ?? null,
     gross_naira: credited.gross,
     fee_naira: credited.fee,
+    partner_fee_naira: credited.partnerFee,
+    platform_fee_naira: credited.platformFee,
+    free_quota_applied: credited.freeQuotaApplied,
     net_naira: credited.net,
     direction: 'credit',
     requested_type: 'deposit',

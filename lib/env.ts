@@ -12,6 +12,11 @@ function optional(name: string): string | undefined {
   return value && value.length > 0 ? value : undefined
 }
 
+/** Public optional env lookup for feature flags and optional providers. */
+export function optionalEnv(name: string): string | undefined {
+  return optional(name)
+}
+
 function requiredPublic(name: string): string {
   const value = optional(name)
   if (!value) {

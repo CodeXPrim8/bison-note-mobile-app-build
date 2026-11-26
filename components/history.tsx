@@ -119,7 +119,11 @@ function mapWalletTx(tx: Record<string, unknown>): Transaction {
   const statusRaw = String(tx.status ?? 'completed')
   const labeled = historyLabel({ type, description: rawDescription, direction })
   const tipCredit = direction === 'credit' && (/^tip received/i.test(rawDescription) || meta.kind === 'tip')
-  const chargeLine = meta.kind === 'charge' || meta.leg === 'charge' || /^charge$/i.test(rawDescription)
+  const chargeLine =
+    meta.kind === 'charge' ||
+    meta.kind === 'charge_refund' ||
+    meta.leg === 'charge' ||
+    /^(charge|fee)(\s+refunded)?$/i.test(rawDescription)
   const counterparty = tipCredit || chargeLine
     ? null
     : (typeof tx.counterparty === 'string' && tx.counterparty.trim() ? tx.counterparty.trim() : null) ||
@@ -168,7 +172,8 @@ function invoiceFromActivity(tx: Transaction, senderName: string): BuInvoice {
 
 function activityTitle(tx: Transaction) {
   const desc = String(tx.description || '')
-  if (/^charge$/i.test(desc)) return 'Charge'
+  if (/^(charge|fee)$/i.test(desc)) return 'Fee'
+  if (/^(charge|fee) refunded$/i.test(desc)) return 'Fee refunded'
   if (tx.bucket === 'withdrawal' && !/tip|spray|sent Ƀu|received Ƀu|pos|commission/i.test(desc)) {
     return desc || (tx.counterparty ? `Sent to ${tx.counterparty}` : 'Send to bank')
   }

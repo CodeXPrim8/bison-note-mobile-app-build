@@ -90,3 +90,49 @@ export function displayBankName(name: string, code?: string) {
   if (/palmpay/i.test(name) || code === '999991' || code === '100033') return 'PalmPay'
   return name
 }
+
+/** Paystack / CBN bank codes → Squad NIP codes for payouts. */
+const SQUAD_NIP: Record<string, string> = {
+  '044': '000014',
+  '023': '000009',
+  '050': '000010',
+  '070': '000007',
+  '011': '000016',
+  '214': '000003',
+  '103': '000027',
+  '058': '000013',
+  '030': '000020',
+  '301': '000006',
+  '082': '000002',
+  '50211': '090267',
+  '090267': '090267',
+  '50515': '090405',
+  '090405': '090405',
+  '999992': '100004',
+  '305': '100004',
+  '100004': '100004',
+  '999991': '100033',
+  '100033': '100033',
+  '076': '000008',
+  '101': '000023',
+  '221': '000012',
+  '068': '000021',
+  '232': '000001',
+  '032': '000018',
+  '033': '000004',
+  '215': '000011',
+  '035': '000017',
+  '057': '000015',
+}
+
+export function squadNipCode(bankCode: string, bankName = '') {
+  const codes = payoutBankCodes(bankCode, bankName)
+  for (const code of codes) {
+    if (SQUAD_NIP[code]) return SQUAD_NIP[code]
+    if (/^\d{6}$/.test(code)) return code
+  }
+  const primary = (bankCode || bankCodeFromName(bankName)).trim()
+  if (SQUAD_NIP[primary]) return SQUAD_NIP[primary]
+  if (/^\d{6}$/.test(primary)) return primary
+  return ''
+}

@@ -6,7 +6,8 @@ import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
 import { getPlatformSettings } from '@/lib/admin/platform'
 import { createPayoutRecipient, insertWithdrawalRow, sendWithdrawalPayout } from '@/lib/wallet/payout'
-import { debitFaceThenCharge, moveLiveWallet } from '@/lib/wallet/move'
+import { creditFaceThenCharge, debitFaceThenCharge } from '@/lib/wallet/move'
+import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
 import { getVendorProfile } from '@/lib/vendor-profile'
 
 /** Best effort. A failed bank send leaves the sale in the BU wallet. */
@@ -15,15 +16,25 @@ export async function settleVendorSale(vendorUserId: string, naira: number) {
   if (profile.settlement !== 'bank') return
   if (profile.bank_account_number.length !== 10 || !profile.bank_code) return
   if (!isPaystackConfigured()) return
+  const db = tryCreateAdminClient() ?? createDataClient()
+  const settings = await getPlatformSettings(db)
+  const payoutProvider = 'paystack'
+  const freeUsedToday = await countUnderFreeBankTransfersToday(
+    db,
+    vendorUserId,
+    settings.squad_fee_rules.free_under_naira,
+  )
   let quote
   try {
-    quote = quoteWithdrawBu(naira)
+    quote = quoteWithdrawBu(naira, {
+      provider: payoutProvider,
+      freeUsedToday,
+      squadRules: settings.squad_fee_rules,
+    })
   } catch (error) {
     if (error instanceof WalletAmountError) return
     throw error
   }
-  const db = tryCreateAdminClient() ?? createDataClient()
-  const settings = await getPlatformSettings(db)
   const bankCode = profile.bank_code
   const bankName = displayBankName(profile.bank_name || 'Bank', bankCode)
   const ready = await createPayoutRecipient({
@@ -37,7 +48,12 @@ export async function settleVendorSale(vendorUserId: string, naira: number) {
     bu: quote.bu,
     naira: quote.naira,
     bank_naira: quote.bankNaira,
+    paystack_transfer_fee: quote.paystackFee,
+    stamp_fee: quote.stampFee,
+    platform_fee: quote.platformFee,
     total_debit: quote.totalDebit,
+    free_quota_applied: quote.freeQuotaApplied,
+    fee_provider: quote.provider,
     value_rate: getBuNairaValue(),
     bank_name: bankName,
     bank_code: ready.bankCode,
@@ -77,13 +93,12 @@ export async function settleVendorSale(vendorUserId: string, naira: number) {
       await sendWithdrawalPayout(row, db)
     }
   } catch {
-    await moveLiveWallet(db, {
+    await creditFaceThenCharge(db, {
       userId: vendorUserId,
-      naira: roundMoney(debited.face + debited.charge),
-      direction: 'credit',
-      type: 'refund',
-      description: 'Bank send refunded',
-      metadata: { ...meta, move_id: crypto.randomUUID(), refund_of: debited.faceMoveId },
+      faceNaira: debited.face,
+      chargeNaira: debited.charge,
+      faceDescription: 'Bank send refunded',
+      metadata: { ...meta, refund_of: debited.faceMoveId },
     }).catch(() => undefined)
   }
 }

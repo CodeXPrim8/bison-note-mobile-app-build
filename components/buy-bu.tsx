@@ -328,7 +328,7 @@ export default function BuyBU({ onComplete: _onComplete }: BuyBUProps) {
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Under ₦10,000 is credited in full. From ₦10,000, the fee is ₦25 up to ₦20,000, then 0.3% up to ₦150. Stay on this screen — we credit your ɃU as soon as the transfer lands.
+                  First 3 transfers under ₦10,000 each day are credited in full. From the 4th under ₦10,000 that day, or from ₦10,000 up, a small fee comes off (partner cost plus 0.05% for Bucks). Stay on this screen — we credit your ɃU as soon as the transfer lands.
                 </p>
                 {syncNote && <p className="text-sm font-semibold text-primary">{syncNote}</p>}
                 {virtualAccount.needs_kyc || virtualAccount.upgrade_to_squad ? (

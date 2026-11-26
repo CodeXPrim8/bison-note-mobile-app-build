@@ -163,6 +163,81 @@ export type SquadCustomerTx = {
   currency?: string
 }
 
+export type SquadMerchantBalance = {
+  balance: number
+  currency_id: string
+  merchant_id: string
+}
+
+export async function getSquadMerchantBalance(currencyId = 'NGN'): Promise<SquadMerchantBalance> {
+  const json = await squadRequest<SquadMerchantBalance>(
+    `/merchant/balance?currency_id=${encodeURIComponent(currencyId)}`,
+  )
+  const data = json.data
+  if (!data?.merchant_id) {
+    throw new ApiError(502, 'SQUAD_BALANCE_FAILED', json.message || 'Could not read Squad wallet balance')
+  }
+  return {
+    balance: Number(data.balance ?? 0),
+    currency_id: String(data.currency_id || currencyId),
+    merchant_id: String(data.merchant_id),
+  }
+}
+
+export async function lookupSquadAccount(input: {
+  bankCode: string
+  accountNumber: string
+}): Promise<{ account_name: string; account_number: string }> {
+  const json = await squadRequest<{ account_name?: string; account_number?: string }>(
+    '/payout/account/lookup',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        bank_code: input.bankCode,
+        account_number: input.accountNumber.replace(/\D/g, ''),
+      }),
+    },
+  )
+  const name = String(json.data?.account_name || '').trim()
+  const number = String(json.data?.account_number || input.accountNumber).replace(/\D/g, '')
+  if (!name || number.length !== 10) {
+    throw new ApiError(400, 'SQUAD_LOOKUP_FAILED', json.message || 'Could not confirm the bank account on Squad')
+  }
+  return { account_name: name, account_number: number }
+}
+
+export async function initiateSquadTransfer(input: {
+  merchantId: string
+  referenceSuffix: string
+  amountKobo: number
+  bankCode: string
+  accountNumber: string
+  accountName: string
+  remark: string
+}): Promise<{ reference: string; status: string }> {
+  const reference = `${input.merchantId}_${input.referenceSuffix}`.slice(0, 64)
+  const json = await squadRequest<{
+    transaction_reference?: string
+    transaction_status?: string
+    status?: string
+  }>('/payout/transfer', {
+    method: 'POST',
+    body: JSON.stringify({
+      transaction_reference: reference,
+      amount: String(Math.round(input.amountKobo)),
+      bank_code: input.bankCode,
+      account_number: input.accountNumber.replace(/\D/g, ''),
+      account_name: input.accountName,
+      currency_id: 'NGN',
+      remark: input.remark.slice(0, 100),
+    }),
+  })
+  return {
+    reference: String(json.data?.transaction_reference || reference),
+    status: String(json.data?.transaction_status || json.data?.status || json.message || 'success'),
+  }
+}
+
 export async function listSquadCustomerTransactions(
   customerIdentifier: string,
 ): Promise<SquadCustomerTx[]> {

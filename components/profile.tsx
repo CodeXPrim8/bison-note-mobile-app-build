@@ -7,11 +7,14 @@ import {
   CreditCard,
   Gift,
   History,
+  LifeBuoy,
   Lock,
   Megaphone,
+  MessageCircle,
   Nfc,
   Palette,
   Radio,
+  ScanFace,
   Settings,
   Sparkles,
   Ticket,
@@ -19,10 +22,19 @@ import {
 } from 'lucide-react'
 import { displayBuId } from '@/lib/phone'
 import ThemeSelector from '@/components/theme-selector'
+import SupportChat from '@/components/support-chat'
 import { useAccount } from '@/components/account-store'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
+import {
+  clearBiometricCredentials,
+  getBiometricAvailability,
+  isFaceUnlockPreferred,
+  saveBiometricCredentials,
+  type BiometricAvailability,
+} from '@/lib/auth/biometric'
+import { PinPadModal } from '@/components/pin-pad-modal'
 
-type MenuView = 'menu' | 'appearance' | 'settings' | 'pnd' | 'coming-soon'
+type MenuView = 'menu' | 'appearance' | 'settings' | 'pnd' | 'coming-soon' | 'support' | 'support-chat'
 
 interface ProfileProps {
   onNavigate: (page: string) => void
@@ -37,12 +49,18 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
   const [initials, setInitials] = useState(displayName ? displayName.slice(0, 2).toUpperCase() : 'ɃU')
   const [signedIn, setSignedIn] = useState(Boolean(displayName))
   const [buId, setBuId] = useState<string | null>(null)
+  const [phoneRaw, setPhoneRaw] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [emailDraft, setEmailDraft] = useState('')
   const [settingsBusy, setSettingsBusy] = useState(false)
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null)
   const [settingsError, setSettingsError] = useState(false)
   const [view, setView] = useState<MenuView>(initialView ?? 'menu')
+  const [faceEnabled, setFaceEnabled] = useState(false)
+  const [faceAvail, setFaceAvail] = useState<BiometricAvailability | null>(null)
+  const [faceBusy, setFaceBusy] = useState(false)
+  const [facePinOpen, setFacePinOpen] = useState(false)
+  const [facePinError, setFacePinError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!displayName) return
@@ -64,11 +82,24 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
           const contact = json.data.profile?.email ?? json.data.user.email ?? null
           setEmail(contact)
           setEmailDraft(contact ?? '')
-          if (profile?.phone_e164) setBuId(displayBuId(profile.phone_e164))
+          if (profile?.phone_e164) {
+            setBuId(displayBuId(profile.phone_e164))
+            setPhoneRaw(String(profile.phone_e164))
+            try {
+              window.sessionStorage.setItem('bu_login_phone', String(profile.phone_e164))
+            } catch {
+              // ignore
+            }
+          }
         }
       })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    setFaceEnabled(isFaceUnlockPreferred())
+    void getBiometricAvailability().then(setFaceAvail)
+  }, [view])
 
   async function saveEmail() {
     const value = emailDraft.trim()
@@ -150,8 +181,14 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
     {
       Icon: Settings,
       title: 'Settings',
-      desc: 'Email, PIN, account details',
+      desc: 'Email, PIN, face unlock',
       onClick: () => setView('settings'),
+    },
+    {
+      Icon: LifeBuoy,
+      title: 'Support',
+      desc: 'In-app chat with Ƀucks',
+      onClick: () => setView('support'),
     },
     {
       Icon: Lock,
@@ -214,10 +251,10 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
         <div className="px-4">
           <button
             type="button"
-            onClick={() => setView('menu')}
+            onClick={() => setView(view === 'support-chat' ? 'support' : 'menu')}
             className="w-full cursor-pointer rounded-xl border border-border px-4 py-3 text-sm font-semibold transition hover:bg-card"
           >
-            ← Back to menu
+            {view === 'support-chat' ? '← Back to support' : '← Back to menu'}
           </button>
         </div>
       )}
@@ -262,6 +299,12 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
                   return
                 }
                 await fetch('/api/auth/logout', { method: 'POST' })
+                // Keep face-unlock preference on device; only clear the unlocked session flag.
+                try {
+                  window.sessionStorage.removeItem('bu_face_session_unlocked')
+                } catch {
+                  // ignore
+                }
                 clearAccountSnapshots()
                 window.location.href = '/login'
               }}
@@ -329,6 +372,113 @@ export default function Profile({ onNavigate, theme, onThemeChange, initialView 
               </button>
             </div>
           </div>
+
+          <div className="rounded-xl bg-card p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="bu-well-navy flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
+                <ScanFace className="h-5 w-5" strokeWidth={2.2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold">{faceAvail?.label || 'Face unlock'}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Unlock the app and confirm sends with your face. Your PIN always remains a backup.
+                </p>
+              </div>
+            </div>
+            {!faceAvail?.available ? (
+              <p className="text-sm text-muted-foreground">
+                {faceAvail?.reason || 'Face unlock needs the Bucks phone app with Face ID / face unlock enrolled.'}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={faceBusy || (!faceEnabled && !faceAvail?.available)}
+              onClick={() => {
+                if (faceEnabled) {
+                  setFaceBusy(true)
+                  void clearBiometricCredentials().finally(() => {
+                    setFaceEnabled(false)
+                    setFaceBusy(false)
+                    setSettingsError(false)
+                    setSettingsMessage(`${faceAvail?.label || 'Face unlock'} turned off. PIN still works.`)
+                  })
+                  return
+                }
+                setFacePinError(null)
+                setFacePinOpen(true)
+              }}
+              className="w-full cursor-pointer rounded-lg border border-border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+            >
+              {faceBusy
+                ? 'Working…'
+                : faceEnabled
+                  ? `Turn off ${faceAvail?.label || 'Face unlock'}`
+                  : `Turn on ${faceAvail?.label || 'Face unlock'}`}
+            </button>
+          </div>
+
+          <PinPadModal
+            open={facePinOpen}
+            title="Confirm your PIN"
+            subtitle="Saved only on this phone, protected by face unlock."
+            busy={faceBusy}
+            error={facePinError}
+            biometric={false}
+            onClose={() => {
+              if (!faceBusy) setFacePinOpen(false)
+            }}
+            onSubmit={async (pin) => {
+              const stored = String(window.sessionStorage.getItem('bu_login_phone') || '').trim()
+              const phone = (phoneRaw || stored || buId || '').trim()
+              if (!phone) {
+                setFacePinError('Could not find your ɃU ID. Sign in once more, then try again.')
+                return
+              }
+              setFaceBusy(true)
+              setFacePinError(null)
+              const saved = await saveBiometricCredentials(phone, pin)
+              setFaceBusy(false)
+              if (!saved.ok) {
+                setFacePinError(saved.message || 'Could not enable face unlock.')
+                return
+              }
+              setFaceEnabled(true)
+              setFacePinOpen(false)
+              setSettingsError(false)
+              setSettingsMessage(`${faceAvail?.label || 'Face unlock'} is on.`)
+            }}
+          />
+        </div>
+      )}
+
+      {view === 'support' && (
+        <div className="space-y-3 px-4">
+          <div className="bu-glass-soft rounded-2xl p-4 space-y-2">
+            <h3 className="font-bold">Support</h3>
+            <p className="text-sm text-muted-foreground">
+              Need help with your wallet, a bank send, or a ticket? Chat with Ƀucks Assist and the team here
+              {buId ? ` · ɃU ID ${buId}` : ''}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setView('support-chat')}
+            className="bu-press bu-glass-soft flex w-full items-start gap-3 rounded-2xl p-4 text-left"
+          >
+            <span className="bu-well-navy flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
+              <MessageCircle className="h-5 w-5" strokeWidth={2.2} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-neutral-950">Chat</h4>
+              <p className="mt-0.5 text-xs text-neutral-500">Message the Ƀucks team in the app</p>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {view === 'support-chat' && (
+        <div className="px-4">
+          <SupportChat />
         </div>
       )}
 

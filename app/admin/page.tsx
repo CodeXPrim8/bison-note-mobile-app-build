@@ -57,7 +57,7 @@ const LINKS = [
   { href: '/admin/events', label: 'Events', hint: 'Unpublish parties, freeze organisers' },
   { href: '/admin/withdrawals', label: 'Withdrawals', hint: 'Approve, reject, auto or manual' },
   { href: '/admin/ads', label: 'Adverts', hint: 'App and website placements' },
-  { href: '/admin/rates', label: 'ɃU rate', hint: 'Raise or cut ɃU to naira' },
+  { href: '/admin/rates', label: 'ɃU rate & fees', hint: 'FX, Squad fees, free quota' },
   { href: '/admin/money', label: 'Money', hint: 'Making, losing, circulation' },
 ]
 

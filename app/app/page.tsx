@@ -8,6 +8,7 @@ import ModeSwitcher from '@/components/mode-switcher'
 import { AccountProvider, useAccount } from '@/components/account-store'
 import RequireEmailGate from '@/components/require-email-gate'
 import { BuLoader } from '@/components/bu-loader'
+import { BiometricAppGate } from '@/components/biometric-app-gate'
 
 const pageFallback = <BuLoader compact />
 
@@ -44,7 +45,16 @@ function ticketIdFromPageData(pageData: unknown) {
 function profileViewFromPageData(pageData: unknown) {
   if (!pageData || typeof pageData !== 'object' || !('view' in pageData)) return undefined
   const view = (pageData as { view?: string }).view
-  if (view === 'settings' || view === 'appearance' || view === 'pnd' || view === 'menu') return view
+  if (
+    view === 'settings' ||
+    view === 'appearance' ||
+    view === 'pnd' ||
+    view === 'support' ||
+    view === 'support-chat' ||
+    view === 'menu'
+  ) {
+    return view
+  }
   return undefined
 }
 
@@ -242,6 +252,7 @@ function MobileAppShell() {
   const hideTopBar = currentPage === 'dashboard'
 
   return (
+    <BiometricAppGate>
     <div className={guestChrome ? 'bu-user-shell min-h-screen' : `${theme} min-h-screen bg-background text-foreground`}>
       <div className="mx-auto max-w-md">
         {!hideTopBar && (
@@ -392,5 +403,6 @@ function MobileAppShell() {
         <ReferCampaignPopup onOpenRefer={() => handleNavigate('refer')} />
       </div>
     </div>
+    </BiometricAppGate>
   )
 }

@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { SiteFooter, SiteHeader } from '@/components/web/site-chrome'
 import { PublicEventsGrid } from '@/components/web/public-events-grid'
 import { AdSlot } from '@/components/web/ad-slot'
-import { FloatingVouchers } from '@/components/web/floating-vouchers'
+import { BucksBrandMark } from '@/components/season/brand-mark'
+import { SeasonHeroLayer } from '@/components/season/season-hero-layer'
 import {
   IconEvents,
   IconGateway,
@@ -22,9 +23,11 @@ export default function WebsiteHome() {
         <div className="bu-site-hero-plane" aria-hidden>
           <span>Ƀ</span>
         </div>
-        <FloatingVouchers />
+        <SeasonHeroLayer />
         <div className="bu-site-hero-copy">
-          <p className="bu-site-brand">Ƀucks</p>
+          <p className="bu-site-brand">
+            <BucksBrandMark />
+          </p>
           <h1 className="bu-site-headline">The digital voucher that moves with you.</h1>
           <p className="bu-site-lede">
             1 ɃU = ₦1. Gift it. Send it. Sell tickets. Take payments. Redeem anytime.
@@ -182,7 +185,9 @@ export default function WebsiteHome() {
 
       <section className="bu-site-finale">
         <div className="bu-site-finale-inner">
-          <p className="bu-site-display text-3xl font-bold tracking-tight text-white md:text-4xl">Ƀucks</p>
+          <p className="bu-site-display text-3xl font-bold tracking-tight text-white md:text-4xl">
+            <BucksBrandMark />
+          </p>
           <p className="mt-3 max-w-lg text-base text-white/75">
             Physical Bison Notes stay ceremonial. The digital voucher is what you gift, spend, and redeem — open Ƀucks
             and move.

@@ -2,7 +2,7 @@ import { ApiError } from '@/lib/api/errors'
 import { buFromNaira, getBuNairaValue, quotePeerMoveBu } from '@/lib/bu-rate'
 import { tryCreateAdminClient } from '@/lib/supabase/admin'
 import { createDataClient } from '@/lib/supabase/data'
-import { debitFaceThenCharge, INSUFFICIENT_ACCOUNT, moveLiveWallet } from '@/lib/wallet/move'
+import { creditFaceThenCharge, debitFaceThenCharge, INSUFFICIENT_ACCOUNT, moveLiveWallet } from '@/lib/wallet/move'
 import { isPurposeId, purposeLabel, type PurposeId } from '@/lib/purpose'
 import { assertLockedGift, commitLockedGift, createLockedGift, lockedHoldBu } from '@/lib/purpose-gifts'
 
@@ -157,13 +157,12 @@ export async function transferBu(input: {
         : { ...sharedMeta, move_id: moveId, from: input.fromUserId },
     })
   } catch (error) {
-    await moveLiveWallet(db, {
+    await creditFaceThenCharge(db, {
       userId: input.fromUserId,
-      naira: feeQuote.totalDebitNaira,
-      direction: 'credit',
-      type: 'refund',
-      description: 'Send refunded',
-      metadata: { ...sharedMeta, move_id: crypto.randomUUID(), refund_of: moveId },
+      faceNaira: input.amount,
+      chargeNaira: feeQuote.feeNaira,
+      faceDescription: 'Send refunded',
+      metadata: { ...sharedMeta, refund_of: moveId },
     }).catch(() => undefined)
     throw error
   }

@@ -2,10 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, Phone, User } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, Phone, ScanFace, User } from 'lucide-react'
 import { safeNextPath } from '@/lib/auth/paths'
 import { loadDraft, saveDraft } from '@/lib/forms/draft'
 import { clearAccountSnapshots } from '@/lib/session-snapshot'
+import {
+  getBiometricAvailability,
+  isFaceUnlockPreferred,
+  loadBiometricCredentials,
+  markAppUnlocked,
+  saveBiometricCredentials,
+  type BiometricAvailability,
+} from '@/lib/auth/biometric'
 
 const LOGIN_DRAFT_KEY = 'bu-login-draft'
 
@@ -30,6 +38,8 @@ export default function LoginPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [referralCode, setReferralCode] = useState('')
   const [referralLocked, setReferralLocked] = useState(false)
+  const [faceAvail, setFaceAvail] = useState<BiometricAvailability | null>(null)
+  const [faceBusy, setFaceBusy] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -59,12 +69,57 @@ export default function LoginPage() {
     if (draft?.name) setName(draft.name)
     if (draft?.email) setEmail(draft.email)
     setDraftReady(true)
+    void getBiometricAvailability().then(setFaceAvail)
   }, [])
 
   useEffect(() => {
     if (!draftReady) return
     saveDraft(LOGIN_DRAFT_KEY, { phone, name, email })
   }, [draftReady, phone, name, email, mode])
+
+  function rememberPhone(value: string) {
+    try {
+      window.sessionStorage.setItem('bu_login_phone', value.trim())
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loginWithFace() {
+    setFaceBusy(true)
+    setMessage(null)
+    setMessageOk(false)
+    try {
+      const creds = await loadBiometricCredentials('Sign in to Ƀucks')
+      if (!creds.ok) {
+        setFaceBusy(false)
+        if (!creds.cancelled) {
+          showError(creds.message || 'Face unlock did not complete. Enter your PIN.')
+        }
+        return
+      }
+      setPhone(creds.phone)
+      rememberPhone(creds.phone)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: creds.pin, phone: creds.phone }),
+      })
+      const json = (await res.json()) as { status: boolean; message: string }
+      setFaceBusy(false)
+      if (!json.status) {
+        showError(json.message || 'Could not sign in with face unlock. Enter your PIN.')
+        return
+      }
+      markAppUnlocked()
+      clearAccountSnapshots()
+      window.location.assign(nextPath)
+    } catch {
+      setFaceBusy(false)
+      showError('Face unlock missed. Enter your PIN to continue.')
+    }
+  }
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -155,6 +210,13 @@ export default function LoginPage() {
       }
       setMessage(json.message || (res.ok ? 'Signed in' : 'Could not sign in'))
       if (json.status) {
+        rememberPhone(phone)
+        markAppUnlocked()
+        // After a successful PIN login on a capable device, refresh stored face credentials
+        // when face unlock is already preferred — never blocks sign-in if this fails.
+        if (mode === 'login' && isFaceUnlockPreferred()) {
+          void saveBiometricCredentials(phone.trim(), pin).catch(() => undefined)
+        }
         clearAccountSnapshots()
         window.location.assign(nextPath)
       }
@@ -487,12 +549,24 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <button type="submit" className="bu-auth-cta" disabled={busy}>
+              <button type="submit" className="bu-auth-cta" disabled={busy || faceBusy}>
                 <span>{cta}</span>
                 <span className="bu-auth-cta-arrow" aria-hidden>
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </button>
+
+              {mode === 'login' && faceAvail?.available && isFaceUnlockPreferred() ? (
+                <button
+                  type="button"
+                  disabled={busy || faceBusy}
+                  onClick={() => void loginWithFace()}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/10 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  <ScanFace className="h-4 w-4" />
+                  {faceBusy ? 'Checking…' : `Login with ${faceAvail.label}`}
+                </button>
+              ) : null}
             </form>
 
             <div className="mt-5 space-y-2 text-center">

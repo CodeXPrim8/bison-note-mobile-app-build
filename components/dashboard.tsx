@@ -28,6 +28,9 @@ import { PurposeIcon } from '@/components/icons/purpose-icons'
 import { purposeLabel, type PurposeGift } from '@/lib/purpose'
 import { SignedBu } from '@/components/signed-bu'
 import { SmartCampaign } from '@/components/smart-campaign'
+import { SeasonAtmosphere } from '@/components/season/season-atmosphere'
+import { SeasonGiftPopup } from '@/components/season/season-gift-popup'
+import { SeasonStrip } from '@/components/season/season-strip'
 
 interface HomeMovement {
   id: string
@@ -169,7 +172,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const latest = movements[0] ?? null
 
   return (
-    <div className="space-y-6 bg-transparent pb-4 text-neutral-950">
+    <div className="relative space-y-6 bg-transparent pb-4 text-neutral-950">
+      <SeasonAtmosphere variant="app" />
+      <SeasonStrip className="!mx-4 !mb-0 !mt-2" />
+      <SeasonGiftPopup
+        mode="member"
+        onSendBu={() => onNavigate('send-bu')}
+        onFund={() => onNavigate('buy-bu')}
+      />
       <div className="sticky top-0 z-30 bg-transparent px-4 pb-3 pt-3 backdrop-blur-xl">
         <div className="relative">
         {alertNeon ? (

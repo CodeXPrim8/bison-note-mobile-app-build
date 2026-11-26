@@ -25,6 +25,12 @@ export const BU_SITE_DESCRIPTION =
 
 export const BU_CANONICAL_ORIGIN = 'https://buapp.vercel.app'
 
+/** Guest-facing support — change here to update Menu → Support. */
+export const BU_SUPPORT_EMAIL = 'support@getbucks.com.ng'
+/** Digits only for wa.me links. */
+export const BU_SUPPORT_WHATSAPP = '2348131074911'
+export const BU_SUPPORT_PHONE_DISPLAY = '+234 813 107 4911'
+
 export function canonicalAppOrigin(origin?: string | null) {
   const raw = (origin ?? '').trim().replace(/\/$/, '')
   if (/bu-app\.vercel\.app/i.test(raw)) return BU_CANONICAL_ORIGIN

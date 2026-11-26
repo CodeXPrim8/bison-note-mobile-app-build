@@ -80,8 +80,17 @@ export default function Notifications() {
       }
     }
     void load()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load()
+    }, 3000)
+    function onVisible() {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [userId, refreshWallet, pulse])
 

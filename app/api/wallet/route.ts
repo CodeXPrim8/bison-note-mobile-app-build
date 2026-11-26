@@ -7,6 +7,11 @@ import { publicBuRates } from '@/lib/bu-rate'
 import { contactEmail } from '@/lib/auth/pin'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { listWalletHistory } from '@/lib/wallet/history'
+import { getPlatformSettings } from '@/lib/admin/platform'
+import { createDataClient } from '@/lib/supabase/data'
+import { tryCreateAdminClient } from '@/lib/supabase/admin'
+import { countUnderFreeBankTransfersToday, freeUnderRemaining } from '@/lib/wallet/free-quota'
+import { isPaystackConfigured } from '@/lib/env'
 
 export async function GET(request: Request) {
   try {
@@ -26,17 +31,34 @@ export async function GET(request: Request) {
         phone: session?.phone_e164 || session?.phone || null,
       })) || user.id
 
-    const [wallet, transactions] = await Promise.all([
+    const db = tryCreateAdminClient() ?? createDataClient()
+    const [wallet, transactions, settings] = await Promise.all([
       fetchLiveWallet(liveId),
       includeHistory && limit > 0
         ? listWalletHistory(liveId, limit, { full: fullHistory })
         : Promise.resolve([]),
+      getPlatformSettings(db),
     ])
+    const freeUsed = await countUnderFreeBankTransfersToday(
+      db,
+      liveId,
+      settings.squad_fee_rules.free_under_naira,
+    )
+    const freePerDay = settings.squad_fee_rules.free_under_per_day
 
     return successResponse({
       user_id: liveId,
       wallet,
-      rates: publicBuRates(),
+      rates: {
+        ...publicBuRates({
+          free_under_used_today: freeUsed,
+          free_under_remaining: freeUnderRemaining(freeUsed, freePerDay),
+          payout_provider: isPaystackConfigured() ? 'paystack' : 'squad',
+        }),
+        free_under_naira: settings.squad_fee_rules.free_under_naira,
+        free_under_per_day: freePerDay,
+        platform_fee_percent: settings.squad_fee_rules.pay_out.platform_percent,
+      },
       transactions,
     })
   } catch (error) {

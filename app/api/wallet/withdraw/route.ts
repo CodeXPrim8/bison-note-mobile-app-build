@@ -8,9 +8,10 @@ import { getPlatformSettings, getUserControl } from '@/lib/admin/platform'
 import { createDataClient } from '@/lib/supabase/data'
 import { readBuSession } from '@/lib/auth/bu-session'
 import { resolveLiveCelebrantId } from '@/lib/events/live'
-import { isPaystackConfigured } from '@/lib/env'
+import { isPaystackConfigured, isSquadConfigured } from '@/lib/env'
+import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
 import { NGN_BANKS, bankCodeFromName, displayBankName } from '@/lib/payments/ngn-banks'
-import { debitFaceThenCharge, moveLiveWallet } from '@/lib/wallet/move'
+import { creditFaceThenCharge, debitFaceThenCharge } from '@/lib/wallet/move'
 import { pinSchema } from '@/lib/auth/pin'
 import { verifyLegacyBuPin } from '@/lib/auth/legacy-login'
 import { resolveNuban } from '@/lib/payments/paystack'
@@ -148,23 +149,33 @@ export async function POST(request: Request) {
       NGN_BANKS.find((bank) => bank.code === bankCode)?.name ?? body.bank_name,
       bankCode,
     )
+    const automatic = settings.withdrawal_mode !== 'manual'
+    if (automatic && !isPaystackConfigured() && !isSquadConfigured()) {
+      throw new ApiError(
+        503,
+        'PAYOUT_REQUIRED',
+        'Bank payouts are not configured yet. Contact support or try again later.',
+      )
+    }
+
+    const payoutProvider = isPaystackConfigured() ? 'paystack' : 'squad'
+    const freeUsedToday = await countUnderFreeBankTransfersToday(
+      db,
+      liveId,
+      settings.squad_fee_rules.free_under_naira,
+    )
     let quote
     try {
-      quote = quoteWithdrawBu(body.bu ?? body.amount ?? 0)
+      quote = quoteWithdrawBu(body.bu ?? body.amount ?? 0, {
+        provider: payoutProvider,
+        freeUsedToday,
+        squadRules: settings.squad_fee_rules,
+      })
     } catch (error) {
       if (error instanceof WalletAmountError) {
         throw new ApiError(400, error.code, error.message)
       }
       throw error
-    }
-
-    const automatic = settings.withdrawal_mode !== 'manual'
-    if (automatic && !isPaystackConfigured()) {
-      throw new ApiError(
-        503,
-        'PAYSTACK_REQUIRED',
-        'Bank payouts are not configured yet. Contact support or try again later.',
-      )
     }
 
     let accountName = body.account_name?.trim() || ''
@@ -196,9 +207,12 @@ export async function POST(request: Request) {
       naira: quote.naira,
       bank_naira: quote.bankNaira,
       paystack_transfer_fee: quote.paystackFee,
+      stamp_fee: quote.stampFee,
       platform_fee: quote.platformFee,
       total_debit: quote.totalDebit,
-      fee_absorbed: false,
+      free_quota_applied: quote.freeQuotaApplied,
+      fee_provider: quote.provider,
+      fee_absorbed: quote.freeQuotaApplied,
       value_rate: getBuNairaValue(),
       bank_name: bankName,
       bank_code: bankCode,
@@ -239,12 +253,11 @@ export async function POST(request: Request) {
         reviewed_at: automatic ? new Date().toISOString() : null,
       })
     } catch (error) {
-      await moveLiveWallet(db, {
+      await creditFaceThenCharge(db, {
         userId: liveId,
-        naira: quote.totalDebit,
-        direction: 'credit',
-        type: 'refund',
-        description: 'Bank send rolled back',
+        faceNaira: quote.bankNaira,
+        chargeNaira: roundMoney(quote.totalDebit - quote.bankNaira),
+        faceDescription: 'Bank send rolled back',
         metadata: { ...meta, reason: 'insert_failed' },
       }).catch(() => undefined)
       throw new ApiError(500, 'WITHDRAW_FAILED', error instanceof Error ? error.message : 'Could not save bank send')
@@ -280,12 +293,11 @@ export async function POST(request: Request) {
     } catch (error) {
       const message = paystackPayoutMessage(error)
       try {
-        await moveLiveWallet(db, {
+        await creditFaceThenCharge(db, {
           userId: liveId,
-          naira: quote.totalDebit,
-          direction: 'credit',
-          type: 'refund',
-          description: 'Bank send refunded after payout failed',
+          faceNaira: quote.bankNaira,
+          chargeNaira: roundMoney(quote.totalDebit - quote.bankNaira),
+          faceDescription: 'Bank send refunded after payout failed',
           metadata: { ...meta, withdrawal_id: id, reason: message },
         })
         await markWithdrawalFailed(id, message, db, 'failed')

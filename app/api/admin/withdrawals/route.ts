@@ -4,7 +4,8 @@ import { requireAdmin } from '@/lib/admin/session'
 import { displayNameFromUser, getPlatformSettings, savePlatformSettings, writeAdminAudit } from '@/lib/admin/platform'
 import { isPaystackConfigured } from '@/lib/env'
 import { adminPaystackSnapshot } from '@/lib/payments/paystack'
-import { moveLiveWallet } from '@/lib/wallet/move'
+import { quoteWithdrawBu, roundMoney } from '@/lib/bu-rate'
+import { creditFaceThenCharge } from '@/lib/wallet/move'
 import { markWithdrawalFailed, paystackPayoutMessage, publicWithdrawalLabel, sendWithdrawalPayout } from '@/lib/wallet/payout'
 
 const actionSchema = z.object({
@@ -82,12 +83,17 @@ export async function PATCH(request: Request) {
 
     if (body.action === 'reject' || body.action === 'reverse') {
       if (!canReverse(status)) throw new ApiError(400, 'NOT_PENDING', 'This withdrawal cannot be reversed to the wallet')
-      await moveLiveWallet(db, {
+      const faceNaira = roundMoney(Number(row.naira) || 0)
+      // Assume the guest was billed (not a free-quota send) when reversing fees.
+      const chargeNaira = Math.max(
+        0,
+        roundMoney(quoteWithdrawBu(faceNaira, { freeUsedToday: 999 }).totalDebit - faceNaira),
+      )
+      await creditFaceThenCharge(db, {
         userId: String(row.user_id),
-        naira: Number(row.naira),
-        direction: 'credit',
-        type: 'refund',
-        description: status === 'paid' ? 'Withdrawal reversed to wallet' : 'Withdrawal returned to wallet',
+        faceNaira,
+        chargeNaira,
+        faceDescription: status === 'paid' ? 'Withdrawal reversed to wallet' : 'Withdrawal returned to wallet',
         metadata: { withdrawal_id: body.id, admin: liveId, note: body.note ?? null, previous_status: status },
       })
       const nextStatus = 'reversed'

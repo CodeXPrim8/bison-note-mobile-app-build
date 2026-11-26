@@ -66,5 +66,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Ƀucks uses Face ID to unlock your wallet and confirm sends. Your PIN always works as a backup.</string>
 </dict>
 </plist>

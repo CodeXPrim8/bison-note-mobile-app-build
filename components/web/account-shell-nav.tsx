@@ -19,6 +19,7 @@ const ADMIN_LINKS = [
   { href: '/admin/events', label: 'Events' },
   { href: '/admin/money', label: 'Money' },
   { href: '/admin/withdrawals', label: 'Withdrawals' },
+  { href: '/admin/support', label: 'Support' },
   { href: '/admin/ads', label: 'Adverts' },
   { href: '/admin/rates', label: 'ɃU rate' },
 ]

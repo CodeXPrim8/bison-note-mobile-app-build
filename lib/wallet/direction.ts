@@ -159,6 +159,10 @@ export function historyLabel(input: {
   const type = String(input.type ?? '').toLowerCase()
   const credit = input.direction === 'credit'
 
+  if (/^charge$/i.test(desc)) return 'Fee'
+  if (/^charge refunded$/i.test(desc)) return 'Fee refunded'
+  if (/^fee$/i.test(desc)) return 'Fee'
+  if (/^fee refunded$/i.test(desc)) return 'Fee refunded'
   if (/^auto reverse/i.test(desc)) return desc.replace(/^auto reverse\s*·\s*/i, 'Refund · ') || 'Refund'
   if (/^airtime /i.test(desc)) return desc
   if (/^data /i.test(desc)) return desc

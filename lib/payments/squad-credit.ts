@@ -1,6 +1,8 @@
 import { ApiError } from '@/lib/api/errors'
-import { dvaNetCreditNaira } from '@/lib/bu-rate'
+import { getPlatformSettings } from '@/lib/admin/platform'
+import { quotePayInCreditNaira } from '@/lib/bu-rate'
 import { isSquadConfigured, listSquadCustomerTransactions, type SquadVaWebhookPayload } from '@/lib/payments/squad'
+import { countUnderFreeBankTransfersToday } from '@/lib/wallet/free-quota'
 import {
   findVirtualAccountByAccountNumber,
   findVirtualAccountByCustomerCode,
@@ -52,7 +54,6 @@ export async function fulfillSquadVirtualAccountCredit(payload: SquadVaWebhookPa
   const grossNaira = money(payload.principal_amount)
   if (!(grossNaira > 0)) throw new ApiError(400, 'INVALID_AMOUNT', 'Squad amount must be greater than zero')
 
-  const credited = dvaNetCreditNaira(grossNaira)
   const resolved = await resolveSquadUserId(payload)
   if (!resolved.userId) {
     throw new ApiError(404, 'VIRTUAL_ACCOUNT_USER_NOT_FOUND', 'No Ƀucks user matched this Squad virtual account', {
@@ -61,6 +62,19 @@ export async function fulfillSquadVirtualAccountCredit(payload: SquadVaWebhookPa
       customer_identifier: resolved.customerCode || null,
     })
   }
+
+  const db = createDataClient()
+  const settings = await getPlatformSettings(db)
+  const freeUsedToday = await countUnderFreeBankTransfersToday(
+    db,
+    resolved.userId,
+    settings.squad_fee_rules.free_under_naira,
+  )
+  const credited = quotePayInCreditNaira(grossNaira, {
+    provider: 'squad',
+    freeUsedToday,
+    squadRules: settings.squad_fee_rules,
+  })
 
   if (await walletHasReference(resolved.userId, reference)) {
     return {
@@ -72,7 +86,6 @@ export async function fulfillSquadVirtualAccountCredit(payload: SquadVaWebhookPa
     }
   }
 
-  const db = createDataClient()
   const ledgerMeta = {
     reference,
     move_id: reference,
@@ -85,6 +98,9 @@ export async function fulfillSquadVirtualAccountCredit(payload: SquadVaWebhookPa
     settled_amount: money(payload.settled_amount),
     gross_naira: credited.gross,
     fee_naira: credited.fee,
+    partner_fee_naira: credited.partnerFee,
+    platform_fee_naira: credited.platformFee,
+    free_quota_applied: credited.freeQuotaApplied,
     net_naira: credited.net,
     remarks: payload.remarks ?? null,
     direction: 'credit',

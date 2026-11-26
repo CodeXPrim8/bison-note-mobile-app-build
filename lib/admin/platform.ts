@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ApiError } from '@/lib/api/errors'
-import { setRuntimeBuNairaValue } from '@/lib/bu-rate'
+import {
+  DEFAULT_SQUAD_FEE_RULES,
+  normalizeSquadFeeRules,
+  setRuntimeBuNairaValue,
+  type SquadFeeRulesSettings,
+} from '@/lib/bu-rate'
 import { adminDb } from '@/lib/admin/session'
 import { isServiceRoleConfigured } from '@/lib/env'
 
@@ -35,11 +40,13 @@ function throwSettingsWriteError(error: unknown): never {
 export type PlatformSettings = {
   bu_naira_value: number
   withdrawal_mode: 'automatic' | 'manual'
+  squad_fee_rules: SquadFeeRulesSettings
 }
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   bu_naira_value: 1,
   withdrawal_mode: 'automatic',
+  squad_fee_rules: DEFAULT_SQUAD_FEE_RULES,
 }
 
 function asSettings(rows: Array<{ key?: string; value?: unknown }> | null | undefined): PlatformSettings {
@@ -54,12 +61,13 @@ function asSettings(rows: Array<{ key?: string; value?: unknown }> | null | unde
   return {
     bu_naira_value: Number.isFinite(rate) && rate > 0 ? rate : 1,
     withdrawal_mode: mode === 'manual' ? 'manual' : 'automatic',
+    squad_fee_rules: normalizeSquadFeeRules(map.get('squad_fee_rules') ?? DEFAULT_SQUAD_FEE_RULES),
   }
 }
 
 export async function getPlatformSettings(db: SupabaseClient = adminDb()): Promise<PlatformSettings> {
   const { data, error } = await db.from('bu_platform_settings').select('key, value')
-  if (error) return DEFAULT_SETTINGS
+  if (error) return { ...DEFAULT_SETTINGS, squad_fee_rules: { ...DEFAULT_SQUAD_FEE_RULES } }
   const settings = asSettings(data as Array<{ key?: string; value?: unknown }>)
   setRuntimeBuNairaValue(settings.bu_naira_value)
   return settings
@@ -73,13 +81,18 @@ export async function savePlatformSettings(
   const next: PlatformSettings = {
     bu_naira_value: patch.bu_naira_value ?? current.bu_naira_value,
     withdrawal_mode: patch.withdrawal_mode ?? current.withdrawal_mode,
+    squad_fee_rules: patch.squad_fee_rules
+      ? normalizeSquadFeeRules(patch.squad_fee_rules)
+      : current.squad_fee_rules,
   }
   if (!(next.bu_naira_value > 0) || next.bu_naira_value > 1000) {
     throw new ApiError(400, 'INVALID_RATE', 'ɃU rate must be between 0 and 1000 naira')
   }
+  const now = new Date().toISOString()
   const rows = [
-    { key: 'bu_naira_value', value: next.bu_naira_value, updated_at: new Date().toISOString() },
-    { key: 'withdrawal_mode', value: next.withdrawal_mode, updated_at: new Date().toISOString() },
+    { key: 'bu_naira_value', value: next.bu_naira_value, updated_at: now },
+    { key: 'withdrawal_mode', value: next.withdrawal_mode, updated_at: now },
+    { key: 'squad_fee_rules', value: next.squad_fee_rules, updated_at: now },
   ]
   const { error } = await db.from('bu_platform_settings').upsert(rows, { onConflict: 'key' })
   if (error) {
@@ -88,6 +101,10 @@ export async function savePlatformSettings(
       p_mode: next.withdrawal_mode,
     })
     if (viaRpc.error) throwSettingsWriteError(viaRpc.error)
+    const feeUpsert = await db
+      .from('bu_platform_settings')
+      .upsert([{ key: 'squad_fee_rules', value: next.squad_fee_rules, updated_at: now }], { onConflict: 'key' })
+    if (feeUpsert.error) throwSettingsWriteError(feeUpsert.error)
   }
   setRuntimeBuNairaValue(next.bu_naira_value)
   return next

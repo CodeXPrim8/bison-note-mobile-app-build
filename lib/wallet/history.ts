@@ -91,7 +91,14 @@ function isAnonymousTip(meta: Record<string, unknown>, description?: string | nu
 }
 
 function partyOf(meta: Record<string, unknown>, direction: WalletDirection, description?: string | null) {
-  if (meta.kind === 'charge' || meta.leg === 'charge' || /^charge$/i.test(String(description ?? ''))) return null
+  if (
+    meta.kind === 'charge' ||
+    meta.kind === 'charge_refund' ||
+    meta.leg === 'charge' ||
+    /^(charge|fee)(\s+refunded)?$/i.test(String(description ?? ''))
+  ) {
+    return null
+  }
   if (direction === 'credit' && isAnonymousTip(meta, description)) return null
   if (direction === 'debit') {
     return firstName(meta.to_name, meta.recipient_name, meta.counterparty, meta.to)
