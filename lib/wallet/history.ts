@@ -187,8 +187,11 @@ function partyFromDescription(description: string, direction: WalletDirection) {
 }
 
 function noteOf(meta: Record<string, unknown>) {
-  const value = meta.note
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+  for (const key of ['note', 'remark'] as const) {
+    const value = meta[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
 }
 
 function rowMeta(row: Record<string, unknown>): Record<string, unknown> {
@@ -206,7 +209,13 @@ function saleDescription(row: Record<string, unknown>) {
   if (kind === 'wallet_debit') {
     if (meta.kind === 'bank_send') {
       const bank = typeof meta.bank_name === 'string' && meta.bank_name.trim() ? meta.bank_name.trim() : 'bank'
-      return `Sent to ${bank}`
+      const remark =
+        typeof meta.remark === 'string' && meta.remark.trim()
+          ? meta.remark.trim()
+          : typeof meta.note === 'string' && meta.note.trim()
+            ? meta.note.trim()
+            : ''
+      return remark ? `Sent to ${bank} · ${remark}` : `Sent to ${bank}`
     }
     if (metaKind === 'tip') {
       return typeof meta.to_name === 'string' && meta.to_name ? `Tip to ${meta.to_name}` : 'Tip'
@@ -386,6 +395,13 @@ function normDesc(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+/** "Sent to GTBank · Cake" and "Sent to GTBank" are the same bank send. */
+function bankSendCore(description: string) {
+  const text = description.trim()
+  if (!/^sent to\s+/i.test(text)) return null
+  return normDesc(text.replace(/\s*[·•].*$/, ''))
+}
+
 function isWithdrawalEcho(item: WalletHistoryItem) {
   return item.reference?.startsWith('wd:') ?? false
 }
@@ -398,13 +414,38 @@ function sameBurst(a: WalletHistoryItem, b: WalletHistoryItem) {
   return Math.abs(timeMs(a.created_at) - timeMs(b.created_at)) < 12 * 1000
 }
 
+/** Bank send listed twice — once plain, once with a remark. */
+function sameBankSend(a: WalletHistoryItem, b: WalletHistoryItem) {
+  if (a.direction !== 'debit' || b.direction !== 'debit') return false
+  const coreA = bankSendCore(a.description)
+  const coreB = bankSendCore(b.description)
+  if (!coreA || !coreB || coreA !== coreB) return false
+  if (Math.abs(a.amount - b.amount) > 0.05) return false
+  return Math.abs(timeMs(a.created_at) - timeMs(b.created_at)) < 3 * 60 * 1000
+}
+
 /** The payout row repeats the wallet debit, sometimes at the face amount and sometimes with the charge added. */
 function bankEcho(echo: WalletHistoryItem, real: WalletHistoryItem) {
   if (!isWithdrawalEcho(echo) || isWithdrawalEcho(real)) return false
   if (echo.direction !== 'debit' || real.direction !== 'debit') return false
-  if (normDesc(echo.description) !== normDesc(real.description)) return false
-  if (!/^sent to\s+\S/i.test(echo.description.trim())) return false
+  const coreEcho = bankSendCore(echo.description)
+  const coreReal = bankSendCore(real.description)
+  if (!coreEcho || !coreReal || coreEcho !== coreReal) return false
+  if (Math.abs(echo.amount - real.amount) > 0.05) return false
   return Math.abs(timeMs(echo.created_at) - timeMs(real.created_at)) < 3 * 60 * 1000
+}
+
+function preferHistoryItem(a: WalletHistoryItem, b: WalletHistoryItem) {
+  if (isWithdrawalEcho(a) !== isWithdrawalEcho(b)) return isWithdrawalEcho(a) ? b : a
+  const aHasRemark = /[·•]/.test(a.description)
+  const bHasRemark = /[·•]/.test(b.description)
+  if (aHasRemark !== bHasRemark) return aHasRemark ? a : b
+  if (Boolean(a.note) !== Boolean(b.note)) return a.note ? a : b
+  return a
+}
+
+function isDuplicateHistory(a: WalletHistoryItem, b: WalletHistoryItem) {
+  return sameBurst(a, b) || sameBankSend(a, b) || bankEcho(a, b) || bankEcho(b, a)
 }
 
 function mergeHistory(items: WalletHistoryItem[]) {
@@ -416,9 +457,16 @@ function mergeHistory(items: WalletHistoryItem[]) {
     return String(b.id).localeCompare(String(a.id))
   })
   for (const item of sorted) {
-    const echoAt = out.findIndex((existing) => bankEcho(existing, item))
-    if (echoAt >= 0) out.splice(echoAt, 1)
-    if (out.some((existing) => sameBurst(existing, item) || bankEcho(item, existing))) continue
+    const dupAt = out.findIndex((existing) => isDuplicateHistory(existing, item))
+    if (dupAt >= 0) {
+      out[dupAt] = preferHistoryItem(out[dupAt], item)
+      const kept = out[dupAt]
+      const keptKey = kept.reference
+        ? `${kept.reference}|${kept.direction}|${kept.amount.toFixed(2)}`
+        : ''
+      if (keptKey) seen.add(keptKey)
+      continue
+    }
     const key = item.reference
       ? `${item.reference}|${item.direction}|${item.amount.toFixed(2)}`
       : ''

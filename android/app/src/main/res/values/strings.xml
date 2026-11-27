@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Bucks</string>
     <string name="title_activity_main">Bucks</string>
-    <string name="package_name">app.buucks.mobile</string>
-    <string name="custom_url_scheme">app.buucks.mobile</string>
+    <string name="package_name">getbucks.com.ng</string>
+    <string name="custom_url_scheme">getbucks.com.ng</string>
 </resources>

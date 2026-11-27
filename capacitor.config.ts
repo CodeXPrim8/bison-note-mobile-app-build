@@ -7,7 +7,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * ASCII "Bucks" on purpose — Play/App Store and native rails break Ƀ.
  */
 const config: CapacitorConfig = {
-  appId: 'app.buucks.mobile',
+  appId: 'getbucks.com.ng',
   appName: 'Bucks',
   webDir: 'capacitor-www',
   server: {

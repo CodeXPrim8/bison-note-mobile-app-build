@@ -4,7 +4,7 @@
  */
 
 export const BIOMETRIC_PREF_KEY = 'bu_face_unlock_enabled'
-export const BIOMETRIC_SERVER = 'app.buucks.mobile.auth'
+export const BIOMETRIC_SERVER = 'getbucks.com.ng.auth'
 const BIOMETRIC_UNLOCKED_KEY = 'bu_face_session_unlocked'
 
 export type BiometricKind = 'face' | 'fingerprint' | 'multiple' | 'none'

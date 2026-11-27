@@ -8,6 +8,12 @@ export function isPublicPagePath(pathname: string): boolean {
   if (pathname.startsWith('/t/')) return true
   if (pathname === '/gateway') return true
   if (pathname === '/gateway/docs') return true
+  if (pathname === '/privacy') return true
+  if (pathname === '/privacy-policy') return true
+  if (pathname === '/delete-account') return true
+  if (pathname === '/account-deletion') return true
+  if (pathname === '/terms') return true
+  if (pathname === '/terms-of-service') return true
   if (pathname.startsWith('/g/')) return true
   if (
     pathname === '/icon' ||
